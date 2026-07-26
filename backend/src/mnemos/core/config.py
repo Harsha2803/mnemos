@@ -33,10 +33,22 @@ class Settings(BaseSettings):
     api_prefix: str = "/api/v1"
 
     # -- data -------------------------------------------------------------
-    database_url: str = "postgresql+asyncpg://mnemos:mnemos@localhost:5432/mnemos"
+    database_url: str = "postgresql+asyncpg://mnemos_app:mnemos-app-dev@localhost:5432/mnemos"
     database_pool_size: int = 10
     database_max_overflow: int = 5
     redis_url: str = "redis://localhost:6379/0"
+
+    # The application connects as an unprivileged role so that row-level security
+    # applies to it. The role the *migrations* connect as owns the tables and is a
+    # superuser, and RLS never applies to a superuser — pointing the API at that
+    # role makes every policy in migration 0004 inert. Migration 0005 creates this
+    # role and needs the same credentials the API will later connect with, which is
+    # why they are settings rather than literals in either place.
+    app_database_role: str = "mnemos_app"
+    app_database_password: SecretStr = SecretStr("mnemos-app-dev")
+    # NOLOGIN, BYPASSRLS. `mnemosctl bootstrap` assumes it for the one transaction
+    # that has no org to scope to yet.
+    admin_database_role: str = "mnemos_admin"
 
     # -- object storage (S3-compatible: MinIO locally, S3 in a real deployment) --
     object_endpoint: str = "http://localhost:9000"

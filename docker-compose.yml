@@ -13,7 +13,15 @@ name: mnemos
 
 x-backend-env: &backend-env
   MNEMOS_ENV: local
-  MNEMOS_DATABASE_URL: postgresql+asyncpg://mnemos:mnemos@postgres:5432/mnemos
+  # The application connects as `mnemos_app`, which is NOSUPERUSER NOBYPASSRLS, so
+  # the row-level security policies from migration 0004 actually apply to it.
+  # `migrate` overrides this with the owning superuser below — RLS must not
+  # obstruct DDL, and it never applies to a superuser anyway.
+  MNEMOS_DATABASE_URL: postgresql+asyncpg://mnemos_app:mnemos-app-dev@postgres:5432/mnemos
+  # Read by migration 0005, which creates the role above. Duplicated into the DSN
+  # rather than assembled from parts, so what the app connects with is readable in
+  # one line; the two must agree.
+  MNEMOS_APP_DATABASE_PASSWORD: mnemos-app-dev
   MNEMOS_REDIS_URL: redis://redis:6379/0
   MNEMOS_OBJECT_ENDPOINT: http://minio:9000
   MNEMOS_OBJECT_ACCESS_KEY: mnemos
@@ -153,7 +161,10 @@ services:
     build:
       context: ./backend
       dockerfile: Dockerfile
-    environment: *backend-env
+    environment:
+      <<: *backend-env
+      # Alembic connects as the table owner. This is the only service that does.
+      MNEMOS_DATABASE_URL: postgresql+asyncpg://mnemos:mnemos@postgres:5432/mnemos
     depends_on:
       postgres: {condition: service_healthy}
     command: ["alembic", "upgrade", "head"]
