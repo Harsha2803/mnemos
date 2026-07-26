@@ -1,0 +1,85 @@
+[build-system]
+requires = ["hatchling"]
+build-backend = "hatchling.build"
+
+[project]
+name = "mnemos"
+version = "0.2.0"
+description = "An AI workspace: chat over documents (RAG), databases (NL2SQL) and tools (MCP), with governed memory and compiled context."
+readme = "README.md"
+requires-python = ">=3.12"
+license = { text = "Apache-2.0" }
+authors = [{ name = "Cheella Sree Harsha" }]
+keywords = ["rag", "nl2sql", "mcp", "context-engineering", "memory", "llm", "agents"]
+
+dependencies = [
+  # web
+  "fastapi>=0.115",
+  "uvicorn[standard]>=0.32",
+  "python-multipart>=0.0.12",
+  "sse-starlette>=2.1",
+  "websockets>=13.0",
+  # data
+  "sqlalchemy[asyncio]>=2.0.35",
+  "asyncpg>=0.30",
+  "alembic>=1.14",
+  "pgvector>=0.3.6",
+  "redis>=5.2",
+  # models / validation
+  "pydantic>=2.9",
+  "pydantic-settings>=2.6",
+  # auth
+  "pyjwt[crypto]>=2.9",
+  "argon2-cffi>=23.1",
+  # clients
+  "httpx>=0.27",
+  "boto3>=1.35",          # S3-compatible object storage (MinIO locally)
+  "tenacity>=9.0",
+  "structlog>=24.4",
+  # ingestion
+  "pypdf>=5.1",
+  "numpy>=1.26",
+  # nl2sql safety
+  "sqlglot>=25.24",
+]
+
+[project.optional-dependencies]
+neural = ["sentence-transformers>=3.2"]
+dev = [
+  "pytest>=8.3",
+  "pytest-asyncio>=0.24",
+  "ruff>=0.7",
+  "mypy>=1.13",
+]
+
+[project.scripts]
+mnemosctl = "mnemos.entrypoints.cli:main"
+
+[tool.hatch.build.targets.wheel]
+packages = ["src/mnemos"]
+
+[tool.ruff]
+line-length = 100
+target-version = "py312"
+src = ["src", "tests"]
+
+[tool.ruff.lint]
+select = ["E", "F", "W", "I", "N", "UP", "B", "C4", "DTZ", "PT", "RET", "SIM", "ASYNC", "RUF"]
+ignore = ["E501", "B008"]   # B008: FastAPI Depends() in defaults is the idiom
+
+[tool.ruff.lint.per-file-ignores]
+"migrations/*" = ["E", "F", "I", "N"]
+"tests/*" = ["S101"]
+
+[tool.mypy]
+python_version = "3.12"
+warn_unused_configs = true
+disallow_untyped_defs = true
+ignore_missing_imports = true
+plugins = ["pydantic.mypy"]
+
+[tool.pytest.ini_options]
+addopts = "-q --strict-markers"
+testpaths = ["tests"]
+pythonpath = ["src"]
+asyncio_mode = "auto"

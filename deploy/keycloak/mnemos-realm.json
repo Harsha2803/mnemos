@@ -1,0 +1,97 @@
+{
+  "realm": "mnemos",
+  "enabled": true,
+  "displayName": "Mnemos",
+  "sslRequired": "none",
+  "registrationAllowed": false,
+  "loginWithEmailAllowed": true,
+  "duplicateEmailsAllowed": false,
+  "accessTokenLifespan": 900,
+  "ssoSessionIdleTimeout": 1800,
+  "ssoSessionMaxLifespan": 36000,
+
+  "roles": {
+    "realm": [
+      { "name": "mnemos-admin",   "description": "Full platform administration" },
+      { "name": "mnemos-analyst", "description": "May query data sources via NL2SQL" },
+      { "name": "mnemos-user",    "description": "Baseline access: chat, documents, memory" }
+    ]
+  },
+
+  "clients": [
+    {
+      "clientId": "mnemos-web",
+      "name": "Mnemos Web",
+      "enabled": true,
+      "publicClient": true,
+      "standardFlowEnabled": true,
+      "directAccessGrantsEnabled": true,
+      "serviceAccountsEnabled": false,
+      "redirectUris": [
+        "http://localhost:3000/*",
+        "http://127.0.0.1:3000/*"
+      ],
+      "webOrigins": ["http://localhost:3000", "http://127.0.0.1:3000", "+"],
+      "attributes": {
+        "pkce.code.challenge.method": "S256",
+        "post.logout.redirect.uris": "http://localhost:3000/*"
+      },
+      "protocolMappers": [
+        {
+          "name": "realm-roles-to-top-level-claim",
+          "protocol": "openid-connect",
+          "protocolMapper": "oidc-usermodel-realm-role-mapper",
+          "config": {
+            "claim.name": "realm_roles",
+            "jsonType.label": "String",
+            "multivalued": "true",
+            "access.token.claim": "true",
+            "id.token.claim": "true"
+          }
+        },
+        {
+          "name": "audience-mnemos-api",
+          "protocol": "openid-connect",
+          "protocolMapper": "oidc-audience-mapper",
+          "config": {
+            "included.client.audience": "mnemos-web",
+            "access.token.claim": "true"
+          }
+        }
+      ]
+    }
+  ],
+
+  "users": [
+    {
+      "username": "admin@mnemos.local",
+      "email": "admin@mnemos.local",
+      "emailVerified": true,
+      "firstName": "Ada",
+      "lastName": "Admin",
+      "enabled": true,
+      "credentials": [{ "type": "password", "value": "admin", "temporary": false }],
+      "realmRoles": ["mnemos-admin", "mnemos-analyst", "mnemos-user"]
+    },
+    {
+      "username": "analyst@mnemos.local",
+      "email": "analyst@mnemos.local",
+      "emailVerified": true,
+      "firstName": "Nina",
+      "lastName": "Analyst",
+      "enabled": true,
+      "credentials": [{ "type": "password", "value": "analyst", "temporary": false }],
+      "realmRoles": ["mnemos-analyst", "mnemos-user"]
+    },
+    {
+      "username": "user@mnemos.local",
+      "email": "user@mnemos.local",
+      "emailVerified": true,
+      "firstName": "Sam",
+      "lastName": "User",
+      "enabled": true,
+      "credentials": [{ "type": "password", "value": "user", "temporary": false }],
+      "realmRoles": ["mnemos-user"]
+    }
+  ]
+}

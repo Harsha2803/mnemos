@@ -6,8 +6,8 @@
 > *in the same commit* — a stale tracker is worse than none.
 
 **Last updated:** 2026-07-26
-**Phase:** Working vertical slice shipped. Kernel + RAG flow + benchmark + inspector UI.
-**Next task:** `N1` (see §5)
+**Phase:** M1 — rebuilding as a containerized AI workspace chatbot.
+**Next task:** `M1` remaining items (see §5)
 
 ---
 
@@ -26,6 +26,22 @@
 5. **No placeholders, no `TODO`, no stubbed returns.** Split a task rather than stub it.
 
 ---
+
+## 0.1 SCOPE CHANGE — read this before anything else
+
+The project was reframed on 2026-07-26. v0.1 was a **benchmark harness with a prompt-diff
+viewer** — an engine and a lab bench, not a product. That was a misread of the goal.
+
+**What is actually wanted:** a **chatbot** that does many things — RAG over documents,
+NL2SQL over a database, MCP tools, auth, ingestion from cloud sources — where governed
+memory and compiled context are the feature that *stands out among* those, not the whole
+app.
+
+The full plan, the JIVA capability map, the schema and milestones M1–M14 now live in
+**[`docs/ADAPTATION.md`](docs/ADAPTATION.md)**. Read that next.
+
+The v0.1 kernel is preserved in `backend/src/mnemos/_v1/` and is ported (not rewritten)
+in milestone M4.
 
 ## 1. What this is (30 seconds)
 
