@@ -1,172 +1,161 @@
 # TRACKER — single source of truth for "what next"
 
 > **If you are an agent picking up this project: read this file first, in full, before
-> reading anything else or writing any code.** It tells you the current state, the
-> constraints you must not violate, and the exact next task. When you finish work,
-> update this file *in the same commit* — a stale tracker is worse than none.
+> reading anything else or writing any code.** It states what is built, the constraints
+> you must not violate, and the exact next task. When you finish work, update this file
+> *in the same commit* — a stale tracker is worse than none.
 
-**Last updated:** 2026-07-26 · **Phase:** Architecture complete, implementation not started
-**Current milestone:** M0 — Foundations · **Next task:** `M0-T1`
+**Last updated:** 2026-07-26
+**Phase:** Working vertical slice shipped. Kernel + RAG flow + benchmark + inspector UI.
+**Next task:** `N1` (see §5)
 
 ---
 
 ## 0. Agent operating instructions
 
-1. **Read in this order:** this file → [`docs/Architecture.md`](docs/Architecture.md) →
-   the ADRs referenced by your task → [`docs/CodingStandards.md`](docs/CodingStandards.md).
-2. **Work one task at a time**, in the order given in §4. Tasks have IDs
-   (`M0-T1`, `M3-T5`, …) defined in [`docs/ImplementationPlan.md`](docs/ImplementationPlan.md).
-3. **Do not skip ahead.** Later tasks assume earlier ones exist. If a task appears
-   blocked, record why in §6 rather than working around it.
-4. **Every task ends with:** code + tests + green CI + docs updated if behaviour changed
-   + this tracker updated + a conventional commit.
-5. **Do not re-litigate decisions in §2.** They are settled and recorded in ADRs. If you
-   believe one is wrong, write a new ADR superseding it — do not silently deviate.
-6. **Never introduce a placeholder, a `TODO`, or a stubbed function.** If a task is too
-   large to finish, split it into sub-tasks (`M3-T5a`, `M3-T5b`) and complete the first.
+1. **Read in this order:** this file → `README.md` → the module you are changing →
+   [`docs/CodingStandards.md`](docs/CodingStandards.md).
+2. **Do not re-litigate decisions in §2.** They are settled and several are load-bearing
+   for numbers published in the README. If you believe one is wrong, write an ADR
+   superseding it — do not silently deviate.
+3. **Every change ends with:** `pytest` green + benchmark re-run + README numbers updated
+   if they moved + this tracker updated + a conventional commit.
+4. **If you change anything in the retrieval or compile path, re-run the benchmark and
+   paste the new numbers into the README.** The README publishes measured results; a
+   change that moves them and does not update them makes the repository dishonest.
+5. **No placeholders, no `TODO`, no stubbed returns.** Split a task rather than stub it.
 
 ---
 
-## 1. What this project is (30-second version)
+## 1. What this is (30 seconds)
 
-**Mnemos — a context operating system for AI agents.**
+**Mnemos — context is a compiled artifact, not a concatenated string.**
 
-Thesis: *context is a compiled artifact, not a concatenated string.* A cost-based
-compiler takes a request + policy + budget and emits a content-addressed,
-provenance-attributed, replayable **context bundle**, with `EXPLAIN` for every decision.
+A working RAG system whose prompt is *planned and budgeted* rather than string-joined and
+truncated. Ships with a benchmark measuring it against a naive concatenated prompt on the
+same corpus, budget and embedder.
 
-- **Kernel:** memory (bitemporal claims) · retrieval (ACL-pushed-down) · context compiler
-- **Flows:** RAG over PDFs · NL2SQL · Agent + MCP tools
-- **Constraint:** runs at **zero cost** on local models; hosted providers are opt-in config.
-
-Full detail: [`docs/Architecture.md`](docs/Architecture.md).
+**Headline measured result** (neural embedder, 800-token budget, 23 questions):
+naive quoted a **superseded policy revision in 100% of prompts**; compiled, **0%**.
+Superseded memory facts: 61% → 0%. Restricted-content leak: 13% → 0%. Duplicate token
+waste: 6.9% → 1.1%. Answer retention: 100% both. Latency: 69 ms → 81 ms.
 
 ---
 
-## 2. Non-negotiable constraints — do not violate, do not re-decide
+## 2. Non-negotiable constraints
 
-| # | Constraint | Authority |
+| # | Constraint | Why |
 |---|---|---|
-| C1 | **Zero paid dependencies in the default path.** No API key required for any capability. | [ADR-0008](docs/ArchitectureDecisionRecords/ADR-0008-local-first-inference.md) |
-| C2 | **Domain layers import no I/O.** No sqlalchemy/httpx/redis/fastapi in `*/domain/`. CI-enforced. | [ADR-0003](docs/ArchitectureDecisionRecords/ADR-0003-feature-first-clean-architecture.md) |
-| C3 | **`features` may never import `flows`.** CI-enforced. | [ADR-0011](docs/ArchitectureDecisionRecords/ADR-0011-three-flows-as-kernel-consumers.md) |
-| C4 | **Fail closed.** Absence of an explicit allow is a deny. Unavailable PDP denies. | Architecture P3 |
-| C5 | **ACL predicates are pushed into index scans. Post-filtering is banned.** | [ADR-0004](docs/ArchitectureDecisionRecords/ADR-0004-pgvector-over-dedicated-vector-db.md) |
-| C6 | **Memory is never overwritten.** Updates supersede. Deletion is a separate, audited operation. | [ADR-0006](docs/ArchitectureDecisionRecords/ADR-0006-bitemporal-memory-model.md) |
-| C7 | **No `datetime.now()` or `uuid4()` in domain/application code.** Use injected `Clock` / `IdGenerator`. | CodingStandards §5 |
-| C8 | **Every external call has an explicit timeout.** No exceptions. | CodingStandards §3 |
-| C9 | **No magic numbers.** Every tunable is a named setting with a documented default. | CodingStandards §7 |
-| C10 | **No placeholders, no `TODO` comments, no stubbed returns.** | Project rule |
-| C11 | **Never commit secrets.** Never use the work email/account (`@jktech.com`, `harshaJKT`). | [ADR-0012](docs/ArchitectureDecisionRecords/ADR-0012-licensing-and-openness.md) |
-| C12 | **CPU inference is offloaded to a thread pool**, never called inline in an async path. | CodingStandards §3 |
+| C1 | **Zero paid dependencies in the default path.** No API key for any capability. | The benchmark must reproduce on any machine |
+| C2 | **Default embedder needs no download.** Neural is opt-in via the same port. | Same |
+| C3 | **`tokens_consumed <= budget` is an invariant, not an estimate.** | It is a published claim; `test_compiled_prompt_never_exceeds_budget` + a 300-case randomised test guard it |
+| C4 | **Authorization is evaluated inside the scan. Post-filtering is banned.** | Published claim; `test_acl_pushdown_beats_post_filtering_on_yield` |
+| C5 | **Memory is never overwritten.** Writes supersede and close belief time. | Published claim; the staleness metric depends on it |
+| C6 | **Superseded document revisions are excluded in the scan, not down-ranked.** | The headline number. Obsolete text often out-ranks current text |
+| C7 | **Utility must be calibrated from rank before allocation.** | Raw RRF scores are nearly flat; skipping this makes the allocator buy boilerplate. Regression test pins the dynamic range |
+| C8 | **Conflict losers are demoted and recorded, never silently dropped.** | |
+| C9 | **Never use the work email/account** (`@jktech.com`, `harshaJKT`). Personal only. | |
+| C10 | **The baseline must stay a fair representative**, not a strawman. `test_naive_arm_does_include_superseded_revisions` guards this. | A rigged baseline invalidates everything |
 
 ---
 
-## 3. Current state
+## 3. Current state — what is actually built
 
-### Done
-- ✅ Full architecture documentation set (`docs/`, 11 documents + 12 ADRs)
-- ✅ Repo initialized, `.gitignore`, repo-local personal git identity
+### ✅ Working and tested (23 tests passing)
 
-### Not started
-- ⬜ Everything else. **No implementation code exists yet.**
+| Module | What it does |
+|---|---|
+| `core.py` | ids, `Clock`/`IdGenerator` ports, heuristic tokenizer, canonical digest, trust tiers, `AuthorizationPredicate`, settings |
+| `embed.py` | `Embedder` port; hashing adapter (default, no download) + sentence-transformers adapter |
+| `store.py` | SQLite. Bitemporal claims (world time × belief time), supersession edges, in-transaction arbitration, chunks, document currency |
+| `retrieval.py` | vector / lexical / memory operators with ACL **and** currency pushdown, RRF fusion, utility calibration, dedup, conflict resolution |
+| `compiler.py` | six phases, greedy-density allocator with section floors/ceilings, measured budget fit + hard trim, trust fencing, manifest, `EXPLAIN` |
+| `baseline.py` | three naive variants (no ACL / post-filter / pre-filter) |
+| `ingest.py` | PDF + text, structure-aware chunking with char offsets |
+| `dataset.py` | 8-document corpus, 23 gold-labelled questions, 8 memory claims, 2 superseded revisions, 1 restricted doc, 1 injection doc |
+| `bench.py` | 7-metric harness |
+| `app.py` | FastAPI + self-contained inspector UI |
+| `cli.py` | `mnemosctl serve \| bench \| ask` |
 
-### Environment facts
+### ⬜ Designed in `docs/` but NOT built
+
+Postgres + pgvector · Neo4j knowledge graph · agent runtime · MCP tool service · NL2SQL
+flow · OIDC/SAML auth · transactional outbox · Celery workers · Next.js dashboard.
+
+`docs/` describes the full target architecture. This repo implements its **kernel and RAG
+flow** on SQLite + numpy. The gap is stated in the README and is not a defect.
+
+### Environment
+
 | Fact | Value |
 |---|---|
-| Repo root | `/home/shreeharsha/Personal/Projects/Resume_001/mnemos` |
-| Python | 3.12.3 |
-| Git identity (repo-local) | `Cheella Sree Harsha <cheellasreeharsha2803@gmail.com>` |
-| GitHub account | `Harsha2803` (personal) — **never** `harshaJKT` |
-| Repo visibility | Private until v0.2 |
+| Repo | `/home/shreeharsha/Personal/Projects/Resume_001/mnemos` |
+| Python | 3.12.3, venv at `.venv` |
+| Install | `.venv/bin/pip install -e .` (add `[neural]` for bge-small) |
+| Serve | `.venv/bin/mnemosctl serve` → `http://127.0.0.1:8000` |
+| Bench | `.venv/bin/mnemosctl bench --embedder neural` |
+| Tests | `.venv/bin/python -m pytest -q` → 23 passed |
+| Git identity | `Cheella Sree Harsha <cheellasreeharsha2803@gmail.com>` (repo-local) |
+| GitHub | `Harsha2803`, repo private |
 
 ---
 
-## 4. Task board
+## 4. Known gaps and honest weaknesses
 
-Legend: ⬜ not started · 🟡 in progress · ✅ done · 🚫 blocked (see §6)
+Recorded so they are not rediscovered as surprises:
 
-### M0 — Foundations ⬜  *(next up)*
-| ID | Task | Status |
-|---|---|---|
-| M0-T1 | `pyproject.toml`, src-layout, Ruff + mypy strict, pre-commit | ⬜ |
-| M0-T2 | `core/config.py` — BaseSettings, fail-fast, `ModelTier` enum | ⬜ |
-| M0-T3 | `core/errors.py` — hierarchy + RFC 9457 mapping | ⬜ |
-| M0-T4 | `core/{ids,clock,canonical,result,pagination}.py` | ⬜ |
-| M0-T5 | `core/telemetry.py` — OTel + structlog contextvars | ⬜ |
-| M0-T6 | `core/di.py` — container + composition root | ⬜ |
-| M0-T7 | `platform/db` — async engine, session, UnitOfWork, RLS GUC | ⬜ |
-| M0-T8 | Alembic + `0001_initial_extensions` | ⬜ |
-| M0-T9 | `deploy/compose` — full free stack | ⬜ |
-| M0-T10 | FastAPI skeleton, correlation-ID middleware, `/healthz` `/readyz` | ⬜ |
-| M0-T11 | `.importlinter` contracts 1–5 | ⬜ |
-| M0-T12 | GitHub Actions CI, all gates | ⬜ |
-| M0-T13 | `Makefile` | ⬜ |
-
-### M1 — Identity, tenancy, PDP ⬜ (M1-T1 … M1-T12)
-### M2 — Inference gateway, local-first ⬜ (M2-T1 … M2-T12)
-### M3 — Memory substrate ⬜ (M3-T1 … M3-T14)
-### M4 — Retrieval fabric ⬜ (M4-T1 … M4-T12)
-### M5 — Context Compiler ⭐ ⬜ (M5-T1 … M5-T19) ← **the thesis milestone**
-### M6 — Flow A: RAG ⬜ (M6-T1 … M6-T9)
-### M7 — Knowledge graph ⬜ (M7-T1 … M7-T6)
-### M8 — Flow B: NL2SQL ⬜ (M8-T1 … M8-T12)
-### M9 — Agent runtime ⬜ (M9-T1 … M9-T9)
-### M10 — Flow C: MCP service ⬜ (M10-T1 … M10-T12)
-### M11 — Dashboard ⬜ (M11-T1 … M11-T10)
-### M12 — Hardening ⬜ (M12-T1 … M12-T10)
-
-Full task descriptions and exit criteria:
-[`docs/ImplementationPlan.md`](docs/ImplementationPlan.md).
+1. **Answer retention is a tie under a good embedder** (100% vs 100%). The corpus is
+   5.4k tokens — too small for budget pressure to bite. Growing the corpus 10× is the
+   single highest-value change to make the retention claim meaningful. → task `N1`
+2. **Duplicate waste rises at large budgets** (14% at 3000) because more
+   near-threshold content is admitted. Dedup is a threshold, not a guarantee.
+3. **Brute-force cosine over all chunks** on every query. Fine at 56 chunks, `O(n)` and
+   wrong at 100k. The `Embedder`/store split makes an ANN index a contained change.
+4. **`all_chunks()` reloads the whole corpus per operator call** — three times per
+   compile. Obvious caching win, deliberately not done yet.
+5. **No LLM in the loop.** The benchmark measures *what reaches the model*, not answer
+   correctness. That is a deliberate scope choice (no paid API, no judge), and it is
+   stated in the README.
+6. **The heuristic tokenizer approximates BPE.** Within a few percent on English prose;
+   a `tiktoken` adapter would remove the approximation.
 
 ---
 
-## 5. NEXT TASK — fully specified
+## 5. NEXT TASK
 
-### `M0-T1` — Toolchain and package skeleton
+### `N1` — Grow the corpus until budget pressure is real
 
-**Read first:** [`docs/CodingStandards.md`](docs/CodingStandards.md) §1–2,
-[`docs/FolderStructure.md`](docs/FolderStructure.md) §1–2.
+**Why this first.** It is the only change that can move the headline retention number
+from "tie" to a measured win, and it makes every other metric more credible.
 
 **Deliverables**
+1. Expand `dataset.py` to ~50k+ corpus tokens — more documents, more near-miss
+   distractors on the same topics, more superseded revisions. Keep it deterministic.
+2. Add ~40 more gold-labelled questions. Every `answer_key` must be verifiable as
+   present exactly once (there is a diagnostic pattern for this in the git history —
+   an earlier labelling bug silently capped retention at 13/23 for both arms).
+3. Re-run both embedders across budgets 400/800/1500/3000.
+4. **Update the README table with whatever comes out**, including if the compiler loses.
 
-1. `pyproject.toml` — hatchling backend, `src/` layout, package `mnemos`, Python `>=3.12`.
-   - Runtime deps: `fastapi`, `uvicorn[standard]`, `pydantic>=2.7`, `pydantic-settings`,
-     `sqlalchemy[asyncio]>=2.0`, `asyncpg`, `alembic`, `redis`, `neo4j`, `celery`,
-     `httpx`, `structlog`, `tenacity`, `opentelemetry-sdk`,
-     `opentelemetry-instrumentation-fastapi`, `uuid-utils` (UUIDv7), `anyio`, `orjson`.
-   - Dev deps: `ruff`, `mypy`, `import-linter`, `pytest`, `pytest-asyncio`, `pytest-cov`,
-     `hypothesis`, `testcontainers[postgres]`, `bandit`, `pip-audit`.
-   - Ruff and mypy config exactly as in CodingStandards §1 (copy it — do not improvise).
-2. Directory skeleton with `__init__.py` in each, matching FolderStructure §2:
-   `src/mnemos/{core,platform,features,flows,entrypoints}/` and the subpackages listed
-   there. Empty packages are fine at this stage; **no stub functions**.
-3. `.pre-commit-config.yaml` — `ruff --fix`, `ruff-format`, `mypy`, `gitleaks`,
-   trailing-whitespace, end-of-file-fixer, `check-added-large-files`.
-4. `tests/` skeleton with `conftest.py` and `tests/unit/test_smoke.py` asserting the
-   package imports and exposes `__version__`.
+**Acceptance**
+- `pytest` green.
+- Corpus tokens ≥ 50,000; questions ≥ 60; every answer key reachable.
+- README numbers regenerated and matching `bench_results/*.json`.
 
-**Acceptance criteria**
-- `pip install -e ".[dev]"` succeeds from a clean venv.
-- `ruff check . && ruff format --check .` passes.
-- `mypy src/` passes with `strict = true` and zero ignores.
-- `pytest` passes.
-- `pre-commit run --all-files` passes.
+**Commit:** `feat(dataset): scale evaluation corpus to create real budget pressure`
 
-**Commit:** `chore(build): add toolchain, src-layout skeleton, and pre-commit gates`
-
-**Then:** mark `M0-T1` ✅ in §4, set §5 to `M0-T2`, update the header date, commit.
+### Then, in order
+- `N2` — cache `all_chunks()` per compile; measure the latency delta (gap 3/4 above).
+- `N3` — `tiktoken` adapter behind the `Tokenizer` port; re-run and report any drift.
+- `N4` — persist bundles to SQLite; add `GET /v1/context/bundles/{digest}` and `:replay`.
+- `N5` — golden-bundle fixtures in CI so a context regression fails the build.
+- `N6` — GitHub Actions: ruff + mypy + pytest + benchmark smoke run.
 
 ---
 
-## 6. Blockers and open questions
+## 6. Blockers
 
-*None currently.*
-
-Open architectural questions (decide with evidence, not opinion — see
-[`docs/Roadmap.md`](docs/Roadmap.md) §5): **Q1** utility model learning · **Q2** Postgres
-FTS vs BM25 · **Q3** working-memory store · **Q4** semantic bundle caching ·
-**Q5** 3B model adequacy for NL2SQL · **Q6** audit log hash chaining.
+*None.*
 
 ---
 
@@ -174,18 +163,11 @@ FTS vs BM25 · **Q3** working-memory store · **Q4** semantic bundle caching ·
 
 When you finish a task, in the **same commit**:
 
-1. Flip its status to ✅ in §4.
-2. Rewrite §5 to fully specify the next task — deliverables, acceptance criteria,
-   commit message, and which docs to read first. Match the level of detail above; the
-   next agent may have no context beyond this file.
-3. Update the header (`Last updated`, `Current milestone`, `Next task`).
-4. Add anything discovered that a future session would otherwise have to rediscover:
-   a version pin that mattered, a workaround, a surprising behaviour — put it in §3
-   *Environment facts* or §6.
-5. If you made an architectural decision, add an ADR and log it in
-   [`docs/DecisionLog.md`](docs/DecisionLog.md). Do not bury a decision in a commit
-   message.
-
-**If you deviated from a documented design, say so explicitly in §6.** An undocumented
-deviation is the single most expensive thing to discover later, because the docs will be
-trusted and will be wrong.
+1. Move it from §5 to §3, or add it to §4 if it revealed a new weakness.
+2. Rewrite §5 to fully specify the next task at the same level of detail — the next
+   agent may have no context beyond this file.
+3. Update the header (`Last updated`, `Phase`, `Next task`).
+4. If benchmark numbers moved, update the README **and** `bench_results/*.json`.
+5. If you deviated from a documented design, say so explicitly in §4. An undocumented
+   deviation is the most expensive thing to discover later, because the docs will be
+   trusted and will be wrong.

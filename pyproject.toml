@@ -1,0 +1,58 @@
+[build-system]
+requires = ["hatchling"]
+build-backend = "hatchling.build"
+
+[project]
+name = "mnemos"
+version = "0.1.0"
+description = "A context operating system for AI agents. Context is a compiled artifact, not a concatenated string."
+readme = "README.md"
+requires-python = ">=3.12"
+license = { text = "Apache-2.0" }
+authors = [{ name = "Cheella Sree Harsha" }]
+keywords = ["rag", "context-engineering", "memory", "llm", "retrieval", "agents"]
+
+dependencies = [
+    "numpy>=1.26",
+    "pydantic>=2.7",
+    "fastapi>=0.110",
+    "uvicorn[standard]>=0.29",
+    "pypdf>=4.2",
+]
+
+[project.optional-dependencies]
+# Neural embeddings. Everything works without this; the hashing embedder is the
+# zero-download default so the benchmark reproduces on any machine.
+neural = ["sentence-transformers>=3.0"]
+dev = ["pytest>=8.0", "pytest-asyncio>=0.23", "ruff>=0.5", "mypy>=1.10"]
+
+[project.scripts]
+mnemosctl = "mnemos.cli:main"
+
+[tool.hatch.build.targets.wheel]
+packages = ["src/mnemos"]
+
+[tool.ruff]
+line-length = 100
+target-version = "py312"
+src = ["src", "tests"]
+
+[tool.ruff.lint]
+select = ["E", "F", "W", "I", "N", "UP", "B", "C4", "DTZ", "PT", "RET", "SIM", "RUF"]
+ignore = ["E501"]
+
+[tool.ruff.lint.per-file-ignores]
+"tests/*" = ["S101"]
+
+[tool.mypy]
+python_version = "3.12"
+warn_unused_configs = true
+warn_redundant_casts = true
+warn_unreachable = true
+disallow_untyped_defs = true
+ignore_missing_imports = true
+
+[tool.pytest.ini_options]
+addopts = "-q --strict-markers"
+testpaths = ["tests"]
+pythonpath = ["src"]

@@ -54,6 +54,12 @@ Thumbs.db
 !.vscode/settings.shared.json
 
 # ---- Personal documents (must never enter this repo) ----
-*.pdf
-*resume*
-*Resume*
+# Scoped to the repository root so a legitimate test-corpus PDF under
+# tests/fixtures/ is not silently excluded.
+/*.pdf
+/*resume*
+/*Resume*
+
+# Local venv and runtime data
+.venv/
+.data/
