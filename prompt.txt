@@ -15,6 +15,34 @@ TRACKER.md section 5 is the task. It is written to be self-contained; implement 
 that, and do not substitute your own idea of what should come next.
 
 ------------------------------------------------------------------------------
+ONE TASK PER SESSION — THIS IS THE MOST IMPORTANT RULE HERE
+
+Do ONE of these, then STOP:
+
+  (a) If something was left unfinished by the previous session, finish THAT. Nothing
+      else. TRACKER.md section 5 and the branch's open PR will tell you what it was.
+
+  (b) Otherwise, implement exactly ONE task from TRACKER.md section 5. One. Not the
+      one after it, however small or tempting the next one looks.
+
+Then close out properly and stop: tests green, both tracker files updated, scoped
+commits, branch pushed, PR updated, and a short honest report of what you did and what
+you did not.
+
+DO NOT roll on to the next task. DO NOT ask "shall I continue with the next one?" and
+DO NOT start it while waiting for an answer. The next task gets a NEW SESSION — that is
+deliberate, because a long session burns usage limits that are better spent on fresh
+context.
+
+If the one task turns out to be bigger than it looked, do not silently expand the
+session to absorb it. Split it, implement the first piece properly, and REWRITE
+TRACKER.md section 5 so the remainder is fully specified for whoever picks it up next.
+A clean handoff is worth more than a rushed finish.
+
+Stopping early with the tree in a clean, committed, documented state is the correct
+outcome. Stopping mid-edit with uncommitted work is not.
+
+------------------------------------------------------------------------------
 WHAT THIS PROJECT IS
 
 An AI workspace chatbot. One conversation surface; a router decides whether an answer
@@ -76,6 +104,9 @@ A reader who trusts one and not the other is worse off than one who trusts neith
 Report honestly. If a test fails, say so and paste the output. If you skipped something,
 say which and why. Do not claim a milestone is done because the code exists — claim it
 when you have run it and seen the output.
+
+Then stop, per the one-task-per-session rule above. End your report by naming what the
+next session should pick up — do not begin it.
 
 ------------------------------------------------------------------------------
 RUNNING IT

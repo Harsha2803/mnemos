@@ -34,6 +34,12 @@
    files.
 7. **Every branch gets a PR the moment it has a commit** — draft if the work is
    unfinished. A branch without a PR is a branch that gets lost.
+8. **One task per session.** Finish whatever the previous session left unfinished; if
+   nothing is pending, implement exactly one task from §5 and stop. Do not continue to
+   the next task and do not start it while asking whether to. The next task gets a new
+   session — that is deliberate, to spend usage limits on fresh context rather than on a
+   long one. If a task proves bigger than it looked, split it, land the first piece
+   properly, and rewrite §5 so the remainder is fully specified for the next agent.
 
 ---
 
