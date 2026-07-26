@@ -13,9 +13,12 @@ Two things here are load-bearing beyond boilerplate:
    so forgetting to scope a query returns zero rows rather than another tenant's
    rows — the failure mode is an empty page, not a breach.
 
-   That holds only if the connection is an *unprivileged* role. RLS does not apply
-   to a superuser, nor to anything holding `BYPASSRLS`, so the policies were inert
-   until migration `0005` split the owner from the role the application uses.
+   Two things make that true rather than aspirational, and both were originally
+   missing. The connection must be an *unprivileged* role: RLS does not apply to a
+   superuser or to anything holding `BYPASSRLS` (migration `0005`). And the policy
+   must read `NULLIF(current_setting(...), '')`, because a reverted `SET LOCAL`
+   leaves a placeholder GUC defined as the empty string rather than undefined, and
+   `''::uuid` raises instead of yielding NULL (migration `0006`).
 """
 
 from __future__ import annotations
