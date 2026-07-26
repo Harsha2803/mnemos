@@ -209,8 +209,29 @@ re-homing into the feature layout and re-targeting at asyncpg + pgvector.**
 The v0.1 benchmark (naive prompt vs compiled bundle) should be **kept** — it is the
 evidence for the memory/context differentiator. Re-point it at Postgres.
 
+### Verified running (2026-07-26)
+
+`docker compose up -d postgres redis minio` → all three healthy. Confirmed by query:
+
+| Check | Result |
+|---|---|
+| Extensions in `mnemos` | `btree_gist citext pg_trgm plpgsql uuid-ossp vector` |
+| Databases created | `mnemos`, `mnemos_analytics` |
+| Analytics seed | 900 sales_order, 6 customer, 6 product, 4 region |
+| `mnemos_ro` SELECT | allowed (900) |
+| `mnemos_ro` INSERT | **`ERROR: permission denied for table region`** |
+
+The last two lines are the defence-in-depth claim proven at the database level: even a
+prompt injection that defeats the AST parser cannot write, because the role cannot write.
+
+**Host port note:** this machine already runs Postgres on 5432 and Redis on 6379, so the
+compose file maps host `15432 -> 5432` and `6380 -> 6379`. Container-to-container traffic
+is unaffected and still uses the standard ports over the compose network.
+
 ### Not started
-M2 onward.
+M2 onward. Not yet built or run: keycloak, ollama, and the four backend containers
+(migrate/api/worker/realtime) — those need `backend/src/mnemos/entrypoints/api/main.py`
+to exist first, which is the immediate next task.
 
 ---
 
