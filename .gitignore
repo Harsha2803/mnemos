@@ -1,0 +1,59 @@
+# ---- Python ----
+__pycache__/
+*.py[cod]
+*.egg-info/
+.eggs/
+build/
+dist/
+.venv/
+venv/
+.python-version
+
+# ---- Tooling caches ----
+.pytest_cache/
+.ruff_cache/
+.mypy_cache/
+.coverage
+coverage.xml
+htmlcov/
+.hypothesis/
+
+# ---- Node / frontend ----
+node_modules/
+.next/
+out/
+*.tsbuildinfo
+.turbo/
+
+# ---- Secrets & local config ----
+# Never commit real secrets. Only *.example files are tracked.
+.env
+.env.*
+!.env.example
+!.env.*.example
+*.pem
+*.key
+*.p12
+secrets/
+.secrets/
+
+# ---- Local runtime state ----
+.data/
+volumes/
+*.db
+*.sqlite3
+logs/
+*.log
+
+# ---- OS / editor ----
+.DS_Store
+Thumbs.db
+.idea/
+.vscode/*
+!.vscode/extensions.json
+!.vscode/settings.shared.json
+
+# ---- Personal documents (must never enter this repo) ----
+*.pdf
+*resume*
+*Resume*
