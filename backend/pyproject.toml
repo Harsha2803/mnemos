@@ -50,6 +50,10 @@ dev = [
   "pytest-asyncio>=0.24",
   "ruff>=0.7",
   "mypy>=1.13",
+  # Tenant isolation is a property of Postgres, not of the service layer, so the
+  # test that proves it has to run against a real Postgres with the real
+  # migrations applied. A fake would only prove the fake isolates.
+  "testcontainers[postgres]>=4.15",
 ]
 
 [project.scripts]
