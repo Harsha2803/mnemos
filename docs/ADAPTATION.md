@@ -183,7 +183,11 @@ Every tenant-scoped table: `org_id` + RLS `FORCE` on `app.current_org` GUC.
 | **M13** | Next.js frontend: chat, memory, knowledge, data, tools, inspector, cost | All pages functional against the API |
 | **M14** | Realtime WS, nginx, e2e verification, docs, push | Full stack from clean clone |
 
-**Current position: M1 and M2 complete and verified. M3 is next.**
+**Current position: M1 and M2 complete and verified. M3 is in progress — its RLS
+prerequisite is done and proved; deliverables 1–7 remain. See §8.**
+
+M3's exit criterion "RLS blocks cross-org" turned out to be unmet by M2 rather than merely
+untested; that is written up in §8 and in [TRACKER §3](../TRACKER.md#3-current-state--what-is-actually-built).
 
 ---
 
@@ -207,7 +211,8 @@ Every tenant-scoped table: `org_id` + RLS `FORCE` on `app.current_org` GUC.
 
 ### M2 — Alembic + full schema ✅
 
-41 tables across the nine groups in §6. Four revisions, each independently reversible:
+41 tables across the nine groups in §6. Four revisions at M2, each independently
+reversible (`0005` and `0006` were added by M3 — see below):
 
 | Revision | Contents |
 |---|---|
@@ -218,6 +223,60 @@ Every tenant-scoped table: `org_id` + RLS `FORCE` on `app.current_org` GUC.
 
 `alembic check` is wired as the models-vs-migrations drift guard and currently reports
 no diff. Downgrade to base was tested and leaves only `alembic_version`.
+
+### M3 — identity 🟡 in progress
+
+**Done: the RLS prerequisite.** Verified 2026-07-27 on branch `feat/m3-identity`
+(PR #2, draft).
+
+M2 reported "40 tables with FORCE row-level security" as evidence of tenant isolation.
+That report was accurate about the catalogue and wrong about the system. Writing M3's
+acceptance test found two defects:
+
+| Revision | Defect | Fix |
+|---|---|---|
+| `0005` | The application connected as `POSTGRES_USER`, created by the Postgres image as a **superuser**. RLS applies to neither a superuser nor a `BYPASSRLS` role, so every policy from `0004` was inert | Role split: `mnemos` owns the tables and runs Alembic; `mnemos_app` is `LOGIN NOSUPERUSER NOBYPASSRLS` with DML only and is what api/worker/realtime connect as. `mnemos_admin` is granted *to* `mnemos_app` for bootstrap |
+| `0006` | An unscoped query **raised `22P02`** rather than returning zero rows: a reverted `SET LOCAL` leaves a dot-qualified placeholder GUC defined as `''`, not undefined, and `''::uuid` raises. Reproduces only on a connection that has already served a scoped request — i.e. every pooled one | Policy expression becomes `NULLIF(current_setting('app.current_org', true), '')::uuid`, restoring the failure mode `0004` documented |
+
+Neither defect was reachable through a correctly filtered query — the explicit `org_id`
+filter in §"Data access" of the coding standards held. What was absent is the *second*
+layer that makes the defence-in-depth claim in `ThreatModel.md` true rather than
+aspirational: an application bug was supposed to be caught by RLS, and RLS was off.
+
+Evidence, as `mnemos_app` against the live stack, two orgs each owning one `tag` row:
+
+| Check | Before | After |
+|---|---|---|
+| `SELECT count(*) FROM tag`, GUC = org A | 2 | **1** |
+| Cross-org `INSERT` under GUC = org A | accepted | **rejected by the policy's `WITH CHECK`** |
+| Same query on the same connection after `COMMIT` | `ERROR: invalid input syntax for type uuid: ""` | **0 rows** |
+
+| Command | Result |
+|---|---|
+| `pytest` | **28 passed** — 23 `_v1` kernel + 5 new tenant-isolation tests |
+| `alembic check` | no drift between models and migrations |
+| `alembic downgrade 0004` then `upgrade head` | clean in both directions |
+
+`tests/test_tenant_isolation.py` runs against a **testcontainers Postgres** with the real
+extensions and the real revisions applied, not a fake — tenant isolation is a property of
+Postgres, and a substitute would only prove the substitute isolates. Its
+`test_application_role_holds_no_rls_exemption` asserts `rolsuper` and `rolbypassrls` are
+both false on the live connection, because the regression it guards is a change to a DSN,
+and no amount of correct SQL protects against that.
+
+Also added: `Database.elevated_session()` — `SET LOCAL ROLE mnemos_admin` for the single
+bootstrap transaction that has no org to scope to yet. A `SET ROLE` rather than a standing
+privilege, because **role attributes are not inherited through membership**: `mnemos_app`
+inherits `mnemos_admin`'s table privileges but not its `BYPASSRLS`, so escaping isolation
+takes a deliberate statement visible in `pg_stat_activity` and at the call site.
+
+**Remaining: deliverables 1–7** — domain types, provider Strategy/Factory, split-horizon
+OIDC, JWT issuance and refresh rotation, API keys, the RBAC dependency, and
+`mnemosctl bootstrap`. Specified in [TRACKER §5](../TRACKER.md#5-next-task), which also
+records two design questions the RLS work forced open: **credentials must now carry their
+own tenant** (nothing about a caller is readable before an org is known), and
+**`ThreatModel.md` and `core/config.py` disagree on the token algorithm** (EdDSA vs HS256)
+in a way M3.4 has to resolve and document.
 
 ### Carried over from v0.1 (needs porting from SQLite → Postgres)
 
@@ -240,17 +299,26 @@ evidence for the memory/context differentiator. Re-point it at Postgres.
 | Analytics seed | 900 sales_order, 6 customer, 6 product, 4 region |
 | `mnemos_ro` SELECT | allowed (900) |
 | `mnemos_ro` INSERT | **`ERROR: permission denied for table region`** |
-| `alembic upgrade head` | revision `0004` |
+| `alembic upgrade head` | revision `0006` |
 | `alembic downgrade base` | clean; only `alembic_version` survives |
 | `alembic check` | no drift between models and migrations |
 | `mnemosctl db doctor` | 41 tables, **40 with FORCE row-level security** |
 | Exclusion constraint | `ex_memory_one_live_fact_per_scope` present and armed |
 | `GET /readyz` | `{"status":"ready","checks":{"postgres":"ok","redis":"ok"}}` |
 | `ollama list` | `qwen2.5:3b-instruct` 1.9 GB |
-| `pytest` | 23 passed |
+| `pytest` | 28 passed (needs Docker — one suite uses testcontainers) |
 
 `org` is the one table without RLS, deliberately: a user must resolve their own org row
-before the GUC can be set from it.
+before the GUC can be set from it. That decision has a consequence which only became
+visible once RLS was in force — **every credential must carry its own tenant**, because
+`app_user`, `session` and `api_key` are all org-scoped and therefore unreadable until an
+org is known. See [TRACKER §5](../TRACKER.md#5-next-task).
+
+**The `db doctor` row above is exactly the trap M3 walked into.** It reports
+`relforcerowsecurity` from `pg_class`, which was true and told us nothing: the policies
+were present and applied to nobody, because the connecting role was a superuser. A
+schema-level report is not evidence that a control is in force. Anything asserted on the
+strength of `db doctor` alone deserves the same scepticism.
 
 The `mnemos_ro` lines are the defence-in-depth claim proven at the database level: even a
 prompt injection that defeats the AST parser cannot write, because the role cannot write.
@@ -265,9 +333,13 @@ stack; `docker compose --profile web up` opts in once M13 lands.
 
 ### Not started
 
-M3 onward. The identity feature — internal auth, JWT, RBAC, tags, OIDC via
-Strategy/Factory, API keys — is the immediate next task. Keycloak is running with the
-realm imported, so the OIDC half has a real provider to talk to on day one.
+M3 deliverables 1–7, then M4 onward. The identity feature — internal auth, JWT, RBAC,
+tags, OIDC via Strategy/Factory, API keys — is in progress: its RLS prerequisite is done,
+and the next unit of work is `M3.1`, the pure domain types. Keycloak is running with the
+realm imported, so the OIDC half has a real provider to talk to on day one — though the
+imported realm currently permits only `http://localhost:3000/*` as a redirect URI, so a
+backend-driven code+PKCE flow needs the API callback added to
+`deploy/keycloak/mnemos-realm.json` first.
 
 ---
 

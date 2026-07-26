@@ -7,9 +7,9 @@
 > tracker is worse than none.
 
 **Last updated:** 2026-07-27
-**Phase:** M3 — identity (internal auth, JWT, RBAC, tags, OIDC, API keys)
-**Next task:** `M3`, fully specified in §5
-**Branch:** `feat/m1-m2-schema` (M1+M2, PR open) — cut a fresh branch for M3
+**Phase:** M3 — identity. The RLS prerequisite is done; deliverables 1–7 remain
+**Next task:** `M3.1`, fully specified in §5. Take them one at a time, in order
+**Branch:** `feat/m3-identity` (PR #2, draft). M1+M2 merged to `main` as PR #1
 
 ---
 
@@ -104,9 +104,49 @@ Detailed evidence for each ✅ is in [ADAPTATION §8](docs/ADAPTATION.md#8-curre
 |---|---|
 | M1 container stack + backend skeleton | ✅ nine services healthy |
 | M2 Alembic + full schema | ✅ 41 tables, 4 revisions, `alembic check` clean |
-| M3 identity | ⬜ **next** |
+| M3 identity | 🟡 **in progress** — prerequisite done, `M3.1`–`M3.7` remain |
 | M4 port memory/retrieval/context kernel to PG | ⬜ |
 | M5–M14 | ⬜ |
+
+### 🟡 M3 prerequisite — RLS made real, verified 2026-07-27
+
+M3's acceptance criterion is `test_cross_org_read_returns_zero_rows`. Writing it found
+that **the tenant isolation reported by M2 did not exist in the running system**. Two
+independent defects, both now fixed, both with a test pinning them:
+
+| Defect | Why it was invisible | Fix |
+|---|---|---|
+| The application connected as `POSTGRES_USER`, which the Postgres image creates as a **superuser**. RLS never applies to a superuser or to a `BYPASSRLS` role, so all 40 policies were inert | `db doctor` reports `relforcerowsecurity` from the catalogue, which was true. The policies existed; they constrained nobody | `0005` — `mnemos_app`, LOGIN NOSUPERUSER NOBYPASSRLS, DML only. `migrate` keeps the owner DSN; api/worker/realtime use the new role |
+| An unscoped query **raised `22P02`** instead of returning zero rows. A reverted `SET LOCAL` leaves a placeholder GUC defined as `''`, not undefined, and `''::uuid` raises | Only reproduces on a connection that has already served a scoped request — i.e. every pooled connection, and no fresh one | `0006` — `NULLIF(current_setting('app.current_org', true), '')` |
+
+Neither was ever exploitable through a *correctly filtered* query; the explicit `org_id`
+filter held throughout. What was missing is the second, independent layer the threat
+model's defence-in-depth argument depends on.
+
+Evidence, as `mnemos_app` against the live stack:
+
+```
+before 0005, GUC = org A, two orgs present :  SELECT count(*) FROM tag  ->  2
+after  0005, GUC = org A                   :  SELECT count(*) FROM tag  ->  1
+after  0005, cross-org INSERT              :  ERROR: new row violates row-level
+                                              security policy for table "tag"
+before 0006, same connection after COMMIT  :  ERROR: invalid input syntax for
+                                              type uuid: ""
+after  0006, same connection after COMMIT  :  0 rows
+```
+
+| Check | Result |
+|---|---|
+| `pytest` | **28 passed** (23 `_v1` kernel + 5 tenant isolation) |
+| `alembic check` | no drift |
+| `alembic downgrade 0004` → `upgrade head` | clean both ways |
+| `pg_roles` | `mnemos` super+bypass · `mnemos_app` neither · `mnemos_admin` bypass, NOLOGIN · `mnemos_app` ∈ `mnemos_admin` |
+
+New in `platform/db.py`: `Database.elevated_session()` — `SET LOCAL ROLE mnemos_admin`
+for the bootstrap transaction that has no org to scope to yet. It is a `SET ROLE` rather
+than a standing privilege because **role attributes are not inherited through
+membership**, so escaping isolation takes a deliberate statement that shows up in
+`pg_stat_activity` and in the call site.
 
 ### ✅ M1 + M2, verified 2026-07-27
 
@@ -115,7 +155,7 @@ Detailed evidence for each ✅ is in [ADAPTATION §8](docs/ADAPTATION.md#8-curre
 | `core/` | config, errors, structlog logging, clock, UUIDv7 ids, shared enums |
 | `platform/` | async engine + tenant-scoped session (`app.current_org` GUC), Redis cache with TTL-mandatory locks, `models.py` metadata registry |
 | `features/*/adapters/models.py` | 41 tables across nine groups |
-| `migrations/` | `0001` schema · `0002` bitemporal EXCLUDE + cycle trigger · `0003` monthly partitions · `0004` FORCE RLS |
+| `migrations/` | `0001` schema · `0002` bitemporal EXCLUDE + cycle trigger · `0003` monthly partitions · `0004` FORCE RLS · `0005` unprivileged app role · `0006` RLS policy tolerates a reverted GUC |
 | `entrypoints/` | api (`/healthz` vs `/readyz` split), worker (stuck-job reaper), realtime (WS over Redis pub/sub), `mnemosctl db doctor` |
 | Stack | postgres · redis · minio · keycloak · ollama (`qwen2.5:3b-instruct`) · migrate · api · worker · realtime |
 
@@ -142,7 +182,9 @@ not a defect.
 | Stack up | `docker compose up -d` (add `--profile web` from M13) |
 | Schema report | `docker compose exec api mnemosctl db doctor` |
 | Migrations | `cd backend && alembic upgrade head \| downgrade base \| check` |
-| Tests | `cd backend && ../.venv/bin/python -m pytest -q` → 23 passed |
+| Tests | `cd backend && ../.venv/bin/python -m pytest -q` → 28 passed (needs Docker; see §4.8) |
+| Fast tests | `cd backend && ../.venv/bin/python -m pytest -q tests/test_invariants.py` → 23, hermetic |
+| DB roles | `migrate` connects as `mnemos` (owner). api/worker/realtime connect as `mnemos_app` |
 | Host ports | postgres `15432`, redis `6380`, api `8000`, realtime `8001`, keycloak `8080`, minio `9000/9001`, ollama `11434` |
 | Git identity | `Cheella Sree Harsha <cheellasreeharsha2803@gmail.com>` (repo-local) |
 | GitHub | `Harsha2803/mnemos`, private. **Two accounts in `gh`; keep `Harsha2803` active** |
@@ -170,51 +212,125 @@ Recorded so they are not rediscovered as surprises:
    from M7 — but it must not replace the deterministic metrics.
 6. **The heuristic tokenizer approximates BPE.** Within a few percent on English prose;
    a `tiktoken` adapter would remove the approximation.
-7. **RLS is untested by an automated test.** `mnemosctl db doctor` shows 40 tables with
-   FORCE, but nothing yet *proves* a cross-org read returns zero rows. That test is an
-   M3 deliverable and is listed there.
-8. **`context_bundle` and `bundle_item` have no writer yet.** The tables and the budget
-   CHECK exist; the compiler that fills them is M4.
-9. **The frontend is an empty directory.** `web` is behind a compose profile so it does
-   not break `up`. M13.
+7. ~~**RLS is untested by an automated test.**~~ **Discharged 2026-07-27**, and it was
+   worse than "untested" — see §3. `tests/test_tenant_isolation.py` now proves it against
+   a real Postgres. The lesson worth keeping: `db doctor` reported the catalogue
+   faithfully and the catalogue was not the thing that mattered. **A schema-level report
+   is not evidence that a control is in force.** Anything else claimed on the strength of
+   `db doctor` alone deserves the same suspicion.
+8. **The test suite now needs Docker.** `test_tenant_isolation.py` starts a
+   testcontainers Postgres, so `pytest` went from ~1s and hermetic to ~25s and
+   Docker-dependent. Accepted deliberately: tenant isolation is a property of Postgres,
+   and a fake would only prove the fake isolates. The 23 `_v1` tests remain hermetic, so
+   `pytest -q tests/test_invariants.py` is still the fast loop.
+9. **`ruff check` is not clean on `tests/test_invariants.py`** — one `RUF059`
+   (unused unpacked variable, line ~202). Pre-existing, inherited from v0.1, untouched
+   because it is not in the M3 diff. One-line fix whenever that file is next edited.
+10. **`context_bundle` and `bundle_item` have no writer yet.** The tables and the budget
+    CHECK exist; the compiler that fills them is M4.
+11. **The frontend is an empty directory.** `web` is behind a compose profile so it does
+    not break `up`. M13.
 
 ---
 
 ## 5. NEXT TASK
 
-### `M3` — Identity: internal auth, JWT, RBAC, tags, OIDC, API keys
+### `M3.1` — `features/identity/domain/`: `Principal`, `Permission`, `TagSet`
 
-**Why this next.** Every subsequent milestone needs a caller with an org and a tag set.
+**Do this one only.** The remaining M3 deliverables are specified below so the shape is
+visible, but they are separate tasks with separate commits. Nothing about M3.1 depends on
+having read ahead.
+
+**Why M3 at all.** Every subsequent milestone needs a caller with an org and a tag set.
 Retrieval cannot push authorization into the scan without a real principal, so building
 M4–M12 first would mean building them against a fake one and rewiring later.
 
 **Read first:** ADAPTATION §3 (the `auth_modules/providers` → `features/identity` row),
-§5 (layering), and `docs/ThreatModel.md`.
+§5 (layering), `docs/CodingStandards.md` §2, and `docs/ThreatModel.md`.
 
-**Deliverables**
+**Scope.** Pure types only. **No SQLAlchemy import anywhere in `domain/`** — that is the
+layering rule, and it is what lets these be unit-tested in microseconds. No repository, no
+provider, no FastAPI. `features/identity/adapters/models.py` already exists and stays
+untouched.
 
-1. `features/identity/domain/` — `Principal`, `Permission`, `TagSet` as pure types with
-   no SQLAlchemy import.
+- `Principal` — who is calling: `org_id`, `principal_id`, kind (`user` vs `service`,
+  because an API key is not a person), granted permissions, tag set, and the
+  `session_id` / `api_key_id` that authenticated it. Frozen; a mutable principal is a
+  privilege-escalation primitive.
+- `Permission` — `resource:action`, which is the string form already stored in
+  `role.permissions` JSONB. Parse tolerantly (an unknown permission in a role is
+  harmless — nothing requires it), but expose typed constructors so a route guard cannot
+  typo a permission into permanent denial.
+- `TagSet` — a set of tag slugs with an `overlaps()` test. **This is why the retrieval
+  scan can push authorization into the `WHERE` clause** (C4): tag authorization is a
+  set-overlap, and set-overlap is expressible in SQL. Keep it that way.
+- Identifier `NewType`s (`OrgId`, `UserId`, `RoleId`, `TagId`, `SessionId`, `ApiKeyId`,
+  `ProviderId`). Every id here is a UUID, so without newtypes `revoke(user_id, org_id)`
+  type-checks with the arguments swapped, and in a multi-tenant system that is a leak.
+
+**Acceptance**
+- `test_permission_denies_by_default` — a permission absent from the set is refused.
+- `test_wildcard_grant_allows_specific_permission` — `*:*` and `memory:*` both work.
+- `test_wildcard_in_a_requirement_is_rejected` — requiring `memory:*` is a bug, not a
+  broad check, and must raise rather than silently over-grant.
+- `test_tag_overlap_is_symmetric_and_empty_set_grants_nothing`.
+- Import-time proof that `domain/` pulls in no SQLAlchemy.
+- `pytest` green, `ruff check` clean on the new files.
+
+### Then, still in M3, one commit each
+
 2. `features/identity/providers/` — `AuthProvider` protocol + `InternalProvider`
    (argon2id) and `OidcProvider` (Keycloak), selected by a factory reading the
    `identity_provider` table. **Strategy + Factory + composition root**, mirroring the
    shape in ADAPTATION §3 — two protocols, not four.
 3. Split-horizon OIDC honoured: validate `iss` against `issuer_internal`, redirect the
    browser to `issuer_public`. JWKS fetched over the internal URL and cached for
-   `oidc_jwks_cache_s`.
+   `oidc_jwks_cache_s`. **The Keycloak realm currently allows only
+   `http://localhost:3000/*` as a redirect URI** (`deploy/keycloak/mnemos-realm.json`);
+   a backend-driven code+PKCE flow needs the API callback added. Keycloak runs
+   `start-dev` with no volume, so `docker compose up -d --force-recreate keycloak`
+   re-imports the realm.
 4. Platform JWT issuance + refresh-token rotation using the `session` table's
    `rotated_to` chain. Presenting an already-rotated token revokes the whole family.
 5. API-key auth: argon2id hash, `prefix` for identification, plaintext shown once.
 6. RBAC dependency for FastAPI: deny by default, permission checked as set membership.
-7. `mnemosctl bootstrap` — create the first org, admin user and system roles. It must
-   run as `mnemos_admin` (the `BYPASSRLS` role from migration `0004`), because the very
-   first insert has no org to scope to.
+7. `mnemosctl bootstrap` — create the first org, admin user and system roles. Run it
+   through `Database.elevated_session()` (added by the M3 prerequisite), which is
+   `SET LOCAL ROLE mnemos_admin`, because the very first insert has no org to scope to.
 
-**Acceptance**
+**Two design questions M3.2–M3.5 must answer, surfaced by the RLS work and not yet
+settled.** Neither is a licence to re-litigate §2 — both are new consequences of RLS
+actually being in force:
+
+- **Credentials must carry their tenant.** `app_user`, `session`, `api_key` and
+  `identity_provider` are all org-scoped, and `org` is the only table without RLS. So
+  nothing about a caller is readable until an org is known, and a bare
+  `Authorization: Bearer` or `X-API-Key` no longer identifies anybody. Either every
+  credential encodes its org (password grant takes an org slug; refresh token and API key
+  become `<org>.<secret>` / `<org>_<prefix>.<secret>`), or `BYPASSRLS` enters the
+  authenticated request path. **Recommendation: carry the tenant in the credential** — it
+  keeps `elevated_session()` down to its single bootstrap call site. Note that
+  `APIContract.md` §1 currently specifies `X-API-Key: <key_id>.<secret>`; folding the org
+  into the id half is a refinement of that, and APIContract must be updated in the same
+  commit either way.
+- **Refresh tokens hash with SHA-256, not argon2id.** `uq_session_refresh_token_hash` is
+  a unique index, and argon2's per-row salt makes a hash column unsearchable. That is
+  correct rather than a compromise: refresh tokens are high-entropy random strings, so
+  there is no dictionary to slow down. Argon2id stays on passwords and API-key secrets,
+  which is where the entropy is low. Say so in a docstring, because "why isn't this
+  argon2 too" is the first question a reviewer will ask.
+- **`ThreatModel.md` §"Cryptography" specifies EdDSA (Ed25519) for tokens; the committed
+  `core/config.py` specifies HS256** with a shared secret. This is a real conflict in the
+  docs, not a gap in the code, and M3.4 has to pick one. HS256 with a strict algorithm
+  allow-list (never read `alg` from the token — that control is the security-critical
+  half) is defensible while API, worker and realtime share one trust domain and one
+  secret. Whichever way it goes, **record it in §4 and reconcile the two documents.** Do
+  not implement one and leave both documents standing.
+
+**Acceptance for M3 overall**
 
 - Keycloak login round-trips to a platform JWT.
-- **`test_cross_org_read_returns_zero_rows`** — the RLS proof owed from §4.7. Two orgs,
-  same query, second org sees nothing.
+- ~~`test_cross_org_read_returns_zero_rows`~~ ✅ done in the prerequisite; see §3.
 - `test_rotated_refresh_token_revokes_family`.
 - `test_unauthenticated_request_is_denied_by_default` on a route with no explicit guard.
 - `alembic check` still clean; `pytest` green.
