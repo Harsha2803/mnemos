@@ -211,6 +211,10 @@ services:
     restart: unless-stopped
 
   web:
+    # Not built yet — the Next.js app is milestone M13. Behind a profile so
+    # `docker compose up` brings up the working stack instead of failing on a
+    # build context that contains no Dockerfile. Enable with `--profile web`.
+    profiles: ["web"]
     build:
       context: ./frontend
       dockerfile: Dockerfile
