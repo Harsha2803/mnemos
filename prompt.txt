@@ -1,0 +1,120 @@
+You are picking up an in-progress project called Mnemos, at
+/home/shreeharsha/Personal/Projects/Resume_001/mnemos
+
+Read these files IN THIS ORDER before writing any code. Do not skim them and do not
+start editing after the first one — the second file is the design and the first is only
+the status.
+
+  1. TRACKER.md                  what is built, the constraints, and the exact next task
+  2. docs/ADAPTATION.md          what the thing IS: architecture, capability map,
+                                 schema plan, milestones M1-M14, locked decisions
+  3. README.md                   the public framing and the published benchmark numbers
+  4. docs/CodingStandards.md     before your first line of code
+
+TRACKER.md section 5 is the task. It is written to be self-contained; implement exactly
+that, and do not substitute your own idea of what should come next.
+
+------------------------------------------------------------------------------
+WHAT THIS PROJECT IS
+
+An AI workspace chatbot. One conversation surface; a router decides whether an answer
+needs documents (RAG), a database (NL2SQL), a tool (MCP), memory, or a combination.
+Underneath, every message has an inspectable context bundle and a governed memory layer
+that distinguishes current facts from superseded ones.
+
+Positioning: the app does many things. Context and memory management is the thing that
+STANDS OUT among them, not the whole product.
+
+It is a portfolio project. Production practices, single-node scale.
+
+------------------------------------------------------------------------------
+HARD RULES — violating any of these is worse than doing nothing
+
+* ZERO MONETARY COST. Every component free and self-hosted. No API key for any
+  capability in the default path.
+
+* NEVER COPY FROM ../jiva/. That directory is the author's EMPLOYER'S PROPRIETARY
+  CODEBASE (J K Technosoft, project JIVA). It is reference for WHAT to build, never for
+  WHAT TO COPY. Architectural shape and capability lists are fine to learn from; source
+  code, schemas, migration bodies, prompts, domain registries and client names are not.
+  Every file in Mnemos is written fresh. See ADAPTATION.md section 2.
+
+* NEVER use the work GitHub account or email (harshaJKT, @jktech.com). Both a personal
+  and a work account are authenticated in `gh` on this machine. Confirm `Harsha2803` is
+  the active account before any push:  gh auth status
+
+* NO PLACEHOLDERS, NO TODOs, NO STUBBED RETURNS. Split a task rather than stub it.
+
+* DO NOT re-litigate settled decisions (TRACKER section 2, ADAPTATION section 9).
+  Several are load-bearing for numbers published in the README. If you think one is
+  wrong, write an ADR superseding it — do not silently deviate.
+
+* DO NOT run `pkill -f mnemos` — it matches the agent's own shell. Kill by port or PID.
+
+------------------------------------------------------------------------------
+HOW TO WORK
+
+Commits: one logical change per commit, conventional format. NEVER a bulk commit of
+unrelated files. The commit message should say why, not just what.
+
+Branches: work on a feature branch, never directly on main. The moment a branch has its
+first commit, push it and open a PR (draft if unfinished) so no branch gets lost.
+Check `git branch -a` and `gh pr list` at the start of every session.
+
+Every change ends with ALL of:
+  - pytest green            cd backend && ../.venv/bin/python -m pytest -q
+  - alembic check clean     cd backend && ../.venv/bin/alembic check
+  - TRACKER.md updated      status, next task, header
+  - ADAPTATION.md updated   section 7 milestone position, section 8 current state
+  - README numbers updated  ONLY if the retrieval or compile path moved, in which case
+                            re-run the benchmark and paste the real numbers
+  - a conventional commit, and the branch pushed with its PR
+
+Both TRACKER.md and docs/ADAPTATION.md must be updated IN THE SAME COMMIT as the work.
+A reader who trusts one and not the other is worse off than one who trusts neither.
+
+Report honestly. If a test fails, say so and paste the output. If you skipped something,
+say which and why. Do not claim a milestone is done because the code exists — claim it
+when you have run it and seen the output.
+
+------------------------------------------------------------------------------
+RUNNING IT
+
+  docker compose up -d                     # nine services; add --profile web from M13
+  docker compose ps
+  curl localhost:8000/readyz               # {"status":"ready", ...}
+  docker compose exec api mnemosctl db doctor    # live schema: tables, RLS, constraints
+
+  cd backend && ../.venv/bin/alembic upgrade head
+  cd backend && ../.venv/bin/python -m pytest -q
+
+Host ports are remapped because this machine already runs its own Postgres and Redis:
+postgres 15432, redis 6380, api 8000, realtime 8001, keycloak 8080, minio 9000/9001,
+ollama 11434. Container-to-container traffic still uses the standard ports.
+
+The Python venv is at .venv/ in the repo root, and the package lives in backend/.
+
+------------------------------------------------------------------------------
+WHERE THINGS ARE
+
+  backend/src/mnemos/
+    core/          config, errors, logging, clock, ids, shared enums
+    platform/      db engine + tenant-scoped sessions, redis, models registry
+    features/      identity, memory, retrieval, context, knowledge, connectors,
+                   datasources, chat, tools, prompts, observability
+    flows/         rag, nl2sql, agent, router
+    entrypoints/   api, worker, realtime, cli
+    _v1/           the SQLite kernel, preserved verbatim until it is ported in M4.
+                   DO NOT import from it in new code. Port, then delete.
+  backend/migrations/    alembic revisions
+  deploy/                postgres init SQL, keycloak realm
+  docs/                  architecture, schema, API contract, threat model, ADRs
+
+Layering rule: domain (pure) <- application <- adapters/api.
+`features` must never import `flows`.
+
+------------------------------------------------------------------------------
+START HERE
+
+Read TRACKER.md now, then docs/ADAPTATION.md. Tell me what the next task is and what
+you plan to do about it BEFORE you start writing code.
