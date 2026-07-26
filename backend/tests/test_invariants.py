@@ -11,8 +11,8 @@ from datetime import UTC, datetime
 
 import pytest
 
-from mnemos.baseline import NaiveContextBuilder
-from mnemos.bench import (
+from mnemos._v1.baseline import NaiveContextBuilder
+from mnemos._v1.bench import (
     SYSTEM_PROMPT,
     _contains,
     _duplicate_waste,
@@ -20,8 +20,8 @@ from mnemos.bench import (
     build_corpus,
     demo_principal,
 )
-from mnemos.compiler import Budgets, ContextCompiler, ContextRequest, SectionSpec, allocate
-from mnemos.core import (
+from mnemos._v1.compiler import Budgets, ContextCompiler, ContextRequest, SectionSpec, allocate
+from mnemos._v1.core import (
     AuthorizationPredicate,
     FrozenClock,
     HeuristicTokenizer,
@@ -31,16 +31,16 @@ from mnemos.core import (
     Settings,
     TrustTier,
 )
-from mnemos.dataset import CURRENT_VALUE, ORG_ID, QUESTIONS, STALE_VALUE, WORKSPACE
-from mnemos.embed import HashingEmbedder
-from mnemos.retrieval import (
+from mnemos._v1.dataset import CURRENT_VALUE, ORG_ID, QUESTIONS, STALE_VALUE, WORKSPACE
+from mnemos._v1.embed import HashingEmbedder
+from mnemos._v1.retrieval import (
     Candidate,
     RetrievalEngine,
     calibrate_utility,
     deduplicate,
     resolve_conflicts,
 )
-from mnemos.store import Store
+from mnemos._v1.store import Store
 
 
 @pytest.fixture(scope="module")
