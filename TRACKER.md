@@ -7,7 +7,7 @@
 > tracker is worse than none.
 
 **Last updated:** 2026-08-02
-**Phase:** M3 — identity. RLS prerequisite + `M3.1` (domain types) + `M3.2` (provider seam) done; deliverables 3–7 remain
+**Phase:** M3 — identity. RLS prerequisite + `M3.1` (domain types) + `M3.2` (provider seam, incl. the error-boundary fix) done; deliverables 3–7 remain
 **Next task:** `M3.3`, fully specified in §5. Take them one at a time, in order
 **Branch:** `feat/m3-identity` (PR #2, draft). M1+M2 merged to `main` as PR #1
 
@@ -235,6 +235,36 @@ collapsing concurrent callers by "was this fetched in the last second" also swal
 deliberate re-fetch that key rotation depends on. It now compares entry *identity* — "did
 somebody else already do my work" — which is the question actually being asked.
 
+### ✅ M3.2a — the API error boundary stopped leaking `details`, 2026-08-02
+
+Found immediately after M3.2, while reading `entrypoints/api/main.py` to plan M3.3. The
+single `MnemosError` handler rendered `**exc.details` into the response body. M3.2's
+`denied()` puts a constant message in `message` and the **real reason** in `details`
+precisely so the reason stays internal — so the handler was undoing, on the wire, the
+control the whole provider layer is built around.
+
+Proved rather than assumed, by restoring the old handler and re-running the new test:
+
+```
+old handler, GET /_probe/denial   -> {"code":"unauthenticated","message":"authentication
+                                      failed","reason":"no such user"}
+old handler, GET /_probe/upstream -> {..., "dsn":"postgresql://mnemos:hunter2@postgres:
+                                      5432/mnemos", "sql":"SELECT * FROM app_user ..."}
+new handler, both                 -> code + message only; details go to the log
+```
+
+`MnemosError.expose_details` is now a `ClassVar` defaulting to **False**, with
+`public_details` as the only thing the handler renders. `ValidationError` is the sole
+opt-in: naming the offending field is the useful answer and reveals nothing the caller did
+not send. `tests/test_error_boundary.py` (5 tests, hermetic — `Database` and `Cache`
+construct lazily, so the lifespan runs with no Postgres or Redis) pins all of it.
+
+**The lesson is the same one §4.7 records about `db doctor`, in a new place.** Every
+provider test passed both before and after, because they assert on the raised exception and
+never on the wire. A control that is only tested one layer below where it takes effect is
+not tested. Anything else M3 claims about what a caller can observe should be asserted at
+the boundary, not at the raise site.
+
 ### ✅ M1 + M2, verified 2026-07-27
 
 | Area | What exists |
@@ -269,8 +299,8 @@ not a defect.
 | Stack up | `docker compose up -d` (add `--profile web` from M13) |
 | Schema report | `docker compose exec api mnemosctl db doctor` |
 | Migrations | `cd backend && alembic upgrade head \| downgrade base \| check` |
-| Tests | `cd backend && ../.venv/bin/python -m pytest` → **72 passed** (needs Docker; see §4.8) |
-| Fast tests | `pytest -q tests/test_invariants.py tests/test_identity_domain.py tests/test_identity_providers.py` → 67, hermetic, no Docker |
+| Tests | `cd backend && ../.venv/bin/python -m pytest` → **77 passed** (needs Docker; see §4.8) |
+| Fast tests | `pytest tests/test_invariants.py tests/test_identity_domain.py tests/test_identity_providers.py tests/test_error_boundary.py` → 72, hermetic, no Docker |
 | Type check | `../.venv/bin/mypy --strict src/mnemos/core src/mnemos/features` — the 4 files that still fail project-wide `mypy` are all in the quarantined `_v1/` |
 | DB roles | `migrate` connects as `mnemos` (owner). api/worker/realtime connect as `mnemos_app` |
 | Host ports | postgres `15432`, redis `6380`, api `8000`, realtime `8001`, keycloak `8080`, minio `9000/9001`, ollama `11434` |

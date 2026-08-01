@@ -93,11 +93,26 @@ def create_app() -> FastAPI:
         return response
 
     @app.exception_handler(MnemosError)
-    async def handle_domain_error(_: Request, exc: MnemosError) -> JSONResponse:
+    async def handle_domain_error(request: Request, exc: MnemosError) -> JSONResponse:
         # One translation point. No handler needs to know how to phrase a 404.
+        #
+        # The full `details` goes to the log; only `public_details` goes to the
+        # client. Spreading `details` into the body — which this handler used to
+        # do — defeats every error message the identity layer is careful about:
+        # `AuthenticationError` deliberately carries a constant `message` and puts
+        # the real reason in `details`, so rendering both hands the caller the
+        # "no such user" / "wrong password" distinction it was built to withhold.
+        log.warning(
+            "http.domain_error",
+            code=exc.code,
+            status=exc.status_code,
+            path=request.url.path,
+            message=exc.message,
+            **exc.details,
+        )
         return JSONResponse(
             status_code=exc.status_code,
-            content={"error": {"code": exc.code, "message": exc.message, **exc.details}},
+            content={"error": {"code": exc.code, "message": exc.message, **exc.public_details}},
         )
 
     @app.get("/healthz", tags=["system"], summary="Liveness — touches no dependency")
