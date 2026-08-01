@@ -270,11 +270,19 @@ privilege, because **role attributes are not inherited through membership**: `mn
 inherits `mnemos_admin`'s table privileges but not its `BYPASSRLS`, so escaping isolation
 takes a deliberate statement visible in `pg_stat_activity` and at the call site.
 
-**Remaining: deliverables 1–7** — domain types, provider Strategy/Factory, split-horizon
-OIDC, JWT issuance and refresh rotation, API keys, the RBAC dependency, and
-`mnemosctl bootstrap`. Specified in [TRACKER §5](../TRACKER.md#5-next-task), which also
-records two design questions the RLS work forced open: **credentials must now carry their
-own tenant** (nothing about a caller is readable before an org is known), and
+**Done: M3.1 — the domain types (2026-08-02).** `features/identity/domain/` holds
+`Principal`, `Permission`/`PermissionSet`, `TagSet`, `PrincipalKind`, and the id newtypes,
+all pure and frozen, with **no SQLAlchemy in the layer** (proven by a subprocess import
+test — an in-process check passes vacuously once pytest has loaded SQLAlchemy elsewhere).
+Grants may be wildcards; requirements may not (`allows()` raises on a wildcard
+requirement). Tag authorization is a set-overlap, kept that way so it pushes into the SQL
+`WHERE` (C4). `pytest` 39 passed (+11), `ruff`/`mypy --strict` clean, `alembic check` clean.
+
+**Remaining: deliverables 2–7** — provider Strategy/Factory, split-horizon OIDC, JWT
+issuance and refresh rotation, API keys, the RBAC dependency, and `mnemosctl bootstrap`.
+Specified in [TRACKER §5](../TRACKER.md#5-next-task) (next up: **M3.2**, the providers),
+which also records two design questions the RLS work forced open: **credentials must now
+carry their own tenant** (nothing about a caller is readable before an org is known), and
 **`ThreatModel.md` and `core/config.py` disagree on the token algorithm** (EdDSA vs HS256)
 in a way M3.4 has to resolve and document.
 
@@ -333,9 +341,10 @@ stack; `docker compose --profile web up` opts in once M13 lands.
 
 ### Not started
 
-M3 deliverables 1–7, then M4 onward. The identity feature — internal auth, JWT, RBAC,
-tags, OIDC via Strategy/Factory, API keys — is in progress: its RLS prerequisite is done,
-and the next unit of work is `M3.1`, the pure domain types. Keycloak is running with the
+M3 deliverables 2–7, then M4 onward. The identity feature — internal auth, JWT, RBAC,
+tags, OIDC via Strategy/Factory, API keys — is in progress: its RLS prerequisite and the
+pure domain types (`M3.1`) are done, and the next unit of work is `M3.2`, the provider
+Strategy/Factory. Keycloak is running with the
 realm imported, so the OIDC half has a real provider to talk to on day one — though the
 imported realm currently permits only `http://localhost:3000/*` as a redirect URI, so a
 backend-driven code+PKCE flow needs the API callback added to

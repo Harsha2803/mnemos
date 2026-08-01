@@ -6,9 +6,9 @@
 > **and [`docs/ADAPTATION.md`](docs/ADAPTATION.md)** *in the same commit* — a stale
 > tracker is worse than none.
 
-**Last updated:** 2026-07-27
-**Phase:** M3 — identity. The RLS prerequisite is done; deliverables 1–7 remain
-**Next task:** `M3.1`, fully specified in §5. Take them one at a time, in order
+**Last updated:** 2026-08-02
+**Phase:** M3 — identity. RLS prerequisite + `M3.1` (domain types) done; deliverables 2–7 remain
+**Next task:** `M3.2`, fully specified in §5. Take them one at a time, in order
 **Branch:** `feat/m3-identity` (PR #2, draft). M1+M2 merged to `main` as PR #1
 
 ---
@@ -104,7 +104,7 @@ Detailed evidence for each ✅ is in [ADAPTATION §8](docs/ADAPTATION.md#8-curre
 |---|---|
 | M1 container stack + backend skeleton | ✅ nine services healthy |
 | M2 Alembic + full schema | ✅ 41 tables, 4 revisions, `alembic check` clean |
-| M3 identity | 🟡 **in progress** — prerequisite done, `M3.1`–`M3.7` remain |
+| M3 identity | 🟡 **in progress** — prerequisite + `M3.1` done, `M3.2`–`M3.7` remain |
 | M4 port memory/retrieval/context kernel to PG | ⬜ |
 | M5–M14 | ⬜ |
 
@@ -147,6 +147,33 @@ for the bootstrap transaction that has no org to scope to yet. It is a `SET ROLE
 than a standing privilege because **role attributes are not inherited through
 membership**, so escaping isolation takes a deliberate statement that shows up in
 `pg_stat_activity` and in the call site.
+
+### ✅ M3.1 — identity domain types, verified 2026-08-02
+
+`features/identity/domain/` now holds the pure types the rest of identity is written
+in. **No SQLAlchemy anywhere in the layer** (the layering rule), proven by a subprocess
+test rather than an in-process `sys.modules` check, which would pass vacuously because
+the pytest process has already imported SQLAlchemy elsewhere.
+
+| File | What it is |
+|---|---|
+| `ids.py` | `OrgId`/`UserId`/`RoleId`/`TagId`/`SessionId`/`ApiKeyId`/`ProviderId` — `NewType` over `UUID` so a transposed `revoke(user_id, org_id)` is a mypy error, not a leak |
+| `permission.py` | `Permission` (`resource:action`) + `PermissionSet`. Grants may carry wildcards (`*:*`, `memory:*`); requirements may not — `allows()` raises on a wildcard requirement and `Permission.require()` refuses to build one. Parsing is tolerant (a garbage grant is dropped, not fatal); construction is strict |
+| `tags.py` | `TagSet.overlaps()` — set intersection, symmetric, empty grants nothing. Kept a set-overlap *because that is what pushes into the SQL `WHERE`* (C4). Slugs lowercased to match `CITEXT` |
+| `principal.py` | `Principal` — frozen (a mutable principal is a privilege-escalation primitive). Carries org, id, kind (`user`/`service`), permissions, tags, and exactly one of `session_id`/`api_key_id`, agreeing with `kind` (enforced at construction) |
+
+| Check | Result |
+|---|---|
+| `pytest` | **39 passed** (was 28; +11 in `tests/test_identity_domain.py`), 3.9s |
+| `pytest -q tests/test_identity_domain.py` | 11 passed, hermetic — no Docker |
+| `ruff check` | clean on the new files |
+| `mypy` (strict) | clean, 5 source files |
+| `alembic check` | no new operations — M3.1 touched no schema |
+
+Acceptance criteria from the old §5 all discharged: `test_permission_denies_by_default`,
+`test_wildcard_grant_allows_specific_permission`, `test_wildcard_in_a_requirement_is_rejected`,
+`test_tag_overlap_is_symmetric_and_empty_set_grants_nothing`, and the import-time
+SQLAlchemy proof.
 
 ### ✅ M1 + M2, verified 2026-07-27
 
@@ -235,54 +262,76 @@ Recorded so they are not rediscovered as surprises:
 
 ## 5. NEXT TASK
 
-### `M3.1` — `features/identity/domain/`: `Principal`, `Permission`, `TagSet`
+### `M3.2` — `features/identity/providers/`: `AuthProvider` protocol + Internal + OIDC
 
-**Do this one only.** The remaining M3 deliverables are specified below so the shape is
-visible, but they are separate tasks with separate commits. Nothing about M3.1 depends on
-having read ahead.
+**Do this one only.** M3.1 (the domain types) is done — see §3. This task builds the
+authentication *strategies* on top of those types. The remaining deliverables (3–7) are
+sketched below so the shape is visible, but they are separate tasks with separate commits.
 
-**Why M3 at all.** Every subsequent milestone needs a caller with an org and a tag set.
-Retrieval cannot push authorization into the scan without a real principal, so building
-M4–M12 first would mean building them against a fake one and rewiring later.
+**Why now.** M3.1 gave us the `Principal` the whole system authorizes against. Nothing
+*produces* one yet. M3.2 is the layer that turns a presented credential into an
+authenticated subject; M3.3–M3.4 wire it to HTTP and mint platform tokens. Build the
+strategy seam first so the login endpoint has two interchangeable implementations behind
+one protocol from day one, rather than an `if provider == "oidc"` that has to be unpicked
+when SAML is wanted later.
 
-**Read first:** ADAPTATION §3 (the `auth_modules/providers` → `features/identity` row),
-§5 (layering), `docs/CodingStandards.md` §2, and `docs/ThreatModel.md`.
+**Read first:** ADAPTATION §3 (the `auth_modules/providers` → `features/identity/providers`
+row — **two protocols, not four**), §5 (layering: `domain ← application ← adapters/api`,
+and `providers/` is the Strategy + Factory + composition root), `docs/CodingStandards.md`
+§2–§3, `docs/ThreatModel.md` (the "Cryptography" and identity sections), and the existing
+`features/identity/adapters/models.py` (`IdentityProvider`, `AppUser`, `Session`) — the
+factory reads the first, the strategies resolve against the second and third.
 
-**Scope.** Pure types only. **No SQLAlchemy import anywhere in `domain/`** — that is the
-layering rule, and it is what lets these be unit-tested in microseconds. No repository, no
-provider, no FastAPI. `features/identity/adapters/models.py` already exists and stays
-untouched.
+**Scope.** The provider seam and both concrete strategies, plus the factory. **No FastAPI
+routes and no JWT issuance in this task** — those are M3.3/M3.4. The output of a provider
+is an *authenticated subject* (org + user/subject identity, verified), not a platform
+token and not a fully-hydrated `Principal` (roles and tags are a separate repository read
+the application layer does; keep that out of the provider).
 
-- `Principal` — who is calling: `org_id`, `principal_id`, kind (`user` vs `service`,
-  because an API key is not a person), granted permissions, tag set, and the
-  `session_id` / `api_key_id` that authenticated it. Frozen; a mutable principal is a
-  privilege-escalation primitive.
-- `Permission` — `resource:action`, which is the string form already stored in
-  `role.permissions` JSONB. Parse tolerantly (an unknown permission in a role is
-  harmless — nothing requires it), but expose typed constructors so a route guard cannot
-  typo a permission into permanent denial.
-- `TagSet` — a set of tag slugs with an `overlaps()` test. **This is why the retrieval
-  scan can push authorization into the `WHERE` clause** (C4): tag authorization is a
-  set-overlap, and set-overlap is expressible in SQL. Keep it that way.
-- Identifier `NewType`s (`OrgId`, `UserId`, `RoleId`, `TagId`, `SessionId`, `ApiKeyId`,
-  `ProviderId`). Every id here is a UUID, so without newtypes `revoke(user_id, org_id)`
-  type-checks with the arguments swapped, and in a multi-tenant system that is a leak.
+- `providers/base.py` — the `AuthProvider` Protocol. Internal auth verifies a
+  password; OIDC validates a token from Keycloak. These are different enough that forcing
+  one method signature is a mistake — model them as **two protocols** (e.g. a
+  password/credential strategy and a token/OIDC strategy) sharing a common
+  authenticated-subject result type, mirroring "2 protocols not 4" in ADAPTATION §3. Do
+  not invent APIKey or SAML protocols here — API keys are M3.5 and are not an
+  `IdentityProvider` row.
+- `providers/internal.py` — `InternalProvider`. Argon2id verification against
+  `app_user.password_hash`. **Check whether a password hasher already exists in
+  `core/` (`core/security` is named in ADAPTATION §5) and reuse it; if not, add one
+  there, not in `providers/`.** `argon2-cffi` is not yet a dependency — add it to
+  `backend/pyproject.toml` if the hasher lives here. Never bcrypt, never a fast hash;
+  verify in a thread (argon2 is CPU-bound — see CodingStandards §3, do not block the loop).
+- `providers/oidc.py` — `OidcProvider`. Validate a Keycloak ID/access token: signature
+  against JWKS, `iss` against `issuer_internal`, `aud`/`azp` against the client, `exp`.
+  **Split-horizon (deliverable 3) is where this gets wired to the browser redirect and
+  the API callback; here, get token *validation* right** — fetch JWKS over
+  `issuer_internal`, cache it, and never trust the `iss` from the token over the
+  configured one. The full code+PKCE round-trip is M3.3.
+- `providers/factory.py` — the factory + composition root. Reads the `identity_provider`
+  row (by org + slug, or the org's default) and constructs the matching strategy. Deny by
+  default: an unknown or disabled provider is a refusal, not an exception that leaks a
+  stack trace. This read happens **before an org GUC can be set from a session** — the
+  caller is not yet authenticated — so it runs against `org`/`identity_provider` through
+  the bootstrap path (`Database.elevated_session()`), and this is exactly the
+  "credentials must carry their tenant" question below: the provider lookup needs an org,
+  so the credential must name one.
 
 **Acceptance**
-- `test_permission_denies_by_default` — a permission absent from the set is refused.
-- `test_wildcard_grant_allows_specific_permission` — `*:*` and `memory:*` both work.
-- `test_wildcard_in_a_requirement_is_rejected` — requiring `memory:*` is a bug, not a
-  broad check, and must raise rather than silently over-grant.
-- `test_tag_overlap_is_symmetric_and_empty_set_grants_nothing`.
-- Import-time proof that `domain/` pulls in no SQLAlchemy.
-- `pytest` green, `ruff check` clean on the new files.
+- `test_internal_provider_verifies_correct_password_and_rejects_wrong` (argon2id round-trip).
+- `test_internal_provider_rejects_user_with_no_password_hash` (external-only users can't
+  password-auth).
+- `test_oidc_provider_rejects_token_with_wrong_issuer` and `..._with_bad_signature` and
+  `..._that_is_expired` — the three ways a token is forged or stale.
+- `test_factory_returns_the_strategy_named_by_the_identity_provider_row`, and
+  `test_factory_denies_an_unknown_or_disabled_provider`.
+- Provider layer imports no FastAPI (same subprocess-proof shape as M3.1's SQLAlchemy test,
+  if you keep providers free of the web framework — decide and pin it).
+- `pytest` green, `ruff check` + `mypy --strict` clean on the new files, `alembic check`
+  still clean (no schema change expected; if you add a column, that is a new revision and
+  a separate concern — prefer not to).
 
 ### Then, still in M3, one commit each
 
-2. `features/identity/providers/` — `AuthProvider` protocol + `InternalProvider`
-   (argon2id) and `OidcProvider` (Keycloak), selected by a factory reading the
-   `identity_provider` table. **Strategy + Factory + composition root**, mirroring the
-   shape in ADAPTATION §3 — two protocols, not four.
 3. Split-horizon OIDC honoured: validate `iss` against `issuer_internal`, redirect the
    browser to `issuer_public`. JWKS fetched over the internal URL and cached for
    `oidc_jwks_cache_s`. **The Keycloak realm currently allows only
