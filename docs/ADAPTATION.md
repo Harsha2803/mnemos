@@ -184,7 +184,8 @@ Every tenant-scoped table: `org_id` + RLS `FORCE` on `app.current_org` GUC.
 | **M14** | Realtime WS, nginx, e2e verification, docs, push | Full stack from clean clone |
 
 **Current position: M1 and M2 complete and verified. M3 is in progress — its RLS
-prerequisite is done and proved; deliverables 1–7 remain. See §8.**
+prerequisite, `M3.1` (domain types) and `M3.2` (the provider seam) are done and proved;
+deliverables 3–7 remain. See §8.**
 
 M3's exit criterion "RLS blocks cross-org" turned out to be unmet by M2 rather than merely
 untested; that is written up in §8 and in [TRACKER §3](../TRACKER.md#3-current-state--what-is-actually-built).
@@ -278,13 +279,50 @@ Grants may be wildcards; requirements may not (`allows()` raises on a wildcard
 requirement). Tag authorization is a set-overlap, kept that way so it pushes into the SQL
 `WHERE` (C4). `pytest` 39 passed (+11), `ruff`/`mypy --strict` clean, `alembic check` clean.
 
-**Remaining: deliverables 2–7** — provider Strategy/Factory, split-horizon OIDC, JWT
-issuance and refresh rotation, API keys, the RBAC dependency, and `mnemosctl bootstrap`.
-Specified in [TRACKER §5](../TRACKER.md#5-next-task) (next up: **M3.2**, the providers),
-which also records two design questions the RLS work forced open: **credentials must now
-carry their own tenant** (nothing about a caller is readable before an org is known), and
-**`ThreatModel.md` and `core/config.py` disagree on the token algorithm** (EdDSA vs HS256)
-in a way M3.4 has to resolve and document.
+**Done: M3.2 — the provider seam (2026-08-02).** `features/identity/providers/` turns a
+presented credential into a verified `AuthenticatedSubject`. **Two protocols, not one**
+(§3's "2 protocols not 4"): `CredentialAuthProvider` for a secret the caller knows,
+`TokenAuthProvider` for a token another system minted. `ProviderFactory` reads the
+`identity_provider` row and builds the strategy, so the login endpoint (M3.3) never
+learns which one it got and SAML later is a row plus an adapter.
+
+| File | What it is |
+|---|---|
+| `core/security.py` | `PasswordHasher` — argon2id at OWASP parameters (m=64 MiB, t=3, p=4), run on a worker thread because 64 MiB of mixing inline would freeze the event loop for every concurrent request. `verify(None, ...)` still performs a real verification, so "no such user" and "wrong password" cost the same. Plus `digest_token` (SHA-256, for high-entropy refresh tokens) and `tokens_equal` |
+| `providers/base.py` | The two protocols, `AuthenticatedSubject`, and `denied()` — one constant message to the caller, the diagnostic reason to the log |
+| `providers/ports.py` | `OrgDirectory` / `UserDirectory` + flat records. Persistence arrives through these, so `providers/` imports no ORM |
+| `providers/internal.py` | `InternalProvider`. A user with `password_hash IS NULL` (external-IdP-only) cannot password-authenticate |
+| `providers/oidc.py` | `OidcProvider` + `HttpJwksCache`. Signature, asymmetric-only algorithm allow-list, configured issuer, `aud`-or-`azp`, `exp` with no leeway |
+| `providers/factory.py` | Strategy selection. Unknown org, disabled provider, unrecognised `kind`, incomplete OIDC config and an ambiguous default all deny identically |
+| `adapters/directory.py` | The SQLAlchemy side of the ports |
+
+**The authentication path needs no `BYPASSRLS`.** `org` is the one table without a policy —
+it is what the policies compare against — so resolving an org slug runs unprivileged, and
+every read after it runs with `app.current_org` bound to the org just resolved.
+`Database.elevated_session()` therefore keeps its single bootstrap call site. That settles
+the first of the two design questions the RLS work forced open, in favour of **carrying the
+tenant in the credential**.
+
+| Command | Result |
+|---|---|
+| `pytest` | **72 passed** in 6.5s (was 39; +33) |
+| `ruff check` + `ruff format` | clean on all new files |
+| `mypy --strict` | clean, 8 new source files (the 4 remaining project-wide errors are all in the quarantined `_v1/`) |
+| `alembic check` | "No new upgrade operations detected" — M3.2 touched no schema |
+
+Two deviations from the task as written, both deliberate and recorded in
+[TRACKER §4](../TRACKER.md#4-known-gaps-and-honest-weaknesses): the OIDC validator trusts
+**two** configured issuers rather than `issuer_internal` alone (Keycloak runs
+`KC_HOSTNAME_STRICT=false`, so it stamps whichever host minted the token — accepting only
+the internal URL would reject every token a browser can actually obtain), and the audience
+check accepts the client id in `aud` **or** `azp`, which is the shape Keycloak access
+tokens actually have.
+
+**Remaining: deliverables 3–7** — split-horizon redirect + code/PKCE, JWT issuance and
+refresh rotation, API keys, the RBAC dependency, and `mnemosctl bootstrap`. Specified in
+[TRACKER §5](../TRACKER.md#5-next-task) (next up: **M3.3**). The second design question is
+still open: **`ThreatModel.md` and `core/config.py` disagree on the token algorithm**
+(EdDSA vs HS256) in a way M3.4 has to resolve and document.
 
 ### Carried over from v0.1 (needs porting from SQLite → Postgres)
 

@@ -31,6 +31,10 @@ dependencies = [
   # auth
   "pyjwt[crypto]>=2.9",
   "argon2-cffi>=23.1",
+  # Already present transitively via Starlette, but `core.security` imports it
+  # directly to push argon2 onto a worker thread, and a direct import deserves a
+  # direct declaration — otherwise the hasher breaks the day Starlette drops it.
+  "anyio>=4.4",
   # clients
   "httpx>=0.27",
   "boto3>=1.35",          # S3-compatible object storage (MinIO locally)
