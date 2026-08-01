@@ -47,6 +47,7 @@ from mnemos.features.identity.providers import (
     AuthenticatedSubject,
     CredentialAuthProvider,
     HttpJwksCache,
+    HttpOidcMetadata,
     InternalProvider,
     OidcConfig,
     OidcProvider,
@@ -55,6 +56,7 @@ from mnemos.features.identity.providers import (
     ProviderRecord,
     TokenAuthProvider,
     UserCredentialRecord,
+    public_authorization_endpoint,
 )
 
 ORG_ID = OrgId(uuid4())
@@ -494,12 +496,26 @@ async def test_oidc_provider_rejects_garbage(oidc: OidcProvider) -> None:
 # -------------------------------------------------------------- jwks cache
 
 
+def discovery_document(issuer: str = ISSUER_INTERNAL, **overrides: Any) -> dict[str, Any]:
+    """The subset of Keycloak's `/.well-known/openid-configuration` that is used.
+
+    Shaped like the real one rather than trimmed to whatever the test under the
+    cursor happens to read, so a new required endpoint fails the fixture honestly
+    instead of passing against a document Keycloak would never send.
+    """
+    return {
+        "issuer": issuer,
+        "authorization_endpoint": f"{issuer}/protocol/openid-connect/auth",
+        "token_endpoint": f"{issuer}/protocol/openid-connect/token",
+        "jwks_uri": f"{issuer}/protocol/openid-connect/certs",
+        **overrides,
+    }
+
+
 def _jwks_transport(document: dict[str, Any], counter: list[int]) -> httpx.MockTransport:
     def handle(request: httpx.Request) -> httpx.Response:
         if request.url.path.endswith("/.well-known/openid-configuration"):
-            return httpx.Response(
-                200, json={"jwks_uri": f"{ISSUER_INTERNAL}/protocol/openid-connect/certs"}
-            )
+            return httpx.Response(200, json=discovery_document())
         counter[0] += 1
         return httpx.Response(200, json=document)
 
@@ -546,19 +562,66 @@ async def test_jwks_refetches_for_an_unknown_kid_but_not_unboundedly(
         assert fetches[0] == before
 
 
-async def test_jwks_uri_outside_the_issuer_is_refused(public_jwk: dict[str, Any]) -> None:
-    """The discovery document comes from the IdP but is still remote input;
-    following it anywhere would be an SSRF with a signing key at the end."""
+@pytest.mark.parametrize(
+    "endpoint",
+    ["jwks_uri", "authorization_endpoint", "token_endpoint"],
+)
+async def test_a_discovered_endpoint_outside_the_issuer_is_refused(
+    public_jwk: dict[str, Any], endpoint: str
+) -> None:
+    """The discovery document comes from the IdP but is still remote input.
+
+    Every endpoint is constrained, not just `jwks_uri`: a redirected
+    `authorization_endpoint` is a phishing page wearing our login, and a
+    redirected `token_endpoint` is where the authorization code gets posted.
+    """
 
     def handle(request: httpx.Request) -> httpx.Response:
         if request.url.path.endswith("/.well-known/openid-configuration"):
-            return httpx.Response(200, json={"jwks_uri": "http://evil.test/certs"})
+            return httpx.Response(200, json=discovery_document(**{endpoint: "http://evil.test/x"}))
         return httpx.Response(200, json={"keys": [public_jwk]})
 
     async with httpx.AsyncClient(transport=httpx.MockTransport(handle)) as client:
         cache = HttpJwksCache(client=client, ttl_s=900)
         with pytest.raises(AuthenticationError):
             await cache.key_for(ISSUER_INTERNAL, KID)
+
+
+async def test_discovery_is_cached_and_shared_between_callers() -> None:
+    """The login flow and the JWKS cache both need it; one document serves both."""
+    discoveries = [0]
+
+    def handle(request: httpx.Request) -> httpx.Response:
+        discoveries[0] += 1
+        return httpx.Response(200, json=discovery_document())
+
+    async with httpx.AsyncClient(transport=httpx.MockTransport(handle)) as client:
+        metadata = HttpOidcMetadata(client=client, ttl_s=900)
+        for _ in range(4):
+            found = await metadata.metadata_for(ISSUER_INTERNAL)
+            assert found.token_endpoint == f"{ISSUER_INTERNAL}/protocol/openid-connect/token"
+        assert discoveries == [1]
+        # A trailing slash is the same issuer, not a second cache entry.
+        await metadata.metadata_for(ISSUER_INTERNAL + "/")
+        assert discoveries == [1]
+
+
+async def test_the_browser_is_sent_to_the_public_issuer() -> None:
+    """Split horizon in one assertion: discovery runs over `keycloak:8080`, the
+    redirect the browser follows must say `localhost:8080` or it cannot resolve."""
+
+    def handle(request: httpx.Request) -> httpx.Response:
+        assert "keycloak" in str(request.url), "discovery must use the internal issuer"
+        return httpx.Response(200, json=discovery_document())
+
+    async with httpx.AsyncClient(transport=httpx.MockTransport(handle)) as client:
+        metadata = await HttpOidcMetadata(client=client, ttl_s=900).metadata_for(ISSUER_INTERNAL)
+
+    public = public_authorization_endpoint(metadata, ISSUER_PUBLIC)
+    assert public == f"{ISSUER_PUBLIC}/protocol/openid-connect/auth"
+    assert "keycloak:8080" not in public
+    # The path is preserved exactly; only the host moves.
+    assert public.endswith("/protocol/openid-connect/auth")
 
 
 async def test_jwks_fetch_failure_is_a_denial_not_a_crash() -> None:

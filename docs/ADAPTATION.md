@@ -184,8 +184,8 @@ Every tenant-scoped table: `org_id` + RLS `FORCE` on `app.current_org` GUC.
 | **M14** | Realtime WS, nginx, e2e verification, docs, push | Full stack from clean clone |
 
 **Current position: M1 and M2 complete and verified. M3 is in progress — its RLS
-prerequisite, `M3.1` (domain types) and `M3.2` (the provider seam) are done and proved;
-deliverables 3–7 remain. See §8.**
+prerequisite, `M3.1` (domain types), `M3.2` (the provider seam) and `M3.3` (the OIDC
+round trip, proved against the live realm) are done; deliverables 4–7 remain. See §8.**
 
 M3's exit criterion "RLS blocks cross-org" turned out to be unmet by M2 rather than merely
 untested; that is written up in §8 and in [TRACKER §3](../TRACKER.md#3-current-state--what-is-actually-built).
@@ -318,11 +318,43 @@ the internal URL would reject every token a browser can actually obtain), and th
 check accepts the client id in `aud` **or** `azp`, which is the shape Keycloak access
 tokens actually have.
 
-**Remaining: deliverables 3–7** — split-horizon redirect + code/PKCE, JWT issuance and
-refresh rotation, API keys, the RBAC dependency, and `mnemosctl bootstrap`. Specified in
-[TRACKER §5](../TRACKER.md#5-next-task) (next up: **M3.3**). The second design question is
-still open: **`ThreatModel.md` and `core/config.py` disagree on the token algorithm**
-(EdDSA vs HS256) in a way M3.4 has to resolve and document.
+**Done: M3.2a — the API error boundary (2026-08-02).** Found while reading
+`entrypoints/api/main.py` to plan M3.3: the single `MnemosError` handler spread
+`**exc.details` into the response body, so M3.2's deliberately-constant denial message was
+being undone on the wire — a caller could read "no such user" versus "password mismatch"
+straight out of a 401. `MnemosError.expose_details` now defaults to `False` and the handler
+renders only `public_details`; `ValidationError` is the sole opt-in. Proved by restoring the
+old handler and re-running `tests/test_error_boundary.py`, which returned the reason *and* a
+DSN containing a password. The lesson generalises: every provider test passed before and
+after, because they assert on the raised exception and never on the wire.
+
+**Done: M3.3 — the OIDC round trip (2026-08-02).** `GET /api/v1/auth/oidc/authorize` →
+Keycloak → `/callback` → verified subject. PKCE S256, `state` verified and single-use
+(Redis `GETDEL`, so read-and-delete cannot interleave), the org read from stored state and
+never from the callback's query string. `HttpOidcMetadata` caches discovery and is shared
+with the JWKS cache; every discovered endpoint is constrained to the issuer's own prefix,
+not just `jwks_uri`. `public_authorization_endpoint()` re-hosts the discovered path on
+`issuer_public` — that function is split horizon in one place.
+
+**The live realm settled the issuer question.** A genuine ID token from the seeded user
+carries `iss = http://localhost:8080/realms/mnemos` — the *public* issuer — and
+`aud = azp = mnemos-web`. Validating `iss` against `issuer_internal` alone, as the original
+M3.2 instruction said, would reject every token a browser can obtain. The M3.2 deviation was
+therefore correct and the instruction was wrong; both are recorded in TRACKER §4.
+
+| Command | Result |
+|---|---|
+| `pytest` | **97 passed** in 5.5s (92 hermetic in 2.6s) |
+| live Keycloak tests | 2, verified to *skip* with the stack down (`14 passed, 2 skipped`) |
+| `ruff` / `mypy --strict` | clean on all new files |
+| `alembic check` | no new operations — neither M3.2a nor M3.3 touched schema |
+
+**Remaining: deliverables 4–7** — JWT issuance and refresh rotation, API keys, the RBAC
+dependency, and `mnemosctl bootstrap`. Specified in
+[TRACKER §5](../TRACKER.md#5-next-task) (next up: **M3.4**). One design question is still
+open and M3.4 must settle it: **`ThreatModel.md` §5 and `core/config.py` disagree on the
+token algorithm** (EdDSA vs HS256). Whichever is chosen, both documents must be
+reconciled in the same commit.
 
 ### Carried over from v0.1 (needs porting from SQLite → Postgres)
 

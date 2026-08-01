@@ -80,6 +80,17 @@ class Settings(BaseSettings):
     oidc_client_id: str = "mnemos-web"
     oidc_jwks_cache_s: int = 900
 
+    # Where Keycloak sends the browser back with the authorization code. Must be
+    # registered in the realm's `redirectUris` *and* match byte-for-byte at both
+    # the authorize and the token-exchange step, which is why it is one setting
+    # rather than something reconstructed from the incoming request — a callback
+    # that derives its own redirect URI from a `Host` header is a callback an
+    # attacker can point elsewhere.
+    oidc_redirect_uri: str = "http://localhost:8000/api/v1/auth/oidc/callback"
+    # How long a half-finished login may sit in Redis: enough for a password and
+    # MFA, short enough that an abandoned attempt is not a standing credential.
+    oidc_login_state_ttl_s: int = 600
+
     # -- context compiler defaults ---------------------------------------
     default_token_budget: int = 3000
     default_operator_deadline_ms: int = 2000

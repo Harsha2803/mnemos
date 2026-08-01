@@ -99,6 +99,113 @@ class JwksSource(Protocol):
     async def key_for(self, issuer: str, kid: str | None) -> PyJWK: ...
 
 
+@dataclass(frozen=True, slots=True)
+class OidcMetadata:
+    """The endpoints from an issuer's discovery document that this system uses.
+
+    Discovered rather than constructed from known Keycloak paths: the paths are
+    predictable right up until the IdP is replaced or a realm is served under a
+    prefix, and a discovery document is the IdP telling us where its endpoints
+    actually are.
+    """
+
+    issuer: str
+    authorization_endpoint: str
+    token_endpoint: str
+    jwks_uri: str
+
+
+class MetadataSource(Protocol):
+    async def metadata_for(self, issuer: str) -> OidcMetadata: ...
+
+
+class HttpOidcMetadata:
+    """Fetches and caches ``/.well-known/openid-configuration`` per issuer.
+
+    Always fetched over the **internal** issuer: this is a server-to-server call
+    and the browser-facing host may not even resolve from inside the network. The
+    public authorization URL is derived from the result by
+    :meth:`public_authorization_endpoint`, not by a second discovery over the
+    public issuer, which would be one more thing to be down.
+
+    **Every discovered URL is constrained to the issuer's own prefix.** The
+    document comes from the IdP, but it is still remote input: an endpoint the
+    document is free to point anywhere is an SSRF, and in the JWKS case an SSRF
+    with a signing key at the end of it.
+    """
+
+    def __init__(
+        self,
+        *,
+        client: httpx.AsyncClient,
+        ttl_s: int,
+        timeout_s: float = HTTP_TIMEOUT_S,
+    ) -> None:
+        self._client = client
+        self._ttl_s = ttl_s
+        self._timeout_s = timeout_s
+        self._cache: dict[str, tuple[float, OidcMetadata]] = {}
+        self._locks: dict[str, asyncio.Lock] = {}
+
+    async def metadata_for(self, issuer: str) -> OidcMetadata:
+        issuer = _normalize_issuer(issuer)
+        entry = self._cache.get(issuer)
+        if entry is not None and time.monotonic() < entry[0]:
+            return entry[1]
+
+        lock = self._locks.setdefault(issuer, asyncio.Lock())
+        async with lock:
+            current = self._cache.get(issuer)
+            if current is not None and current is not entry:
+                return current[1]
+            metadata = await self._fetch(issuer)
+            self._cache[issuer] = (time.monotonic() + self._ttl_s, metadata)
+            logger.info("oidc.metadata_discovered", issuer=issuer)
+            return metadata
+
+    async def _fetch(self, issuer: str) -> OidcMetadata:
+        try:
+            response = await self._client.get(issuer + DISCOVERY_PATH, timeout=self._timeout_s)
+            response.raise_for_status()
+            document = response.json()
+        except (httpx.HTTPError, ValueError) as exc:
+            raise denied(f"OIDC discovery failed for {issuer}: {exc!r}") from exc
+        if not isinstance(document, dict):
+            raise denied(f"OIDC discovery for {issuer} returned no object")
+
+        return OidcMetadata(
+            issuer=issuer,
+            authorization_endpoint=self._endpoint(document, "authorization_endpoint", issuer),
+            token_endpoint=self._endpoint(document, "token_endpoint", issuer),
+            jwks_uri=self._endpoint(document, "jwks_uri", issuer),
+        )
+
+    @staticmethod
+    def _endpoint(document: Mapping[str, Any], name: str, issuer: str) -> str:
+        value = document.get(name)
+        if not isinstance(value, str) or not value:
+            raise denied(f"OIDC discovery for {issuer} named no {name}")
+        if not value.startswith(issuer + "/"):
+            raise denied(f"{name} {value!r} is outside issuer {issuer}")
+        return value
+
+
+def public_authorization_endpoint(metadata: OidcMetadata, issuer_public: str) -> str:
+    """Re-host the discovered authorization endpoint on the public issuer.
+
+    This *is* split horizon. Discovery runs over the internal URL because that is
+    what the API can reach; the browser must be sent to the public one because
+    ``keycloak:8080`` means nothing outside the compose network. Same realm, same
+    path, different host — so swapping the configured prefix is the whole
+    transformation, and both prefixes are configuration rather than anything the
+    IdP or a token told us.
+    """
+    public = _normalize_issuer(issuer_public)
+    if not metadata.authorization_endpoint.startswith(metadata.issuer):
+        raise denied("discovered authorization endpoint is outside its issuer")
+    return public + metadata.authorization_endpoint[len(metadata.issuer) :]
+
+
 class _CachedJwks:
     __slots__ = ("expires_at", "fetched_at", "keys")
 
@@ -127,11 +234,17 @@ class HttpJwksCache:
         *,
         client: httpx.AsyncClient,
         ttl_s: int,
+        metadata: MetadataSource | None = None,
         timeout_s: float = HTTP_TIMEOUT_S,
         min_refetch_interval_s: float = MIN_REFETCH_INTERVAL_S,
     ) -> None:
         self._client = client
         self._ttl_s = ttl_s
+        # Shares the discovery cache with the login flow when one is supplied;
+        # builds its own otherwise, so this stays usable on its own.
+        self._metadata = metadata or HttpOidcMetadata(
+            client=client, ttl_s=ttl_s, timeout_s=timeout_s
+        )
         self._timeout_s = timeout_s
         self._min_refetch_interval_s = min_refetch_interval_s
         self._cache: dict[str, _CachedJwks] = {}
@@ -195,7 +308,8 @@ class HttpJwksCache:
             return entry
 
     async def _fetch(self, issuer: str) -> PyJWKSet:
-        jwks_uri = await self._discover(issuer)
+        # `jwks_uri` is already constrained to the issuer's prefix by discovery.
+        jwks_uri = (await self._metadata.metadata_for(issuer)).jwks_uri
         try:
             response = await self._client.get(jwks_uri, timeout=self._timeout_s)
             response.raise_for_status()
@@ -206,23 +320,6 @@ class HttpJwksCache:
             return PyJWKSet.from_dict(document)
         except jwt.PyJWKSetError as exc:
             raise denied(f"malformed JWKS at {jwks_uri}: {exc!r}") from exc
-
-    async def _discover(self, issuer: str) -> str:
-        try:
-            response = await self._client.get(issuer + DISCOVERY_PATH, timeout=self._timeout_s)
-            response.raise_for_status()
-            jwks_uri = response.json().get("jwks_uri")
-        except (httpx.HTTPError, ValueError, AttributeError) as exc:
-            raise denied(f"OIDC discovery failed for {issuer}: {exc!r}") from exc
-        if not isinstance(jwks_uri, str) or not jwks_uri:
-            raise denied(f"OIDC discovery for {issuer} named no jwks_uri")
-        # The discovery document is fetched from the IdP but is still remote
-        # input. Constraining `jwks_uri` to the issuer's own prefix keeps a
-        # compromised or misconfigured document from pointing key retrieval at a
-        # host of its choosing — an SSRF with a signing key at the end of it.
-        if not jwks_uri.startswith(issuer + "/"):
-            raise denied(f"jwks_uri {jwks_uri!r} is outside issuer {issuer}")
-        return jwks_uri
 
 
 @dataclass(frozen=True, slots=True)
@@ -235,6 +332,7 @@ class OidcConfig:
     """
 
     issuer_internal: str
+    issuer_public: str
     trusted_issuers: frozenset[str]
     client_id: str
 
@@ -243,12 +341,14 @@ class OidcConfig:
         cls, *, issuer_internal: str, issuer_public: str | None, client_id: str
     ) -> OidcConfig:
         internal = _normalize_issuer(issuer_internal)
-        trusted = {internal}
-        if issuer_public:
-            trusted.add(_normalize_issuer(issuer_public))
+        # No public issuer configured means there is no split horizon: one URL
+        # serves both roles. Defaulting to the internal one keeps a plain,
+        # non-containerised IdP working without making the field mandatory.
+        public = _normalize_issuer(issuer_public) if issuer_public else internal
         return cls(
             issuer_internal=internal,
-            trusted_issuers=frozenset(trusted),
+            issuer_public=public,
+            trusted_issuers=frozenset({internal, public}),
             client_id=client_id,
         )
 
@@ -276,6 +376,18 @@ class OidcProvider:
     @property
     def provider_id(self) -> ProviderId:
         return self._provider_id
+
+    @property
+    def org_id(self) -> OrgId:
+        return self._org_id
+
+    @property
+    def config(self) -> OidcConfig:
+        """Read-only. The login flow needs the issuers and the client id to build
+        an authorization URL; it must not be able to widen what is trusted, which
+        is why `OidcConfig` is frozen rather than this being a private field made
+        public."""
+        return self._config
 
     async def authenticate(self, *, token: str) -> AuthenticatedSubject:
         header = self._read_header(token)

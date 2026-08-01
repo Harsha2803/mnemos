@@ -7,8 +7,8 @@
 > tracker is worse than none.
 
 **Last updated:** 2026-08-02
-**Phase:** M3 — identity. RLS prerequisite + `M3.1` (domain types) + `M3.2` (provider seam, incl. the error-boundary fix) done; deliverables 3–7 remain
-**Next task:** `M3.3`, fully specified in §5. Take them one at a time, in order
+**Phase:** M3 — identity. RLS prerequisite + `M3.1` + `M3.2` (+ error-boundary fix) + `M3.3` (OIDC round trip) done; deliverables 4–7 remain
+**Next task:** `M3.4`, fully specified in §5. Take them one at a time, in order
 **Branch:** `feat/m3-identity` (PR #2, draft). M1+M2 merged to `main` as PR #1
 
 ---
@@ -104,7 +104,7 @@ Detailed evidence for each ✅ is in [ADAPTATION §8](docs/ADAPTATION.md#8-curre
 |---|---|
 | M1 container stack + backend skeleton | ✅ nine services healthy |
 | M2 Alembic + full schema | ✅ 41 tables, 4 revisions, `alembic check` clean |
-| M3 identity | 🟡 **in progress** — prerequisite + `M3.1` + `M3.2` done, `M3.3`–`M3.7` remain |
+| M3 identity | 🟡 **in progress** — prerequisite + `M3.1` + `M3.2` + `M3.3` done, `M3.4`–`M3.7` remain |
 | M4 port memory/retrieval/context kernel to PG | ⬜ |
 | M5–M14 | ⬜ |
 
@@ -235,6 +235,54 @@ collapsing concurrent callers by "was this fetched in the last second" also swal
 deliberate re-fetch that key rotation depends on. It now compares entry *identity* — "did
 somebody else already do my work" — which is the question actually being asked.
 
+### ✅ M3.3 — split-horizon OIDC round trip, verified 2026-08-02
+
+M3.2 could validate a token; nothing obtained one. M3.3 is the round trip, and it is the
+first deliverable proved against **the realm as shipped** rather than against tokens the
+test suite minted for itself.
+
+| File | What it is |
+|---|---|
+| `providers/oidc.py` | `HttpOidcMetadata` — cached `/.well-known/openid-configuration` per issuer, shared with the JWKS cache. **Every discovered endpoint is constrained to the issuer's own prefix**, not just `jwks_uri`: a redirected `authorization_endpoint` is a phishing page wearing our login, and a redirected `token_endpoint` is where the authorization code gets posted. `public_authorization_endpoint()` re-hosts the discovered path on `issuer_public` — that function *is* split horizon |
+| `application/oidc_login.py` | `OidcLoginFlow.begin()` / `.complete()`. PKCE S256, `state` verified and single-use, the org read from stored state and never from the callback's query string |
+| `adapters/login_state.py` | `RedisLoginStateStore`. `GETDEL`, so read-and-delete cannot interleave — a `GET` then `DEL` has a window in which two concurrent callbacks both succeed, which is the replay the state exists to prevent |
+| `entrypoints/api/routers/auth.py` | `GET /api/v1/auth/oidc/authorize` and `/callback`. Thin: HTTP in, flow call, HTTP out |
+| `entrypoints/api/main.py` | The identity composition root in the lifespan — one `httpx.AsyncClient`, one hasher, one discovery cache shared by JWKS and the flow |
+| `deploy/keycloak/mnemos-realm.json` | The API callback added to `redirectUris`. **Exact URIs, not `:8000/*`** — the wildcard was not needed and a narrower allow-list is free |
+
+**Evidence against the live stack** (`docker compose up -d --force-recreate keycloak`
+re-imports the realm; `start-dev` has no volume):
+
+```
+real id_token from the seeded realm user:
+  iss   = http://localhost:8080/realms/mnemos      <- the PUBLIC issuer
+  aud   = mnemos-web      azp = mnemos-web
+realm redirectUris after re-import include
+  http://localhost:8000/api/v1/auth/oidc/callback
+GET /api/v1/auth/oidc/authorize?org=nope
+  client sees : {"code":"unauthenticated","message":"authentication failed"}
+  log sees    : reason="no org with slug 'nope'"
+```
+
+**That first line is the hard evidence for §4 item 12.** A token minted through the
+browser-facing host carries `iss = issuer_public`, while the API's `issuer_internal` is
+`keycloak:8080`. Trusting only `issuer_internal`, as the old §5 said, would reject **every
+token a browser can obtain**. The deviation is not a shortcut; the instruction was wrong.
+`aud = mnemos-web` on an ID token also confirms the `aud`-or-`azp` check (§4 item 13).
+
+| Check | Result |
+|---|---|
+| `pytest` | **97 passed** in 5.5s (was 77; +20) |
+| hermetic subset | 92 passed in 2.6s, no Docker |
+| live Keycloak tests | 2, and they **skip** when the stack is down — verified by stopping it (`14 passed, 2 skipped`) rather than assumed |
+| `ruff check` + `format` | clean |
+| `mypy --strict` | clean on everything new; the 2 remaining in `identity/` are pre-existing `dict`-without-type-args in M2's `models.py` |
+| `alembic check` | no new operations — M3.3 touched no schema |
+
+Not done here, deliberately: **no platform JWT and no `session` row.** The callback returns
+the verified subject. M3.4 replaces that response with a token pair; the refresh-rotation
+chain is a whole test surface of its own and splitting it keeps both landable.
+
 ### ✅ M3.2a — the API error boundary stopped leaking `details`, 2026-08-02
 
 Found immediately after M3.2, while reading `entrypoints/api/main.py` to plan M3.3. The
@@ -299,8 +347,8 @@ not a defect.
 | Stack up | `docker compose up -d` (add `--profile web` from M13) |
 | Schema report | `docker compose exec api mnemosctl db doctor` |
 | Migrations | `cd backend && alembic upgrade head \| downgrade base \| check` |
-| Tests | `cd backend && ../.venv/bin/python -m pytest` → **77 passed** (needs Docker; see §4.8) |
-| Fast tests | `pytest tests/test_invariants.py tests/test_identity_domain.py tests/test_identity_providers.py tests/test_error_boundary.py` → 72, hermetic, no Docker |
+| Tests | `cd backend && ../.venv/bin/python -m pytest` → **97 passed** (needs Docker + Keycloak; see §4.8) |
+| Fast tests | everything except `test_tenant_isolation.py` → **92 passed in 2.6s**, no Docker. The 2 live-Keycloak tests skip cleanly when the stack is down |
 | Type check | `../.venv/bin/mypy --strict src/mnemos/core src/mnemos/features` — the 4 files that still fail project-wide `mypy` are all in the quarantined `_v1/` |
 | DB roles | `migrate` connects as `mnemos` (owner). api/worker/realtime connect as `mnemos_app` |
 | Host ports | postgres `15432`, redis `6380`, api `8000`, realtime `8001`, keycloak `8080`, minio `9000/9001`, ollama `11434` |
@@ -350,8 +398,12 @@ Recorded so they are not rediscovered as surprises:
 11. **The frontend is an empty directory.** `web` is behind a compose profile so it does
     not break `up`. M13. Until then the only UI is Swagger at `http://localhost:8000/docs`,
     the Keycloak console at `:8080` (`admin`/`admin`) and the MinIO console at `:9001`.
-12. **Deviation (M3.2): the OIDC validator trusts *two* configured issuers, not
-    `issuer_internal` alone.** The old §5 said to validate `iss` against `issuer_internal`.
+12. **Deviation (M3.2), now confirmed correct by M3.3: the OIDC validator trusts *two*
+    configured issuers, not `issuer_internal` alone.** The old §5 said to validate `iss`
+    against `issuer_internal`. **A real token from the live realm carries
+    `iss = http://localhost:8080/realms/mnemos` — the *public* issuer** (§3, M3.3
+    evidence), so the instruction as written would reject every token a browser can
+    obtain. Original reasoning:
     Keycloak runs `start-dev` with `KC_HOSTNAME_STRICT=false`, so it stamps `iss` with
     whichever host minted the token — a browser token says `localhost:8080` while the API
     fetches JWKS from `keycloak:8080`. Accepting only the internal URL would reject every
@@ -369,132 +421,122 @@ Recorded so they are not rediscovered as surprises:
 14. **`ThreatModel.md` §5 (EdDSA) still contradicts `core/config.py` (HS256).** Untouched
     by M3.2, which issues no tokens. **M3.4 must pick one and reconcile both documents** —
     see §5.
-15. **No end-to-end proof against the live Keycloak yet.** M3.2's OIDC tests mint their own
-    RSA-signed tokens and serve JWKS through `httpx.MockTransport`, which is the right
-    trade for testing *validation logic*. It does mean nothing has yet verified that the
-    realm as shipped produces a token this validator accepts. That is M3.3's acceptance
-    criterion, and it is where a wrong `iss` or `azp` assumption would surface.
+15. ~~**No end-to-end proof against the live Keycloak yet.**~~ **Discharged by M3.3** —
+    `test_a_real_keycloak_token_is_accepted_by_the_validator` and
+    `test_the_realm_allows_the_api_callback_as_a_redirect_uri` run against the live stack,
+    and were confirmed to *skip* rather than silently pass when it is down. It did surface
+    the `iss` assumption, exactly as predicted; see item 12.
+16. **The live-Keycloak tests point both issuers at `localhost:8080`.** From the host,
+    `keycloak:8080` is a compose-network name that does not resolve, so the *two-issuer*
+    logic is covered hermetically and the live tests cover "a genuine Keycloak token
+    validates". Running them from inside the `api` container would exercise both at once
+    and is the obvious improvement whenever the test suite gains a container-side runner.
+17. **The OIDC callback returns a subject, not a token.** Deliberate — M3.4 replaces the
+    response with an access/refresh pair. Until then there is no way to *stay* logged in,
+    only to prove a login happened.
 
 ---
 
 ## 5. NEXT TASK
 
-### `M3.3` — split-horizon OIDC: the code+PKCE round-trip against the live Keycloak
+### `M3.4` — platform JWT issuance + refresh-token rotation
 
-**Do this one only.** M3.2 (the provider seam) is done — see §3. It validates a token but
-nothing yet *obtains* one: there is no route, no redirect, no callback. M3.3 closes that,
-and it is the first deliverable that proves the OIDC work against the realm as shipped
-rather than against tokens the test suite minted for itself (see §4 item 15 — this is
-where a wrong `iss` or `azp` assumption surfaces, so expect to debug that, not to be
-surprised by it).
+**Do this one only.** M3.3 is done — see §3. A login now proves who someone is and then
+forgets it: the callback returns a subject and there is no way to *stay* logged in. M3.4
+mints the platform's own tokens and makes a session survive.
 
-**Why now.** M3.4 mints platform JWTs and needs something to mint them *from*. The
-authorization-code flow is the part with moving pieces outside the process — a browser, a
-redirect URI allow-list, a realm config — so land it before the token issuance that
-depends on it, and land it while the provider it feeds is fresh.
+**Why now.** Every route from M3.6 onward is guarded by a `Principal`, and a `Principal`
+comes from a platform token. Until this exists there is nothing to guard with, and the
+OIDC round trip lands nowhere.
 
-**Read first:** `features/identity/providers/oidc.py` in full (the validator you are
-feeding, and its module docstring explains the two-issuer decision you must not undo),
-`providers/factory.py` (how you obtain the strategy), `docs/APIContract.md` §1,
-`docs/ThreatModel.md` §5, `deploy/keycloak/mnemos-realm.json`, and the `api` service block
-in `docker-compose.yml`.
+**Read first:** `features/identity/application/oidc_login.py` (what hands you a subject),
+`features/identity/adapters/models.py` — the `Session` model, especially `rotated_to`,
+`refresh_token_hash` and `uq_session_refresh_token_hash` — `core/security.py`
+(`digest_token` already exists for exactly this), `docs/APIContract.md` §2,
+`docs/ThreatModel.md` §5, and `entrypoints/api/routers/auth.py`.
 
-**Scope.** The browser-facing half of OIDC, ending at a verified `AuthenticatedSubject`.
-**No platform JWT and no session row in this task** — those are M3.4. The endpoint's
-response at the end of M3.3 may be the subject itself; M3.4 replaces that with a token
-pair. Resist the temptation to do both: the refresh-rotation chain is a whole test surface
-of its own.
+**Settle the algorithm conflict first — it is a prerequisite, not a footnote.**
+`ThreatModel.md` §5 specifies **EdDSA (Ed25519)**; the committed `core/config.py`
+specifies **HS256** with a shared secret. Pick one, and:
 
-1. **`GET {api_prefix}/auth/oidc/authorize`** — takes an org slug (the credential carries
-   its tenant; that is settled, see §3), resolves the provider through `ProviderFactory`,
-   and 302s the browser to **`issuer_public`**'s authorization endpoint. Never
-   `issuer_internal` — the browser cannot resolve `keycloak:8080`, and this is the exact
-   failure the split-horizon design exists to prevent.
-   - PKCE is mandatory: generate a `code_verifier` with `secrets`, send
-     `code_challenge` = base64url(SHA-256(verifier)), `code_challenge_method=S256`. The
-     realm's `mnemos-web` client is public, so PKCE is the only thing binding the code to
-     this client.
-   - `state` is mandatory and must be **verified on return**, or the callback is a CSRF
-     sink. Store `state → (verifier, org, provider, redirect target)` in Redis with a TTL
-     (`platform/redis.py` already mandates a TTL on locks; do the same here) — not in a
-     cookie you have to sign, and not in process memory, which does not survive two API
-     replicas or a restart.
-2. **`GET {api_prefix}/auth/oidc/callback`** — verify `state`, exchange `code` +
-   `code_verifier` at the **internal** token endpoint (server-to-server; `issuer_internal`
-   is correct here), then hand the returned ID token to `OidcProvider.authenticate`. Do
-   **not** trust the token endpoint's response body without validating the token — a
-   direct-fetch flow is not an excuse to skip signature and audience checks.
-   - `state` is single-use. Delete it from Redis on first presentation; a replayed `state`
-     is a denial.
-   - Every denial from this endpoint is the same `AUTHENTICATION_FAILED` the provider layer
-     raises. `providers/base.denied()` already has the two-audience shape — reuse it.
-3. **The realm needs the API callback added.** `deploy/keycloak/mnemos-realm.json`
-   currently allows only `http://localhost:3000/*` and `http://127.0.0.1:3000/*` as
-   redirect URIs. Add the API's callback URL. Keycloak runs `start-dev` with **no volume**,
-   so `docker compose up -d --force-recreate keycloak` re-imports the realm — that is the
-   loop for iterating on it, and it also means realm edits are lost if you only click them
-   into the admin console.
-4. **Wire the composition root.** `HttpJwksCache` needs a long-lived `httpx.AsyncClient`
-   and `settings.oidc_jwks_cache_s`; `PasswordHasher` and `ProviderFactory` are
-   process-wide singletons. Build them in the API's lifespan and hang them off app state.
-   Do not construct a `PasswordHasher` per request — it is cheap to build but the argon2
-   parameters belong in one place.
+- **HS256 is defensible** while api, worker and realtime share one trust domain and one
+  secret, and it is what is configured today. The security-critical half is not the
+  algorithm but the **allow-list**: never read `alg` from the token.
+  `providers/oidc.py` already shows the shape (`ALLOWED_ALGORITHMS`, passed to the
+  decoder) — reuse that discipline rather than reinventing it.
+- **EdDSA** buys asymmetric verification, so a future service can verify without holding
+  a signing key. That is real, and it is also not needed by anything that exists.
+- Whichever way it goes: **update `ThreatModel.md` and `core/config.py` so they agree**,
+  and record the decision in §4. Do not implement one and leave both documents standing —
+  that is the state today and it is why this paragraph exists.
 
-**Consider pinning Keycloak's issuer instead of trusting two.** §4 item 12 records why the
-validator currently accepts both configured issuers. Setting `KC_HOSTNAME` so Keycloak
-stamps one stable `iss` regardless of the host used would collapse that to a single
-trusted issuer, which is strictly better. It is a compose change and you are editing the
-realm anyway. If you do it, narrow `OidcConfig.build` and **update §4 item 12** rather
-than leaving it describing a decision that no longer holds. If you do not, say why.
+**Scope.**
+
+1. **Access tokens.** 15 minutes (`settings.access_token_ttl_s`). **Identity only — no
+   roles, no permissions, no tags in the claims.** `APIContract.md` §2 is explicit and the
+   reason is worth restating: a token carrying `roles` keeps working after the role is
+   revoked, and that window is exactly what an attacker looks for. Roles resolve per
+   request from the database (M3.6). Claims: `sub` (the `app_user.id`), `org` (the org
+   id), `sid` (the session id), `iat`, `exp`, `iss`, `jti`. Verification must pin the
+   algorithm, `iss`, and expiry with no leeway.
+2. **Refresh tokens.** High-entropy random from `secrets`, stored **SHA-256-hashed** via
+   the existing `core.security.digest_token` — *not* argon2id, and the docstring there
+   already carries the reason a reviewer will ask for (`uq_session_refresh_token_hash` is
+   a unique index, and argon2's per-row salt would make the column unsearchable; the input
+   has no dictionary to slow down). Compare with `tokens_equal`.
+3. **Rotation, and the family kill.** Every use of a refresh token issues a new one and
+   sets the old row's `rotated_to` to the new row's id. Presenting a token whose row
+   already has `rotated_to` set **proves theft** — the legitimate holder and the thief
+   cannot both have the current token — so revoke **the entire chain**, not just that row.
+   Walk `rotated_to` to the head and revoke forward, and set `revoked_reason`.
+4. **The org travels in the credential.** Settled in M3.2 and it applies here: the refresh
+   token must name its tenant, because `session` is org-scoped and unreadable until the
+   org is known. Format it as `<org_slug>.<secret>`, and note that `APIContract.md` §1
+   specifies `X-API-Key: <key_id>.<secret>` — the same refinement lands there in M3.5.
+   **`APIContract.md` must be updated in this commit** either way.
+5. **Wire it into the OIDC callback**, replacing `SubjectResponse` with the token pair
+   from `APIContract.md` §2. The subject must be mapped to a local `app_user` — this is
+   where just-in-time provisioning from an external IdP is decided. If you provision,
+   `app_user.provider_id` and `external_subject` are the columns, and `password_hash`
+   stays `NULL` (M3.2 already refuses to password-authenticate such a user).
+6. **`POST /v1/auth/token` with `grant_type=refresh_token`**, and
+   `POST /v1/auth/token:revoke`.
 
 **Acceptance**
-- `test_authorize_redirects_to_the_public_issuer_with_pkce_and_state` — asserts the
-  redirect host is `issuer_public`, and that `code_challenge_method=S256` is present.
-- `test_callback_rejects_an_unknown_or_replayed_state` — both, separately.
-- `test_callback_rejects_a_state_belonging_to_a_different_org`.
-- **`test_keycloak_login_round_trips_to_an_authenticated_subject`** — the one that matters,
-  against the live stack (`docker compose up -d`) using a seeded realm user and Keycloak's
-  direct-grant endpoint to obtain a genuine token, then through `OidcProvider`. Mark it so
-  it is skipped when the stack is down; a test that silently passes without Keycloak is
-  worse than no test. This is what discharges §4 item 15.
-- `pytest` green, `ruff check` + `ruff format --check` + `mypy --strict` clean on new
-  files, `alembic check` still clean (no schema change expected).
+- `test_rotated_refresh_token_revokes_family` — **the M3-level criterion.** Use a token,
+  use the *old* one again, assert the whole chain is revoked and that the newest token
+  stops working too.
+- `test_access_token_carries_no_roles_or_permissions` — inspect the claims directly.
+- `test_a_token_signed_with_another_algorithm_is_rejected` — including `alg: none` and,
+  if you land HS256, an asymmetric-signed token. Mirror
+  `test_oidc_provider_rejects_an_unsigned_token`, which hand-forges rather than relying on
+  PyJWT to mint the forgery.
+- `test_expired_access_token_is_rejected` with zero leeway.
+- `test_refresh_token_for_one_org_is_useless_against_another`.
+- A live-stack test end-to-end: real Keycloak token → platform token pair → refresh →
+  rotation. Mark it skippable like M3.3's, and **verify it actually skips** with the stack
+  down rather than assuming it does.
+- `pytest` green, `ruff` + `mypy --strict` clean on new files, `alembic check` clean —
+  M3.4 should need **no migration**; `session` already has every column.
 
 ### Then, still in M3, one commit each
 
-4. Platform JWT issuance + refresh-token rotation using the `session` table's
-   `rotated_to` chain. Presenting an already-rotated token revokes the whole family.
-   `core/security.digest_token` already exists for the refresh-token hash, with the
-   "why not argon2 here" answer in its docstring.
-5. API-key auth: argon2id hash (`core/security.PasswordHasher` — same hasher, low-entropy
-   secret), `prefix` for identification, plaintext shown once.
+5. API-key auth: argon2id hash (`core/security.PasswordHasher` — the same hasher; an
+   API-key secret is low-entropy enough to deserve it), `prefix` for identification,
+   plaintext shown once, org folded into the id half per M3.2's decision.
 6. RBAC dependency for FastAPI: deny by default, permission checked as set membership
-   against `PermissionSet` from M3.1.
-7. `mnemosctl bootstrap` — create the first org, admin user and system roles. Run it
-   through `Database.elevated_session()` (added by the M3 prerequisite), which is
-   `SET LOCAL ROLE mnemos_admin`, because the very first insert has no org to scope to.
-   Also seed the org's `settings.default_provider`, which is what `ProviderFactory` reads
-   when a login names no provider.
-
-**One design question remains open. M3.4 must settle it.** ~~Credentials must carry their
-tenant~~ — ✅ settled by M3.2 in favour of carrying it; the auth path needs no `BYPASSRLS`
-(see §3). ~~Refresh tokens hash with SHA-256, not argon2id~~ — ✅ settled and implemented as
-`core/security.digest_token`. What is left:
-
-- **`ThreatModel.md` §"Cryptography" specifies EdDSA (Ed25519) for tokens; the committed
-  `core/config.py` specifies HS256** with a shared secret. This is a real conflict in the
-  docs, not a gap in the code, and M3.4 has to pick one. HS256 with a strict algorithm
-  allow-list (never read `alg` from the token — that control is the security-critical half,
-  and `providers/oidc.py` shows the shape) is defensible while API, worker and realtime
-  share one trust domain and one secret. Whichever way it goes, **record it in §4 and
-  reconcile the two documents.** Do not implement one and leave both documents standing.
-- Also in M3.4: `APIContract.md` §1 specifies `X-API-Key: <key_id>.<secret>`. Folding the
-  org into the id half is the refinement M3.2's decision implies, and APIContract must be
-  updated in the same commit as M3.5 either way.
+   against `PermissionSet` from M3.1. `test_unauthenticated_request_is_denied_by_default`
+   on a route with **no** explicit guard is the one that matters — it must fail closed.
+7. `mnemosctl bootstrap` — create the first org, admin user and system roles through
+   `Database.elevated_session()` (`SET LOCAL ROLE mnemos_admin`), because the very first
+   insert has no org to scope to. Also seed `org.settings.default_provider`, which is what
+   `ProviderFactory` reads when a login names no provider, and seed the org's
+   `identity_provider` rows — without them nothing in M3.2/M3.3 can be exercised by hand.
 
 **Acceptance for M3 overall**
 
-- Keycloak login round-trips to a platform JWT.
+- ~~Keycloak login round-trips~~ ✅ to a verified subject (M3.3); to a **platform JWT** is
+  M3.4.
 - ~~`test_cross_org_read_returns_zero_rows`~~ ✅ done in the prerequisite; see §3.
 - `test_rotated_refresh_token_revokes_family`.
 - `test_unauthenticated_request_is_denied_by_default` on a route with no explicit guard.

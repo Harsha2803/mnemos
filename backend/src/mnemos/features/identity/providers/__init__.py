@@ -27,9 +27,13 @@ from mnemos.features.identity.providers.internal import InternalProvider
 from mnemos.features.identity.providers.oidc import (
     ALLOWED_ALGORITHMS,
     HttpJwksCache,
+    HttpOidcMetadata,
     JwksSource,
+    MetadataSource,
     OidcConfig,
+    OidcMetadata,
     OidcProvider,
+    public_authorization_endpoint,
 )
 from mnemos.features.identity.providers.ports import (
     OrgDirectory,
@@ -46,9 +50,12 @@ __all__ = [
     "AuthenticatedSubject",
     "CredentialAuthProvider",
     "HttpJwksCache",
+    "HttpOidcMetadata",
     "InternalProvider",
     "JwksSource",
+    "MetadataSource",
     "OidcConfig",
+    "OidcMetadata",
     "OidcProvider",
     "OrgDirectory",
     "OrgRecord",
@@ -58,4 +65,5 @@ __all__ = [
     "UserCredentialRecord",
     "UserDirectory",
     "denied",
+    "public_authorization_endpoint",
 ]
