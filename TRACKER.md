@@ -965,6 +965,19 @@ Recorded so they are not rediscovered as surprises:
     smoke job — build, `up -d`, poll `/readyz` and `:3000`, tear down — is the check that
     would have caught this, and it should be added to `.github/workflows/ci.yml`.
 
+33. **`core/config.py`'s default `database_url` points at `localhost:5432`, which on the
+    development machine is a *different Postgres*.** The compose stack maps its Postgres to
+    host port **15432** precisely because this machine already runs its own on 5432. So
+    `cd backend && alembic check` from the host connects to the wrong server and fails with
+    `InvalidPasswordError: password authentication failed for user "mnemos_app"` — and the
+    worse outcome is the one where a stray local database *does* answer and the check passes
+    against something that is not the stack. The `Makefile`'s `migrate`/`migrate-down`/
+    `check` targets now run through the `migrate` compose service, which is the only one
+    holding the table owner's DSN and which resolves `postgres` over the compose network.
+    Every `alembic check` claim in §3 that was run from a host venv should be read as
+    unverified unless the DSN was overridden; the drift itself is confirmed absent, by
+    `make check` against the real database on 2026-08-03.
+
 ---
 
 ## 5. NEXT TASK
