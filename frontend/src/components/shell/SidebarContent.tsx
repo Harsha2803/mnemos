@@ -1,31 +1,11 @@
 "use client";
 
-import { LayoutGrid } from "lucide-react";
 import { usePathname } from "next/navigation";
-import type { ReactNode } from "react";
 
 import { List, ListItem } from "@/components/ui/List";
 
+import { DESTINATIONS } from "./destinations";
 import { HealthIndicator } from "./HealthIndicator";
-
-type Destination = {
-  href: string;
-  label: string;
-  icon: ReactNode;
-};
-
-/**
- * Only destinations that exist. The sidebar grows a row per milestone — chat at
- * M8, knowledge at M6, sources at M5 — and a row that leads nowhere is worse
- * than a short list, because the user cannot tell "not built" from "broken".
- */
-const DESTINATIONS: readonly Destination[] = [
-  {
-    href: "/",
-    label: "Overview",
-    icon: <LayoutGrid className="size-[18px]" strokeWidth={1.5} aria-hidden="true" />,
-  },
-];
 
 export function SidebarContent() {
   const pathname = usePathname();
@@ -38,8 +18,13 @@ export function SidebarContent() {
       </div>
 
       <List label="Sections">
-        {DESTINATIONS.map(({ href, label, icon }) => (
-          <ListItem key={href} href={href} current={pathname === href} leading={icon}>
+        {DESTINATIONS.map(({ href, label, Icon }) => (
+          <ListItem
+            key={href}
+            href={href}
+            current={pathname === href}
+            leading={<Icon className="size-[18px]" strokeWidth={1.5} aria-hidden="true" />}
+          >
             {label}
           </ListItem>
         ))}

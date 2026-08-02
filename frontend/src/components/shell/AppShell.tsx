@@ -3,11 +3,13 @@
 import * as Dialog from "@radix-ui/react-dialog";
 import * as VisuallyHidden from "@radix-ui/react-visually-hidden";
 import { PanelLeft, PanelRight } from "lucide-react";
+import { usePathname } from "next/navigation";
 import { useState, type ReactNode } from "react";
 
 import { ThemeToggle } from "@/components/theme/ThemeToggle";
 import { Button } from "@/components/ui/Button";
 
+import { destinationFor } from "./destinations";
 import { InspectorContent } from "./InspectorContent";
 import { SidebarContent } from "./SidebarContent";
 import { INSPECTOR_INLINE, SIDEBAR_INLINE, useMediaQuery } from "./useMediaQuery";
@@ -26,6 +28,7 @@ const INSPECTOR_ID = "context-inspector";
  * in JavaScript rather than left to CSS.
  */
 export function AppShell({ children }: { children: ReactNode }) {
+  const pathname = usePathname();
   const inspectorIsInline = useMediaQuery(INSPECTOR_INLINE, true);
   const sidebarIsInline = useMediaQuery(SIDEBAR_INLINE, true);
 
@@ -61,7 +64,11 @@ export function AppShell({ children }: { children: ReactNode }) {
             </Button>
           )}
 
-          <span className="text-subheadline font-semibold text-label">Overview</span>
+          {/* Read from the same list the sidebar renders, so the bar and the nav
+              cannot disagree. A literal here is a lie waiting for the second route. */}
+          <span className="text-subheadline font-semibold text-label">
+            {destinationFor(pathname)?.label ?? "Mnemos"}
+          </span>
 
           <div className="ml-auto flex items-center gap-2">
             <ThemeToggle />
