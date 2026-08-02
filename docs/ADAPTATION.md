@@ -1,8 +1,8 @@
-# Mnemos — Build Plan & JIVA Adaptation Map
+# Mnemos — Build Plan & Architecture
 
 > **Read this first if you are resuming work.** It is the authoritative plan and is
-> self-contained: architecture, capability map, schema, milestones, and current state.
-> [`TRACKER.md`](../TRACKER.md) holds live task status; this holds the design.
+> self-contained: architecture, the capability inventory, schema, milestones, and current
+> state. [`TRACKER.md`](../TRACKER.md) holds live task status; this holds the design.
 
 **Last updated:** 2026-08-02
 
@@ -10,15 +10,32 @@
 
 ## 1. What Mnemos is
 
-**An AI workspace chatbot.** One conversation surface. The user asks something; a router
-decides whether the answer needs documents (**RAG**), a database (**NL2SQL**), a tool
-(**MCP**), memory, or a combination — then answers with citations.
+**An enterprise AI assistant.** One conversation surface. The user asks something; a
+router decides whether the answer needs documents (**RAG**), a database (**NL2SQL**), a
+tool (**MCP**), memory, or a combination — then answers with citations you can click
+into. Underneath it is multi-tenant, authenticated, authorised and audited, because that
+is what separates an assistant from a demo.
 
-Underneath, every message has an inspectable **context bundle** and a **governed memory
-layer** that distinguishes current facts from superseded ones.
+**The breadth is the achievement.** Conversation, retrieval, natural language over a
+warehouse, tool calling, ingestion at scale, identity, governance and the operational
+scaffolding around all of it — a platform of this kind is defined by having the whole
+surface, not by having one part of it done unusually well. §3 is the inventory, and every
+row of it is in the milestone plan rather than in a wish list.
 
-**Positioning:** the app does many things. Context and memory management is the thing
-that *stands out* among them — not the whole product.
+**It carries one deep technical claim, and the claim is measured rather than asserted:**
+every prompt is a **compiled, budgeted artifact you can open** — an inspectable context
+bundle over a **governed memory layer** that distinguishes current facts from superseded
+ones. The numbers are in the root [`README.md`](../README.md). They were measured on the
+v0.1 SQLite kernel and must be re-run when that kernel finishes its port in `C4`; until
+then the README says so.
+
+That is the ordering, and it used to be the other way round. Framing the project as a
+context-compilation result that used a chatbot as its harness put the product last: the
+old milestone plan reached a conversation surface at `M8`. The re-cut in §7 fixes the
+order, and TRACKER **C14** is the rule that keeps it fixed.
+
+**It is an independent implementation.** Every file is written fresh, and no other
+codebase is a source. See §2.
 
 **Constraints (non-negotiable):**
 - **Zero monetary cost.** Every component free and self-hosted. No API key required.
@@ -28,21 +45,38 @@ that *stands out* among them — not the whole product.
 
 ---
 
-## 2. IP boundary (read before touching `jiva/`)
+## 2. IP boundary — this is an independent implementation
 
-`~/Personal/Projects/Resume_001/jiva/` is the author's **employer's proprietary codebase**
-(J K Technosoft, project JIVA). It is reference material for *what to build*, never for
-*what to copy*.
+Mnemos implements capabilities the author has **production experience building**. It is
+not derived from any system he has worked on, and specifically: **the author's employer's
+codebase is not a reference. It is not read, not mapped from, and not cited.** That is
+TRACKER **C11**, and it is a constraint rather than a preference.
 
-| Permitted | Forbidden |
-|---|---|
-| Architectural shape — which services exist, how modules split | Source code, verbatim or lightly edited |
-| Capability lists — what a platform like this needs | Database schemas, migration bodies |
-| Naming/layering conventions the author is fluent in | Prompts, domain registries, business vocabulary |
-| Lessons (single-owner retry, fail-closed authz, split-horizon OIDC) | Client names, customer data, internal docs |
+The distinction the project runs on:
 
-Every file in Mnemos is written fresh. **Patterns are portable; artifacts are not.**
-A public personal repo containing employer code is a real legal problem for the author.
+- **What a platform of this kind needs is public knowledge about the shape of the
+  problem.** That it wants OIDC behind a provider seam, tenant-scoped RBAC, object
+  storage behind a port, an event bus, structure-aware chunking, a read-only guard in
+  front of generated SQL, a tool registry with approval gates, versioned prompts and a
+  cost ledger is the *inventory in §3*. Any competent engineer arrives at that list from
+  the problem statement, and much of it is in vendor documentation and conference talks.
+- **Any particular codebase's realisation of that list is not public knowledge**, and
+  none is consulted here. No source, no schema, no migration, no prompt, no domain
+  registry, no business vocabulary, no client name and no internal document from anywhere
+  else appears in this repository, verbatim or paraphrased.
+
+Every design decision here is therefore justified from first principles, in §9 and in
+`docs/ArchitectureDecisionRecords/`. That is not decoration: **a rationale that cannot be
+written down from public reasoning does not go in**, because a decision whose only
+justification is "that is how the other system did it" is exactly the kind this boundary
+excludes.
+
+**Why the section stays, rather than being deleted as obvious.** A personal repository
+that documents itself as a mapping *from* an employer's system invites the reading that it
+contains that employer's material — and that reading is expensive to disprove and cheap to
+prevent. Stating the boundary explicitly is the protection; the earlier version of this
+section, which described what could be safely taken from where, was the risk it was
+supposed to guard against.
 
 ---
 
