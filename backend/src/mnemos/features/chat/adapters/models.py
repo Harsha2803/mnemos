@@ -9,6 +9,7 @@ from __future__ import annotations
 
 import uuid
 from datetime import datetime
+from typing import Any
 
 from sqlalchemy import (
     Boolean,
@@ -66,7 +67,7 @@ class ChatSession(Base, TimestampMixin):
     title: Mapped[str] = mapped_column(Text, nullable=False, server_default=text("'New chat'"))
     is_archived: Mapped[bool] = mapped_column(Boolean, nullable=False, server_default=text("false"))
     token_budget: Mapped[int] = mapped_column(Integer, nullable=False, server_default=text("3000"))
-    settings: Mapped[dict] = mapped_column(
+    settings: Mapped[dict[str, Any]] = mapped_column(
         JSONB, nullable=False, server_default=text("'{}'::jsonb")
     )
     last_message_at: Mapped[datetime | None] = mapped_column(nullable=True)
@@ -110,7 +111,7 @@ class ChatMessage(Base):
     finish_reason: Mapped[str | None] = mapped_column(String(32), nullable=True)
     error_code: Mapped[str | None] = mapped_column(String(64), nullable=True)
 
-    msg_metadata: Mapped[dict] = mapped_column(
+    msg_metadata: Mapped[dict[str, Any]] = mapped_column(
         JSONB, nullable=False, server_default=text("'{}'::jsonb")
     )
     created_at: Mapped[datetime] = mapped_column(server_default=text("now()"), nullable=False)

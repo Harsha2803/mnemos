@@ -17,6 +17,7 @@ from __future__ import annotations
 
 import uuid
 from datetime import datetime
+from typing import Any
 
 from sqlalchemy import (
     CheckConstraint,
@@ -54,10 +55,10 @@ class ContextPlan(Base):
     query_sha256: Mapped[str] = mapped_column(String(64), nullable=False)
     total_budget: Mapped[int] = mapped_column(Integer, nullable=False)
     # {"memory": {"floor": 120, "ceiling": 600}, ...}
-    section_budgets: Mapped[dict] = mapped_column(
+    section_budgets: Mapped[dict[str, Any]] = mapped_column(
         JSONB, nullable=False, server_default=text("'{}'::jsonb")
     )
-    operators: Mapped[dict] = mapped_column(
+    operators: Mapped[dict[str, Any]] = mapped_column(
         JSONB, nullable=False, server_default=text("'{}'::jsonb")
     )
     deadline_ms: Mapped[int] = mapped_column(Integer, nullable=False)
@@ -92,12 +93,12 @@ class ContextBundle(Base):
 
     # Per-section spend, admitted/rejected counts, trim events — everything the
     # inspector renders as the "why this and not that" panel.
-    budget_report: Mapped[dict] = mapped_column(
+    budget_report: Mapped[dict[str, Any]] = mapped_column(
         JSONB, nullable=False, server_default=text("'{}'::jsonb")
     )
     # Rejections with reasons: superseded, unauthorized, near-duplicate,
     # conflict-loser, over-budget. Recorded, never silently dropped.
-    rejections: Mapped[dict] = mapped_column(
+    rejections: Mapped[dict[str, Any]] = mapped_column(
         JSONB, nullable=False, server_default=text("'[]'::jsonb")
     )
 

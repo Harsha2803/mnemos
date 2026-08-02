@@ -91,4 +91,7 @@ async def subscribe(websocket: WebSocket, channel: str) -> None:
         with contextlib.suppress(asyncio.CancelledError):
             await pump_task
         await pubsub.unsubscribe(topic)
-        await pubsub.aclose()
+        # redis-py's PubSub.aclose is not itself annotated, so strict mypy sees an
+        # untyped call here even though every argument and the return path are
+        # fine; the gap is in the dependency, not this code.
+        await pubsub.aclose()  # type: ignore[no-untyped-call]
