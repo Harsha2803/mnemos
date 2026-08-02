@@ -4,7 +4,7 @@
 > self-contained: architecture, capability map, schema, milestones, and current state.
 > [`TRACKER.md`](../TRACKER.md) holds live task status; this holds the design.
 
-**Last updated:** 2026-07-27
+**Last updated:** 2026-08-02
 
 ---
 
@@ -195,9 +195,9 @@ for typography, spatial rhythm, materials and motion character. §0 there record
 Apple assets are off-limits (SF Pro as a webfont, SF Symbols) and what is used instead.
 
 **Current position: M1, M2 and `M3.1`–`M3.3` are merged to `main` (PR #1, PR #2 at
-`98fe47a`). The next task is `F0`, the frontend foundation — see
-[TRACKER §5](../TRACKER.md#5-next-task). `M3.4`–`M3.7` follow, each now carrying a UI
-slice. See §8.**
+`98fe47a`). `M3.4`'s **backend half** is on `feat/m3.4-platform-jwt` (PR #6); its UI slice
+is not built. `F0`, the frontend foundation, is the task that unblocks every remaining UI
+slice — see [TRACKER §5](../TRACKER.md#5-next-task). `M3.5`–`M3.7` follow. See §8.**
 
 M3's exit criterion "RLS blocks cross-org" turned out to be unmet by M2 rather than merely
 untested; that is written up in §8 and in [TRACKER §3](../TRACKER.md#3-current-state--what-is-actually-built).
@@ -361,12 +361,74 @@ therefore correct and the instruction was wrong; both are recorded in TRACKER §
 | `ruff` / `mypy --strict` | clean on all new files |
 | `alembic check` | no new operations — neither M3.2a nor M3.3 touched schema |
 
-**Remaining: deliverables 4–7** — JWT issuance and refresh rotation, API keys, the RBAC
-dependency, and `mnemosctl bootstrap`. Specified in
-[TRACKER §5](../TRACKER.md#5-next-task) (next up: **M3.4**). One design question is still
-open and M3.4 must settle it: **`ThreatModel.md` §5 and `core/config.py` disagree on the
-token algorithm** (EdDSA vs HS256). Whichever is chosen, both documents must be
-reconciled in the same commit.
+**Done: M3.4 backend half — platform JWT + refresh rotation (2026-08-02).** M3.3 could
+prove a login *happened*; this is what makes one last. The OIDC callback returns
+`{access_token, token_type, expires_in, org_slug}` and sets the refresh token as an
+`httpOnly`, `SameSite=Lax`, `Path=/api/v1/auth` cookie; `POST /v1/auth/token` rotates it
+and `POST /v1/auth/token:revoke` signs out. **No migration** — `session` already carried
+`refresh_token_hash`, `rotated_to`, `revoked_at` and `revoked_reason`, and `alembic check`
+still reports no new operations.
+
+**The token-algorithm question is settled: HS256**, and the argument now lives in
+`ThreatModel.md` §5.1 instead of contradicting `core/config.py`. api, worker and realtime
+are one trust domain reading one `MNEMOS_JWT_SECRET`, so there is no verifier that must be
+unable to sign — the only thing asymmetric signing buys. EdDSA would turn one environment
+variable into key generation, distribution and a JWKS endpoint with no KMS to hold any of
+it (C1). §5.1 records what reverses the decision: the first verifier outside the signing
+trust domain, e.g. a separately-deployed MCP tool service at M11. The part that actually
+stops forgeries is the same either way — a fixed one-element `algorithms=` allow-list
+passed to the decoder, never the token's own `alg` header.
+
+| File | What it is |
+|---|---|
+| `domain/token.py` | `AccessTokenClaims` — exactly `sub`/`org`/`sid`/`iat`/`exp`/`iss`/`jti`, refusing authorization claims when minting **and** when verifying. Plus `RefreshCredential` (`<org_slug>.<secret>`) and `TokenPair`, both `repr=False` because a generated repr prints a live bearer secret into every log line that formats it. The layer is now proven to import no SQLAlchemy, no FastAPI and **no PyJWT** |
+| `providers/platform.py` | `PlatformTokenCodec` + `PlatformTokenConfig`, deliberately beside `oidc.py`: that one verifies a token another system minted, this one a token we minted and could have forged. Opposite key material, identical header discipline |
+| `application/tokens.py` | `TokenService`, the `SessionStore`/`AppUserStore` ports, and the JIT-provisioning decision |
+| `adapters/sessions.py` | `SqlSessionStore` — compare-and-set rotation, recursive-CTE family walk — and `SqlAppUserStore` |
+| `entrypoints/api/routers/auth.py` | The two new endpoints, the changed callback, and the cookie |
+
+**Rotation and the family kill.** Every use of a refresh token issues a new one and records
+the successor in `rotated_to`. Presenting a token whose row already names a successor is
+*proof* of theft rather than a suspicion — the legitimate holder and the thief cannot both
+hold the current token, and nothing in the request says which is which — so the whole chain
+is revoked. Losing the compare-and-set is the same evidence arriving through a different
+door, which is why a client must collapse concurrent refreshes into one call.
+
+**Just-in-time provisioning is on, and it grants identity rather than authority.** A first
+OIDC login creates the `app_user` row with `password_hash` NULL, no `role_binding` and no
+`user_tag`, so the user can sign in and do nothing until M3.6 grants something. Matching is
+on `external_subject` and never on email: an IdP email is mutable and often unverified, so
+linking on it would let whoever controls that address inherit a local account.
+
+| Command | Result |
+|---|---|
+| `pytest` | **183 passed** in 13.5s (was 97; +86 — 19 codec, 31 rotation policy, 11 store-vs-Postgres, 25 endpoints) |
+| hermetic subset | 167 passed in 5.5s, no Docker |
+| `ruff check` + `ruff format --check` | clean on all new and touched files |
+| `mypy --strict` | clean on `core`, `features`, `entrypoints/api` (28 files) |
+| `alembic check` | "No new upgrade operations detected" |
+
+Live evidence, with the API run against the compose stack: `alg: HS256`, claims
+`['exp','iat','iss','jti','org','sid','sub']` and no roles; `Set-Cookie` carrying
+`HttpOnly; Max-Age=1209600; Path=/api/v1/auth; SameSite=lax` and no `refresh_token` in the
+body; a replayed token returning 401 and leaving **both** rows with
+`revoked_reason=refresh_token_reuse_detected`; four different failure causes producing one
+byte-identical response body.
+
+Two tests are worth naming because they exist to stop a specific kind of false confidence.
+`tests/test_session_store.py` runs the rotation and the family walk against a real Postgres,
+because "the walk reaches a whole chain from a middle member" and "two concurrent rotations
+cannot both win" are properties of the database and a fake would only prove the fake. And
+the endpoint tests assert on the *response bytes*; they were verified to fail by restoring
+the M3.2a leak, which put `"no active org with slug 'nosuchorg'"` on the wire as a
+distinguishable answer — a tenant-enumeration oracle.
+
+**Remaining in M3: the `M3.4` UI slice, then deliverables 5–7** — the sign-in screen and
+session handling, API keys, the RBAC dependency, and `mnemosctl bootstrap`. Specified in
+[TRACKER §5](../TRACKER.md#5-next-task). Note that M3.4 landed **without its UI slice**,
+which is a C12 exception recorded in [TRACKER §4](../TRACKER.md#4-known-gaps-and-honest-weaknesses)
+item 20 rather than glossed over: `frontend/` is still an empty directory, so `F0` has to
+exist before a sign-in screen can be built in anything.
 
 ### Carried over from v0.1 (needs porting from SQLite → Postgres)
 
