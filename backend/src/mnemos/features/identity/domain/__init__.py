@@ -19,9 +19,12 @@ from mnemos.features.identity.domain.ids import (
 )
 from mnemos.features.identity.domain.permission import Permission, PermissionSet
 from mnemos.features.identity.domain.principal import Principal, PrincipalKind
+from mnemos.features.identity.domain.roles import ADMIN_ROLE_SLUG, SYSTEM_ROLES, SystemRole
 from mnemos.features.identity.domain.tags import TagSet
 
 __all__ = [
+    "ADMIN_ROLE_SLUG",
+    "SYSTEM_ROLES",
     "ApiKeyId",
     "OrgId",
     "Permission",
@@ -31,6 +34,7 @@ __all__ = [
     "ProviderId",
     "RoleId",
     "SessionId",
+    "SystemRole",
     "TagId",
     "TagSet",
     "UserId",
