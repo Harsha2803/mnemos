@@ -404,6 +404,37 @@
   .measure {
     max-width: var(--measure);
   }
+
+  /* Grouped-inset list (DesignSystem §4). The separator is a pseudo-element
+     rather than a border because it has to start at the *text* origin, not at
+     the container edge — a full-bleed rule cuts the group in half instead of
+     dividing it. `--list-inset` is what the row's leading slot shifts. */
+  .list-group {
+    background-color: var(--bg-secondary);
+    border-radius: var(--radius-lg);
+    overflow: hidden;
+  }
+
+  .list-row {
+    position: relative;
+    --list-inset: var(--space-4);
+  }
+
+  /* A leading icon is 1.25rem wide with --space-3 after it, so the text origin
+     moves by exactly that much and the separator has to follow. */
+  .list-row-leading {
+    --list-inset: calc(var(--space-4) + 1.25rem + var(--space-3));
+  }
+
+  .list-row + .list-row::before {
+    content: "";
+    position: absolute;
+    top: 0;
+    left: var(--list-inset);
+    right: 0;
+    height: 1px;
+    background-color: var(--separator);
+  }
 }
 
 /* =========================================================== 2.5 motion

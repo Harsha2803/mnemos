@@ -421,10 +421,15 @@ retrofit across forty of them.
   is an inspector or an inline disclosure. Modals need `<dialog>`, focus trapping, `Esc`,
   and focus restored to the trigger on close.
 - **Empty states.** Every list gets one: an icon, one line of what goes here, one action.
-  An empty pane with no explanation reads as a bug.
+  An empty pane with no explanation reads as a bug — the user cannot tell "nothing here
+  yet" from "this failed to load", and assumes the worse of the two. The action is omitted
+  **only** when there is genuinely nothing the user can do yet; a control that does nothing
+  is worse than no control, because it reads as a defect rather than as a boundary.
 - **Loading.** Skeletons that match the final layout, never a centred spinner over a blank
   region — a spinner discards the layout information the user is about to need. For
-  streamed text, render tokens as they arrive.
+  streamed text, render tokens as they arrive. **Label one skeleton per region, not each
+  shape:** six live regions all announcing "loading" is worse than none, so the rest are
+  `aria-hidden` decoration.
 - **Destructive actions.** `--danger`, and confirmation names the specific thing being
   destroyed. "Delete document?" is not good enough; "Delete *Q3 Revenue Policy*?" is.
 - **Appearance.** Three choices, not two: **Match system**, **Light**, **Dark**. "System"
