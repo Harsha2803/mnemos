@@ -946,6 +946,38 @@ Recorded so they are not rediscovered as surprises:
     endpoint needs the same treatment, that is the signal to add a runtime validator
     generated from the schema rather than to write a third narrowing function.
 
+32. **The whole stack was never rebuilt from source between M3.4 and F0, and `main` could
+    not start.** `M3.4` added a minimum-length check on `jwt_secret` (an HMAC-SHA256 key
+    shorter than its own digest signals a value nobody chose deliberately) but
+    `docker-compose.yml` still shipped the 19-byte `dev-only-change-me`. The first
+    `docker compose up -d --build api` after F0 merged put the API into a crash loop with
+    `ConfigurationError: jwt_secret is shorter than an HMAC-SHA256 key should be`, and
+    `web` never started because it waits on `api` being healthy. Fixed in the same commit
+    as this entry.
+
+    **Every test passed throughout.** M3.4's agent verified its work against an API it ran
+    locally on `:8010` with its own settings, and its 191 tests construct
+    `PlatformTokenConfig` directly — so nothing in the suite ever read
+    `docker-compose.yml`. This is the same lesson as `db doctor` (item 7) and the error
+    boundary (§3, M3.2a), in a third place: **a control verified one layer away from where
+    it takes effect is not verified.** The concrete gap is that CI builds no images and
+    runs no `docker compose up`, so "the stack starts" is asserted by nobody. A compose
+    smoke job — build, `up -d`, poll `/readyz` and `:3000`, tear down — is the check that
+    would have caught this, and it should be added to `.github/workflows/ci.yml`.
+
+33. **`core/config.py`'s default `database_url` points at `localhost:5432`, which on the
+    development machine is a *different Postgres*.** The compose stack maps its Postgres to
+    host port **15432** precisely because this machine already runs its own on 5432. So
+    `cd backend && alembic check` from the host connects to the wrong server and fails with
+    `InvalidPasswordError: password authentication failed for user "mnemos_app"` — and the
+    worse outcome is the one where a stray local database *does* answer and the check passes
+    against something that is not the stack. The `Makefile`'s `migrate`/`migrate-down`/
+    `check` targets now run through the `migrate` compose service, which is the only one
+    holding the table owner's DSN and which resolves `postgres` over the compose network.
+    Every `alembic check` claim in §3 that was run from a host venv should be read as
+    unverified unless the DSN was overridden; the drift itself is confirmed absent, by
+    `make check` against the real database on 2026-08-03.
+
 ---
 
 ## 5. NEXT TASK

@@ -36,7 +36,13 @@ x-backend-env: &backend-env
   MNEMOS_OIDC_ISSUER_PUBLIC: http://localhost:8080/realms/mnemos
   MNEMOS_OIDC_ISSUER_INTERNAL: http://keycloak:8080/realms/mnemos
   MNEMOS_OIDC_CLIENT_ID: mnemos-web
-  MNEMOS_JWT_SECRET: dev-only-change-me
+  # M3.4 requires at least 32 bytes — an HMAC-SHA256 key shorter than its own
+  # digest adds no security over a 32-byte one and signals a value nobody chose
+  # deliberately. The old 19-byte placeholder here crash-looped the API on
+  # startup the first time the whole stack was rebuilt from source.
+  # `core/config.py` separately refuses to start in production while this is
+  # still the development default, so a real deployment cannot inherit it.
+  MNEMOS_JWT_SECRET: dev-only-change-me-this-is-not-a-real-secret-32b+
   PYTHONUNBUFFERED: "1"
 
 # The browser-facing configuration, in one place because it is needed twice: as
