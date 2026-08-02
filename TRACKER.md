@@ -324,6 +324,122 @@ Not done here, deliberately: **no platform JWT and no `session` row.** The callb
 the verified subject. M3.4 replaces that response with a token pair; the refresh-rotation
 chain is a whole test surface of its own and splitting it keeps both landable.
 
+### ✅ M3.4 (backend half) — platform JWT + refresh rotation, verified 2026-08-02
+
+M3.3 could prove a login *happened*. This is what makes one **last**: a 15-minute
+access token, a rotating refresh token in an `httpOnly` cookie, and a family kill on
+reuse. The UI slice (items 7–9 in §5) is still open — see §4 item 20.
+
+**The algorithm conflict is settled: HS256.** `ThreatModel.md` §5 said EdDSA and
+`core/config.py` said HS256; both stood because nothing had issued a token. The argument
+is now in `ThreatModel.md` §5.1 rather than in a table cell: api/worker/realtime are one
+trust domain reading one `MNEMOS_JWT_SECRET`, so there is no verifier that must be unable
+to sign — which is the only property asymmetric signing buys. EdDSA would turn one
+environment variable into key generation, distribution and a JWKS endpoint, with the
+private half ending up in that same variable. §5.1 also records what *reverses* it: the
+first verifier outside the signing trust domain (a separately-deployed MCP tool service in
+M11, an external audit consumer). `PlatformTokenConfig` already carries the algorithm as a
+validated field, so that change is the allow-list plus a key pair.
+
+The security-critical half is identical either way and is the **allow-list**:
+`ALLOWED_PLATFORM_ALGORITHMS` is a one-element tuple passed to the decoder, and the token's
+own `alg` header is never consulted.
+
+| File | What it is |
+|---|---|
+| `domain/token.py` | `AccessTokenClaims` (exactly `sub`/`org`/`sid`/`iat`/`exp`/`iss`/`jti`, refusing `FORBIDDEN_CLAIMS` on the way *out* and the way *in*), `RefreshCredential` (`<org_slug>.<secret>`, `repr=False`), `TokenPair`. Pure — and now proven to import no **PyJWT** either, because the temptation with a claims type is to give it an `encode()` |
+| `providers/platform.py` | `PlatformTokenCodec` + `PlatformTokenConfig`. Deliberately beside `oidc.py`: that one verifies a token another system minted, this one verifies a token we minted and could have forged. Opposite key material, identical header discipline |
+| `application/tokens.py` | `TokenService.issue_for_subject` / `refresh` / `revoke`, the `SessionStore`/`AppUserStore` ports, and the JIT-provisioning decision |
+| `adapters/sessions.py` | `SqlSessionStore` (compare-and-set rotation, recursive-CTE family walk) + `SqlAppUserStore` |
+| `entrypoints/api/routers/auth.py` | Callback returns the pair instead of `SubjectResponse`; `POST /auth/token`, `POST /auth/token:revoke`; the cookie |
+| `core/config.py` | `jwt_issuer`, `jwt_min_secret_length`, the named `DEV_JWT_SECRET` refused in production, the refresh-cookie settings |
+| `docs/ThreatModel.md` §5/§5.1, `docs/APIContract.md` §1/§2 | Reconciled with the code in the same commits |
+
+**Why the whole family dies.** Presenting a refresh token whose row already names a
+successor is *proof* of theft, not a suspicion: the legitimate holder and the thief cannot
+both hold the current token, so one is replaying a copy and nothing in the request can say
+which. Refusing only the stale token leaves the thief holding the live one. Losing the
+compare-and-set counts as the same evidence — same proof, different door — which is why the
+frontend interceptor must collapse concurrent 401s into **one** refresh (§5 item 8).
+
+**Just-in-time provisioning: on, and argued rather than assumed.** Refusing it would mean
+nobody but the bootstrap admin (M3.7) can ever sign in, which is a reason to share an
+account rather than a security control. What makes it safe is that provisioning grants
+**identity, never authority**: no `role_binding`, no `user_tag`, `password_hash` NULL (so
+M3.2's `InternalProvider` cannot password-authenticate the row). Matching is on
+`external_subject` and **never on email** — an IdP email is a mutable, often unverified
+attribute of an account *there*, so linking on it lets whoever controls that address
+inherit a local user. An email already held by a different subject is a denial; linking is
+an administrative action with a human in it.
+
+**Evidence against the live stack** (API run locally on `:8010` against the compose
+Postgres/Redis/Keycloak, an `acme` org seeded by hand and removed afterwards — there is no
+`mnemosctl bootstrap` yet, §4 item 21):
+
+```
+authorize -> browser sent to  http://localhost:8080/realms/mnemos/protocol/openid-connect/auth
+authorize?org=nope         -> 401 {"code":"unauthenticated","message":"authentication failed"}
+JIT-provisioned app_user    : password_hash=None  role_binding rows=0  last_login_at set
+access token header         : {"alg":"HS256","typ":"JWT"}
+access token claims         : ['exp','iat','iss','jti','org','sid','sub']   <- no roles
+POST /token (cookie only)   -> 200, refresh_token in body? False
+  Set-Cookie                : mnemos_refresh=<secret>; HttpOnly; Max-Age=1209600;
+                              Path=/api/v1/auth; SameSite=lax
+  session rows              : A rotated_to=B reason=None / B rotated_to=- reason=None
+replay the retired token A  -> 401, and BOTH rows now reason=refresh_token_reuse_detected
+the live token B afterwards -> 401                      <- the family died, as designed
+4 different failures        -> 1 distinct response body
+POST /token:revoke, unknown -> 204 b''
+CORS preflight from :3000   -> 200 origin=http://localhost:3000 credentials=true
+openapi paths               : /api/v1/auth/{oidc/authorize, oidc/callback, token, token:revoke}
+TokenResponse properties    : ['access_token','expires_in','org_slug','token_type']
+```
+
+That last line is the point of `TokenResponse` having no `refresh_token` field: the
+generated frontend client cannot be handed one to put in `localStorage`.
+
+| Check | Result |
+|---|---|
+| `pytest` | **183 passed** in 13.5s (was 97; +86) |
+| hermetic subset | 167 passed in 5.5s, no Docker |
+| new tests | 19 codec/claims · 31 rotation policy · 11 store-vs-Postgres · 25 endpoints |
+| `ruff check` + `ruff format --check` | clean on all new and touched files |
+| `mypy --strict` on `core`/`features`/`entrypoints/api` | clean, 28 files — **and the 2 pre-existing `type-arg` errors in identity's `models.py` are fixed** (§4 item 19) |
+| `alembic check` | "No new upgrade operations detected" — **no migration**; `session` already had every column |
+| `gh auth status` | `Harsha2803` active, `harshaJKT` inactive (C9) |
+
+Acceptance criteria, all discharged: `test_rotated_refresh_token_revokes_family`,
+`test_access_token_carries_no_roles_or_permissions`,
+`test_a_token_signed_with_another_algorithm_is_rejected` (including `alg: none`),
+`test_expired_access_token_is_rejected` (zero leeway, asserted at the boundary second),
+`test_refresh_token_for_one_org_is_useless_against_another`, plus the two controls
+`test_a_genuine_access_token_is_accepted` and
+`test_a_verified_subject_receives_a_working_pair`.
+
+Four things worth keeping deliberately, because a later reader might delete them as
+redundant:
+
+- **The boundary test was verified to fail.** `test_the_token_endpoint_leaks_nothing_in_its_error_body`
+  and `test_every_token_failure_is_byte_identical` assert on the *response bytes*, and were
+  checked by flipping `MnemosError.expose_details` back to `True`: 8 failures, with
+  `"no active org with slug 'nosuchorg'"` and `"no session holds the presented refresh
+  token"` appearing on the wire as distinguishable answers — a free tenant-enumeration
+  oracle. Restored: 0 failures. That is the M3.2a lesson applied where it takes effect
+  rather than one layer below it.
+- **`tests/test_session_store.py` exists because the fakes would otherwise prove
+  themselves.** Two claims are properties of Postgres, not of our code: the recursive walk
+  that reaches a whole chain from a *middle* member, and that two genuinely concurrent
+  rotations of one token cannot both win. The second is asserted with `asyncio.gather` over
+  two real transactions.
+- **PyJWT's `exp`/`iat`/`nbf` verification is turned off and replaced**, against the
+  injected `Clock`. PyJWT calls `datetime.now(UTC)` internally, which defeats the port
+  CodingStandards §5 exists to provide — a lifetime that cannot be tested without sleeping
+  is one nobody tests at the boundary second. Same move `oidc.py` makes with `verify_aud`.
+  `require` stays on, because without it "expiry is checked below" would be true and
+  useless: there would be no `exp` to check.
+- **The forgeries are hand-built from `base64`/`hmac`**, including the malformed-claim ones
+  — PyJWT refuses to *mint* a non-string `iss`, which is a courtesy on the signing side and
+  no help at all on the verifying side.
 ### ✅ M3.7 — `mnemosctl bootstrap`, verified 2026-08-02
 
 M3.2 and M3.3 built a provider seam and an OIDC round trip that **nothing could
@@ -499,11 +615,11 @@ not a defect.
 | Stack up | `docker compose up -d` (add `--profile web` from M13) |
 | Schema report | `docker compose exec api mnemosctl db doctor` |
 | Migrations | `cd backend && alembic upgrade head \| downgrade base \| check` |
-| Tests | `cd backend && ../.venv/bin/python -m pytest` → **105 passed** (needs Docker + Keycloak; see §4.8) |
-| Fast tests | everything except `test_tenant_isolation.py` and `test_bootstrap.py` → no Docker. The 2 live-Keycloak tests skip cleanly when the stack is down |
+| Tests | `cd backend && ../.venv/bin/python -m pytest` → **183 passed** (needs Docker + Keycloak; see §4.8) |
+| Fast tests | everything except `test_tenant_isolation.py` and `test_session_store.py` → **167 passed in 5.5s**, no Docker. The 2 live-Keycloak tests skip cleanly when the stack is down |
 | First-run setup | `mnemosctl bootstrap --org-slug <slug> --org-name <name> --admin-email <addr>`, password from `MNEMOS_BOOTSTRAP_ADMIN_PASSWORD` or the prompt. Idempotent; re-running is safe |
 | Bootstrapped locally | org `mnemos` / admin `admin@mnemos.local` / password `mnemos-dev-admin-password` — a **dev-stack credential**, in the same class as Keycloak's `admin`/`admin` and MinIO's `mnemos-dev-secret`, and never to be reused anywhere real |
-| Type check | `../.venv/bin/mypy --strict src/mnemos/core src/mnemos/features` — the 4 files that still fail project-wide `mypy` are all in the quarantined `_v1/` |
+| Type check | `../.venv/bin/mypy --strict src/mnemos/core src/mnemos/features src/mnemos/entrypoints` — clean on everything M3 has touched; what still fails project-wide is listed in §4 item 19 |
 | DB roles | `migrate` connects as `mnemos` (owner). api/worker/realtime connect as `mnemos_app` |
 | Host ports | postgres `15432`, redis `6380`, api `8000`, realtime `8001`, keycloak `8080`, minio `9000/9001`, ollama `11434` |
 | UI, such as it is | Swagger `http://localhost:8000/docs` · Keycloak `:8080` (`admin`/`admin`) · MinIO `:9001` (`mnemos`/`mnemos-dev-secret`). No app frontend until M13 — see §4.11 |
@@ -574,9 +690,20 @@ Recorded so they are not rediscovered as surprises:
     realm. "The client id appears in either position" is the check that actually means
     *this token was issued to us*. PyJWT's own `aud` verification is switched off and
     replaced rather than left on and worked around.
-14. **`ThreatModel.md` §5 (EdDSA) still contradicts `core/config.py` (HS256).** Untouched
-    by M3.2 and M3.3, neither of which issues a token. **`M3.4` must pick one and reconcile
-    both documents in the same commit** — see §5.
+14. ~~**`ThreatModel.md` §5 (EdDSA) still contradicts `core/config.py` (HS256).**~~
+    **Settled by M3.4 in favour of HS256**, with the argument written into
+    `ThreatModel.md` **§5.1** rather than left as a table cell. Summary: api/worker/realtime
+    are one trust domain reading one secret, so there is no verifier that must be unable to
+    sign — the only property asymmetric signing buys. EdDSA would turn one environment
+    variable into key generation, distribution, rotation and a JWKS endpoint, with the
+    private half ending up in that same variable; there is no KMS in this stack (C1). The
+    part that actually stops forgeries is identical either way and is the **allow-list**,
+    never the token's `alg`.
+    **What reverses it, written down so it is not re-litigated from scratch:** the first
+    verifier outside the signing trust domain — a separately-deployed MCP tool service
+    (M11), an external audit consumer, or tokens crossing an organisational boundary. At
+    that point verification would require handing out the ability to mint.
+    `PlatformTokenConfig` keeps the algorithm as a validated field for exactly that day.
 15. ~~**No end-to-end proof against the live Keycloak yet.**~~ **Discharged by M3.3** —
     `test_a_real_keycloak_token_is_accepted_by_the_validator` and
     `test_the_realm_allows_the_api_callback_as_a_redirect_uri` run against the live stack,
@@ -587,9 +714,10 @@ Recorded so they are not rediscovered as surprises:
     logic is covered hermetically and the live tests cover "a genuine Keycloak token
     validates". Running them from inside the `api` container would exercise both at once
     and is the obvious improvement whenever the test suite gains a container-side runner.
-17. **The OIDC callback returns a subject, not a token.** Deliberate — `M3.4` replaces the
-    response with an access/refresh pair. Until then there is no way to *stay* logged in,
-    only to prove a login happened.
+17. ~~**The OIDC callback returns a subject, not a token.**~~ **Discharged by M3.4** — the
+    callback returns `TokenResponse` and sets the refresh cookie, and
+    `POST /v1/auth/token` rotates it. A session now survives a reload. What is still
+    missing is the *browser* half that uses it; see item 20.
 18. **There is no CI. `.github/workflows/` does not exist**, so `gh pr checks` reports
     nothing and "the PR is green" has, so far, meant *someone ran the gate locally and said
     so in the merge commit*. That is how PR #2 was merged (2026-08-02): `pytest` 97 passed,
@@ -646,6 +774,39 @@ Recorded so they are not rediscovered as surprises:
     (§5), which is why bootstrap does not guess at it. The practical effect until then:
     the seeded admin signs in with the **internal** provider by naming it, while the org
     default sends the browser to Keycloak.
+
+24. **C12 is not satisfied for `M3.4`: the backend landed without its UI slice.** Written
+    down rather than implied, because "the backend landed and the UI is next" is exactly
+    the drift C12 exists to prevent. The reason is sequencing and it is not an excuse
+    that generalises: `frontend/` is still an empty directory, so `F0` (the app shell)
+    has to exist before a sign-in screen can be built *in* anything. Items **7–9 of §5
+    `M3.4`** are the outstanding work and remain fully specified there. Until they land,
+    the only way to exercise a login end to end is by hand or through the test suite.
+
+25. **The refresh window slides; there is no absolute session lifetime.** Every rotation
+    sets `expires_at = now + refresh_token_ttl_s`, so an actively used session never
+    reaches an end — fourteen days is an *idle* timeout, not a maximum. Capping it needs
+    the chain root's `issued_at`, which means either a walk to the root on every refresh or
+    a `family_id` column and a migration. Neither is worth doing until a policy asks for
+    it. Pinned by `test_the_refresh_window_slides_on_every_rotation` so it stays a decision
+    somebody made rather than one nobody noticed.
+
+26. **A user who deliberately opens two tabs mid-refresh revokes their own session.** This
+    is the cost of treating a lost compare-and-set as reuse, and it is the right trade —
+    the alternative is two live chains from one credential, which is the state the family
+    kill exists to prevent. It does mean the frontend interceptor in §5 item 8 is a
+    *correctness* requirement and not an optimisation, and that a future non-browser client
+    has the same obligation. If it proves painful in practice the fix is a short grace
+    window keyed on `(session_id, presented_hash)` — deliberately not built on speculation.
+
+27. **M3.4's original §4 items 21 and 24 are resolved, not deleted.** Item 21 ("nothing
+    seeds an org") is discharged by `M3.7`, which merged first and seeded org `mnemos`;
+    the prerequisite it warned about is satisfied. Item 24 (repo-wide `ruff` reports 10
+    findings, not the 1 that item 9 claims) is the same finding as item 22 above, reached
+    independently by two agents on two branches — which is itself the evidence that it is
+    real and that the repo-wide format chore is overdue. Item 9's "one finding" claim is
+    wrong and both of those items supersede it.
+
 
 ---
 
@@ -732,34 +893,48 @@ inspector renders an `EmptyState` until M4 fills it.
 
 ### `M3.4` — platform JWT + refresh rotation, **and the sign-in screen**
 
-The first slice under the new rule: backend and UI in the same milestone.
+**Backend half: ✅ done 2026-08-02** (branch `feat/m3.4-platform-jwt`, PR #6). Evidence in
+§3. **Frontend half: still open** — items 7–9 below are the remaining work, and §4 item 20
+records that C12 is unsatisfied until they land.
 
-**Backend half.** Unchanged from the previous specification and still fully valid:
+1. ~~**Settle the algorithm conflict first.**~~ ✅ **HS256**, argued in `ThreatModel.md`
+   §5.1 and reconciled with `core/config.py` in the same commit. §4 item 14 carries the
+   decision and what would reverse it.
+2. ~~**Access tokens**, 15 min, identity only — no roles, no permissions, no tags.~~ ✅
+   Claims are exactly `sub`, `org`, `sid`, `iat`, `exp`, `iss`, `jti`, and
+   `FORBIDDEN_CLAIMS` is enforced when minting *and* when verifying.
+3. ~~**Refresh tokens**: high-entropy from `secrets`, SHA-256 via `digest_token`,
+   compared with `tokens_equal`.~~ ✅
+4. ~~**Rotation and the family kill.**~~ ✅ Plus the case the spec did not name: **losing
+   the compare-and-set counts as reuse too**, because two concurrent presentations of one
+   token would otherwise produce two live chains from one credential.
+5. ~~**The org travels in the credential**: `<org_slug>.<secret>`.~~ ✅ `APIContract.md`
+   §1 updated, and the slug is hashed *with* the secret so it binds rather than hints.
+6. ~~Replace the callback's `SubjectResponse` with the token pair; `POST /v1/auth/token`
+   and `POST /v1/auth/token:revoke`.~~ ✅ **JIT provisioning is on**, and the reasoning is
+   in `TokenService._resolve_user` and §3: it grants *identity, never authority* (no
+   `role_binding`, no `user_tag`, `password_hash` NULL) and matches on `external_subject`,
+   never on email.
 
-1. **Settle the algorithm conflict first.** `ThreatModel.md` §5 says **EdDSA (Ed25519)**;
-   `core/config.py` says **HS256**. Pick one, implement it, and **reconcile both
-   documents in the same commit** — do not leave both standing, which is the state today.
-   HS256 is defensible while api/worker/realtime share one trust domain and one secret;
-   the security-critical half is the **allow-list**, never reading `alg` from the token.
-   `providers/oidc.py` already shows that shape. Record the decision in §4.
-2. **Access tokens**, 15 min, **identity only — no roles, no permissions, no tags**
-   (`APIContract.md` §2). A token carrying `roles` keeps working after the role is
-   revoked. Claims: `sub`, `org`, `sid`, `iat`, `exp`, `iss`, `jti`.
-3. **Refresh tokens**: high-entropy from `secrets`, stored SHA-256-hashed via the existing
-   `core.security.digest_token` — not argon2id, and that docstring already carries the
-   reason. Compare with `tokens_equal`.
-4. **Rotation and the family kill.** Every use issues a new token and sets the old row's
-   `rotated_to`. Presenting a token whose row *already* has `rotated_to` set proves theft —
-   the legitimate holder and the thief cannot both hold the current token — so revoke the
-   **entire chain**, and set `revoked_reason`.
-5. **The org travels in the credential** (settled in M3.2): `<org_slug>.<secret>`.
-   `APIContract.md` §1 currently specifies `X-API-Key: <key_id>.<secret>`; update it in
-   this commit either way.
-6. Replace the OIDC callback's `SubjectResponse` with the token pair, mapping the subject
-   to a local `app_user` — this is where just-in-time provisioning is decided.
-   `POST /v1/auth/token` (`grant_type=refresh_token`) and `POST /v1/auth/token:revoke`.
+**Frontend half — the sign-in screen and session handling. This is what remains.**
 
-**Frontend half — the sign-in screen and session handling.**
+> **Before starting, read §3's `M3.4` entry and §4 items 20–23.** Two things there change
+> how this must be built: the API is already written and its shapes are in
+> `/openapi.json`, and a *concurrent* refresh is treated as theft by design — item 8 below
+> is therefore a correctness requirement, not an optimisation.
+>
+> **`F0` must land first** (`frontend/` is still an empty directory), and **`M3.7`
+> `mnemosctl bootstrap` is now a de-facto prerequisite too**: nothing seeds an org, so
+> there is no tenant to sign into by hand (§4 item 21). Pull `M3.7` forward or seed a row
+> by hand and say which was done.
+>
+> **What the backend already gives you**, so none of it gets rebuilt in the browser:
+> `GET /api/v1/auth/oidc/authorize?org=…` 307s to Keycloak; the callback returns
+> `{access_token, token_type, expires_in, org_slug}` and sets the refresh cookie itself;
+> `POST /api/v1/auth/token` with body `{"grant_type":"refresh_token"}` and
+> `credentials: "include"` rotates; `POST /api/v1/auth/token:revoke` signs out and always
+> answers 204. **There is no `refresh_token` field anywhere in the API** — do not add one,
+> and do not put a token in `localStorage`.
 
 7. **Sign-in route.** Org slug field, then "Continue with Keycloak" driving
    `GET /api/v1/auth/oidc/authorize?org=…`. Design per DesignSystem §4: one `filled`
@@ -776,22 +951,36 @@ The first slice under the new rule: backend and UI in the same milestone.
    redirect to sign-in preserving the intended destination. Sign-out calls
    `token:revoke`. The signed-in user appears in the sidebar footer.
 
-**Acceptance (both halves)**
-- `test_rotated_refresh_token_revokes_family` — the M3-level criterion.
-- `test_access_token_carries_no_roles_or_permissions` — inspect the claims directly.
-- `test_a_token_signed_with_another_algorithm_is_rejected`, including `alg: none`. Mirror
-  `test_oidc_provider_rejects_an_unsigned_token`, which hand-forges rather than relying on
-  PyJWT to mint the forgery.
-- `test_expired_access_token_is_rejected`, zero leeway.
-- `test_refresh_token_for_one_org_is_useless_against_another`.
-- `test_concurrent_401s_trigger_exactly_one_refresh` — frontend, and it is the one that
-  prevents a self-inflicted family revocation.
-- `test_signin_error_is_identical_for_unknown_org_and_denied_login` — frontend.
+**Acceptance**
+
+Backend, all ✅ and evidenced in §3:
+- ~~`test_rotated_refresh_token_revokes_family`~~ — the M3-level criterion.
+- ~~`test_access_token_carries_no_roles_or_permissions`~~ — decoded claims inspected
+  directly, without verification, so it asserts the wire bytes and not our own parser.
+- ~~`test_a_token_signed_with_another_algorithm_is_rejected`~~, including `alg: none`,
+  hand-forged from `base64`/`hmac`.
+- ~~`test_expired_access_token_is_rejected`~~, zero leeway, asserted at the boundary second.
+- ~~`test_refresh_token_for_one_org_is_useless_against_another`~~.
+- ~~A boundary test that the token endpoints leak nothing in the body~~ — and it was
+  *verified to fail* by restoring the leak, rather than assumed to work.
+- ~~`pytest` green, `ruff` + `mypy --strict` clean, `alembic check` clean, no migration.~~
+
+Frontend, remaining:
+- `test_concurrent_401s_trigger_exactly_one_refresh` — the one that prevents a
+  self-inflicted family revocation. §4 item 23 explains why this is correctness, not
+  polish.
+- `test_signin_error_is_identical_for_unknown_org_and_denied_login`.
+- **No refresh token in `localStorage` or `sessionStorage`** — grep the built bundle, the
+  way `F0`'s `test_no_component_hardcodes_a_colour` greps for hex literals. The API cannot
+  hand one out, so this catches a client that invents its own storage.
 - A **Playwright** run: sign in against the live Keycloak, land on the shell, reload and
   stay signed in, sign out. Skippable like M3.3's live tests, and **verify it actually
-  skips** with the stack down rather than assuming it does.
-- `pytest` green, `ruff` + `mypy --strict` clean, `alembic check` clean (no migration —
-  `session` already has every column). Frontend: `tsc`, ESLint, `axe` clean.
+  skips** with the stack down rather than assuming it does. Note that this is also the only
+  thing that will exercise Keycloak's *login form*: the backend's live evidence drove
+  `authorize` and everything after the callback, but scripting the form itself with `httpx`
+  hit Keycloak 26's browser-session requirements and was not worth fighting for — that is
+  precisely what a browser driver is for.
+- Frontend: `tsc`, ESLint, `axe` clean. **Backend untouched**: `pytest` still 183 passed.
 
 ### Then, still in M3 — each with its UI slice, one commit each
 

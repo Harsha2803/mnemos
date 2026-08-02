@@ -226,10 +226,41 @@ that choice and is accepted knowingly.
 | Passwords | Argon2id (m=64MB, t=3, p=4) | Memory-hard; OWASP current guidance |
 | API key secrets | Argon2id | Same |
 | Data at rest (credentials, DSNs, tokens) | AES-256-GCM, per-org DEK under a master KEK | Envelope encryption enables per-tenant key rotation and crypto-shredding |
-| Tokens | EdDSA (Ed25519) | Small, fast, no curve/padding footguns |
+| **Platform access tokens** | **HS256 (HMAC-SHA256)**, key ≥ 32 bytes | See below. One trust domain, one shared secret, no third-party verifier |
+| Refresh tokens | 256-bit `secrets.token_urlsafe`, stored as a SHA-256 digest | High entropy, so there is no dictionary for argon2 to slow down — and the digest column has to stay searchable by a unique index |
+| Externally-issued tokens (OIDC) | Asymmetric only — RS\*/PS\*/ES\*/EdDSA, from the IdP's JWKS | We are the verifier and never the signer; an HMAC entry in that allow-list would let a token signed with the *public* key verify |
 | Digests | SHA-256 | Content addressing |
 | Cursors | HMAC-SHA256 signed | Prevents cursor tampering into an unauthorized scan |
 | Randomness | `secrets` module | Never `random` for anything security-relevant |
+
+### 5.1 Why platform tokens are HS256 and not EdDSA — settled in M3.4
+
+This table said **EdDSA (Ed25519)** while `core/config.py` shipped **HS256**, and both
+stood unreconciled until a token was actually issued. HS256 is the choice, for reasons
+that are about deployment rather than about cryptography:
+
+- **There is no third party to verify.** `api`, `worker` and `realtime` are one trust
+  domain, deployed together, reading one `MNEMOS_JWT_SECRET`. Asymmetric signing exists so
+  a verifier who must not be able to sign can still verify. Every verifier we have is also
+  a signer, so the property is bought and not used.
+- **A private key needs somewhere to live.** EdDSA turns "one secret in the environment"
+  into key generation, distribution, storage and rotation, with a JWKS endpoint to publish
+  the public half. There is no KMS and no secret manager in this stack (C1: zero paid
+  dependencies), so the private key would end up in the same environment variable the HMAC
+  secret is in today — the same exposure, with more moving parts.
+- **The security-critical half is identical either way, and it is the allow-list.**
+  Neither algorithm defends anything if the verifier reads `alg` out of the token it is
+  verifying. `providers/platform.py` passes a fixed one-element `algorithms=` list to the
+  decoder and never consults the header, which is what makes `alg: none` and every
+  algorithm-substitution forgery fail. That discipline — not the algorithm name — is what
+  the tests pin.
+
+**What would change this.** The moment a verifier exists outside the signing trust domain —
+a separately-deployed MCP tool service (M11) validating our tokens, an external audit
+consumer, or tokens crossing an organisational boundary — HS256 stops being defensible,
+because verification would require handing out the ability to mint. At that point switch to
+EdDSA: `PlatformTokenConfig` already carries the algorithm as a field and validates it
+against an allow-list, so the change is that allow-list, a key pair, and a JWKS route.
 
 Key rotation is designed in from the start: `key_version` columns accompany every
 encrypted field, so re-encryption is a background job rather than an outage. Crypto-

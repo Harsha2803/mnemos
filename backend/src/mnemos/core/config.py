@@ -9,8 +9,9 @@ from __future__ import annotations
 
 from enum import StrEnum
 from functools import lru_cache
+from typing import Final, Self
 
-from pydantic import Field, SecretStr, field_validator
+from pydantic import Field, SecretStr, field_validator, model_validator
 from pydantic_settings import BaseSettings, SettingsConfigDict
 
 
@@ -18,6 +19,13 @@ class Environment(StrEnum):
     LOCAL = "local"
     TEST = "test"
     PRODUCTION = "production"
+
+
+#: The signing secret a developer gets for free. Named rather than inlined so
+#: that `_reject_the_dev_secret_in_production` can recognise it: a deployment
+#: that forgot to set `MNEMOS_JWT_SECRET` would otherwise mint tokens anyone who
+#: has read this repository can forge, and it would do so silently.
+DEV_JWT_SECRET: Final = "dev-only-change-me-not-for-production-use"
 
 
 class Settings(BaseSettings):
@@ -65,10 +73,36 @@ class Settings(BaseSettings):
     embedding_dim: int = 384
 
     # -- auth -------------------------------------------------------------
-    jwt_secret: SecretStr = SecretStr("dev-only-change-me")
+    # HS256, and `docs/ThreatModel.md` §5.1 is where that is argued rather than
+    # asserted: api/worker/realtime are one trust domain reading one secret, so
+    # there is no verifier that must be unable to sign — which is the only thing
+    # an asymmetric algorithm buys. The half that actually stops forgeries is the
+    # fixed `algorithms=` allow-list in `providers/platform.py`, never the token's
+    # own `alg` header, and that is identical under either choice.
+    jwt_secret: SecretStr = SecretStr(DEV_JWT_SECRET)
     jwt_algorithm: str = "HS256"
+    # RFC 7518 §3.2: an HMAC key must be at least as long as the hash output, so
+    # 32 bytes for SHA-256. Enforced rather than documented, because a short
+    # secret degrades silently.
+    jwt_min_secret_length: int = 32
+    # `iss` on every token we mint, and the value the verifier requires. A
+    # constant we control, so a token from another deployment sharing a leaked
+    # secret still fails.
+    jwt_issuer: str = "mnemos"
     access_token_ttl_s: int = 900
     refresh_token_ttl_s: int = 60 * 60 * 24 * 14
+
+    # The refresh token reaches the browser as an httpOnly cookie and never in a
+    # response body, so no script can read it — `localStorage` is readable by any
+    # XSS, and a refresh token is the credential worth stealing. `SameSite=Lax` is
+    # what makes the cookie safe to *accept* on the token endpoints: Lax withholds
+    # the cookie from cross-site POSTs, and both endpoints are POST-only, so a
+    # forged form on another origin sends nothing.
+    refresh_cookie_name: str = "mnemos_refresh"
+    # `None` means "derive it": never `Secure` over local http, always otherwise.
+    # Hard-coding False would ship a cookie that travels in clear text; hard-coding
+    # True would silently drop it in development, which looks like a broken login.
+    refresh_cookie_secure: bool | None = None
 
     # Split-horizon OIDC. The browser is redirected to the public issuer; the API
     # fetches JWKS over the internal one. Collapsing these into a single URL is
@@ -124,9 +158,43 @@ class Settings(BaseSettings):
             )
         return v
 
+    @model_validator(mode="after")
+    def _reject_the_dev_secret_in_production(self) -> Self:
+        """Fail to boot rather than mint forgeable tokens.
+
+        A missing `MNEMOS_JWT_SECRET` in production is indistinguishable from a
+        working deployment until somebody signs their own access token with a
+        value published in this repository. Checked here, at startup, because
+        that is the last moment the failure is cheap (CodingStandards §7).
+        """
+        if self.env is Environment.PRODUCTION and (
+            self.jwt_secret.get_secret_value() == DEV_JWT_SECRET
+        ):
+            msg = "MNEMOS_JWT_SECRET is still the development default; set a real secret"
+            raise ValueError(msg)
+        return self
+
     @property
     def is_local(self) -> bool:
         return self.env is Environment.LOCAL
+
+    @property
+    def refresh_cookie_is_secure(self) -> bool:
+        """`Secure` unless this is local development over plain http."""
+        if self.refresh_cookie_secure is not None:
+            return self.refresh_cookie_secure
+        return self.env is not Environment.LOCAL
+
+    @property
+    def refresh_cookie_path(self) -> str:
+        """Scoped to the auth routes, so the browser attaches the refresh token
+        to the two endpoints that consume it and to nothing else.
+
+        A cookie on `/` rides along on every API call, which widens the blast
+        radius of a logging middleware, a proxy that records headers, or a CSRF
+        hole in some unrelated endpoint — for a credential only two routes ever
+        need."""
+        return f"{self.api_prefix}/auth"
 
 
 @lru_cache(maxsize=1)
