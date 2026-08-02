@@ -7,13 +7,42 @@
 > tracker is worse than none.
 
 **Last updated:** 2026-08-02
-**Phase:** **F0 — frontend foundation.** M3 backend is at `M3.3`; `M3.4`–`M3.7` remain and
-now each carry a UI slice (§5)
-**Next task:** `F0`, fully specified in §5. Take them one at a time, in order
-**Branch:** `feat/f0-frontend-foundation`. **M1+M2 merged as PR #1; M3.1–M3.3 merged as
-PR #2 (`98fe47a`)** — `main` now contains everything through the OIDC round trip
+**Phase:** **A — make it a chatbot.** The foundation (stack, schema, tenant isolation,
+identity, app shell, CI) is built; the product surface is not
+**Next task:** `A0`, fully specified in §5. Take them one at a time, in order
+**Branch:** `feat/a0-auth-surface`. **`main` contains M1+M2 (PR #1), M3.1–M3.3 (PR #2),
+the slice plan (PR #3), CI (PR #4), M3.7 bootstrap (PR #5), F0 the app shell, and M3.4's
+backend half**
 
-> **2026-08-02 — the project is now built in vertical slices.** Every milestone ships its
+> ### 2026-08-02 — the plan was re-cut around the product, and the milestones renumbered
+>
+> **What was wrong.** The old plan reached a chatbot at `M8`, RAG at `M9` and NL2SQL at
+> `M10` — four milestones and several sessions of work in, with no conversation surface
+> and nothing a person could be shown. Everything built was infrastructure: a 41-table
+> schema, row-level security, an identity stack, a design system. All of it real, none of
+> it demonstrable. A plan that reaches its own subject last is mis-ordered.
+>
+> **What was also wrong: the pitch.** §1 used to read *"an AI workspace chatbot whose
+> context is a compiled artifact"*, and the README led with benchmark numbers about
+> superseded document revisions. That is a research claim using a chatbot as its harness.
+> The actual goal is the reverse — **an assistant with the full feature surface of a
+> production platform**, where compiled context is one strong capability among many and
+> earns its place by being measured, not by being the headline.
+>
+> **What changed.** Milestones are re-cut into four phases (§3.0). Phase A drives straight
+> at a working chatbot: sign in, talk to it, then documents, then the database, then the
+> router that chooses between them. Phases B–D layer on the platform depth, the enterprise
+> governance and the ship polish. The memory/context kernel is **not dropped and not
+> demoted in quality** — it is split, so its retrieval half lands early where RAG needs it
+> (`A2`) and its governance half lands as its own deep slice with the inspector and the
+> benchmark (`C4`).
+>
+> **Nothing built is scrapped.** Every milestone already merged is foundation under the new
+> plan; the old `M`-numbers are mapped onto the new IDs in §3.0 so no work is lost or
+> rediscovered. See the new constraint **C14**, which is the rule that stops this drift
+> happening again.
+
+> **2026-08-02 — the project is built in vertical slices.** Every milestone ships its
 > backend *and* the UI for that backend. The old plan deferred the entire frontend to a
 > single milestone `M13`; that milestone is **dissolved** and its contents redistributed
 > (§3.0). The reason is in §2 C12: a feature with no UI is a feature nobody has used, and
@@ -28,7 +57,7 @@ PR #2 (`98fe47a`)** — `main` now contains everything through the OIDC round tr
    [`docs/CodingStandards.md`](docs/CodingStandards.md) for backend work, or
    [`docs/DesignSystem.md`](docs/DesignSystem.md) for **any** frontend work.
    This file tells you *what to do next*. ADAPTATION tells you *what the thing is* —
-   architecture, the JIVA capability map, the schema plan, and the M1–M14 ledger.
+   architecture, the capability inventory, the schema plan, and the milestone ledger.
    DesignSystem tells you *what it looks like* and is not optional reading before you
    write a component.
 2. **Do not re-litigate decisions in §2 or in ADAPTATION §9.** They are settled and
@@ -58,37 +87,60 @@ PR #2 (`98fe47a`)** — `main` now contains everything through the OIDC round tr
 
 ---
 
-## 0.1 SCOPE CHANGE — read this before anything else
+## 0.1 WHAT THIS PROJECT IS FOR — read this before anything else
 
-The project was reframed on 2026-07-26. v0.1 was a **benchmark harness with a prompt-diff
-viewer** — an engine and a lab bench, not a product. That was a misread of the goal.
+Mnemos is a **portfolio-grade implementation of the capabilities its author has production
+experience building**: retrieval over documents, natural language over a warehouse, tool
+calling, ingestion pipelines, multi-tenant identity, and the operational scaffolding a real
+platform needs. It exists to be *shown* — run it, sign in, ask it something, watch it
+answer from a document and from a database.
 
-**What is actually wanted:** a **chatbot** that does many things — RAG over documents,
-NL2SQL over a database, MCP tools, auth, ingestion from cloud sources — where governed
-memory and compiled context are the feature that *stands out among* those, not the whole
-app.
+**It is an independent implementation, not a port of anything.** Every file is written
+fresh. See **C11**: the author's employer's codebase is not a reference, not a source, and
+not to be read. The capability *list* below is what a platform of this kind needs — which
+is public knowledge about the shape of the problem, not anybody's intellectual property.
 
-The full plan, the JIVA capability map, the schema and milestones M1–M14 live in
+**The feature surface, in full.** All of it is in the plan; none of it is aspirational
+decoration:
+
+| Area | What ships |
+|---|---|
+| **Conversation** | Sessions, messages, token-by-token streaming, folders, bookmarks, feedback |
+| **RAG** | Upload → extract → chunk → embed → hybrid retrieval → answer with click-through citations |
+| **NL2SQL** | Schema introspection, business glossary, generated SQL, AST read-only guard, read-only DB role, result grid, narration |
+| **Tools** | MCP registry, per-user credentials, approval gates, trust tiers, and a bounded agent state machine over them |
+| **Routing** | Classify a message to chat / RAG / NL2SQL / tools, and show *why* it was routed there |
+| **Ingestion** | Object storage, source connectors, an event bus, jobs with heartbeat, retry and stuck-job detection |
+| **Identity** | OIDC + internal auth, platform JWT with refresh rotation, API keys, RBAC, tag-scoped ACLs, per-tenant row-level security |
+| **Governed context** | Bitemporal memory with supersession, a budgeted context compiler, and an inspector that shows what was admitted, what was excluded and why |
+| **Operations** | Versioned prompt store, cost and token ledger, audit log, realtime WebSocket, migrations, CI, end-to-end tests |
+
+The milestone plan is §3.0 here; the architecture, schema and design rationale are in
 **[`docs/ADAPTATION.md`](docs/ADAPTATION.md)**. Read that next.
 
-The v0.1 kernel is preserved in `backend/src/mnemos/_v1/` and is ported (not rewritten)
-in milestone M4.
+The v0.1 kernel is preserved in `backend/src/mnemos/_v1/`. It is **ported, not rewritten**,
+in two halves: retrieval onto pgvector in `A2`, memory governance and the context compiler
+in `C4`.
 
 ## 1. What this is (30 seconds)
 
-**Mnemos — an AI workspace chatbot whose context is a compiled artifact.**
+**Mnemos — an enterprise AI assistant.**
 
-One conversation surface. A router decides whether an answer needs documents (RAG), a
-database (NL2SQL), a tool (MCP), memory, or a combination. Underneath, every message has
-an inspectable context bundle and a governed memory layer that distinguishes current
-facts from superseded ones.
+One conversation surface. Ask it something and a router decides whether the answer needs
+your documents (**RAG**), your database (**NL2SQL**), a tool (**MCP**), memory, or a
+combination — then answers with citations you can click into. Underneath it is
+multi-tenant, authenticated, authorised and audited, because that is what separates an
+assistant from a demo.
 
-**Headline measured result, v0.1 kernel** (neural embedder, 800-token budget, 23
-questions): naive quoted a **superseded policy revision in 100% of prompts**; compiled,
-**0%**. Superseded memory facts: 61% → 0%. Restricted-content leak: 13% → 0%. Duplicate
-token waste: 6.9% → 1.1%. Answer retention: 100% both. Latency: 69 ms → 81 ms.
+**The one deep technical claim**, and it is measured rather than asserted: every prompt is
+a **compiled, budgeted artifact you can open**. In the v0.1 kernel (neural embedder,
+800-token budget, 23 questions), a naive prompt quoted a **superseded policy revision in
+100% of prompts**; compiled, **0%**. Superseded memory facts: 61% → 0%. Restricted-content
+leak: 13% → 0%. Duplicate token waste: 6.9% → 1.1%. Answer retention: 100% both. Latency:
+69 ms → 81 ms.
 
-**These numbers were measured on SQLite** and must be re-run after the M4 port.
+**These numbers were measured on SQLite** and must be re-run when the kernel finishes its
+port in `C4`. Until then the README must say so.
 
 ---
 
@@ -106,9 +158,10 @@ token waste: 6.9% → 1.1%. Answer retention: 100% both. Latency: 69 ms → 81 m
 | C8 | **Conflict losers are demoted and recorded, never silently dropped.** | |
 | C9 | **Never use the work email/account** (`@jktech.com`, `harshaJKT`). Personal only. | Two GitHub accounts are authenticated in `gh`; confirm `Harsha2803` is active before any push |
 | C10 | **The baseline must stay a fair representative**, not a strawman. `test_naive_arm_does_include_superseded_revisions` guards this. | A rigged baseline invalidates everything |
-| C11 | **Never copy from `jiva/`.** Patterns are portable; artifacts are not. | See ADAPTATION §2. Employer IP in a public repo is a real legal problem |
+| C11 | **`jiva/` is not a reference. Do not read it, do not map from it, do not cite it.** Mnemos is an independent implementation of capabilities the author has production experience in — the capability *list* is public knowledge about the shape of the problem; any particular codebase's realisation of it is not. | See ADAPTATION §2. Employer IP in a personal repo is a real legal problem, and a project that documents itself as a mapping *from* an employer system invites exactly that reading even when every line is original |
 | C12 | **Every feature ships its UI in the same milestone.** Backend and frontend advance together; no milestone is complete with an untouched `frontend/`. | A capability with no screen is one nobody has exercised end to end. It also hides integration defects — M3.2a was a leak invisible to every unit test because nothing looked at the wire |
 | C13 | **The UI follows [`docs/DesignSystem.md`](docs/DesignSystem.md).** Tokens are the only source of colour, type, spacing and radius. | Consistency is the whole value of a design system; one component with a hard-coded hex is the crack it starts leaking through. The system draws its *ideas* from Apple's design resources — type scale, spatial rhythm, materials, motion character — but the palette, accent and identity are Mnemos's own; §0 there records which Apple assets are off-limits and why |
+| C14 | **Every milestone ends with something a person can *do* in the running app.** Not an endpoint that exists, not a table that is filled — a sentence of the form "you can now ___" that a stranger could perform at `http://localhost:3000`. If a milestone cannot produce that sentence, it is infrastructure and must be folded into the milestone it serves rather than standing alone. | This is the rule the 2026-08-02 re-plan exists to install. The old plan reached its own subject — a chatbot — at `M8`, because each milestone was scoped by *layer* rather than by *capability*, and layers are invisible from outside. Infrastructure is not forbidden; standing alone in the plan is |
 
 ---
 
@@ -117,37 +170,79 @@ token waste: 6.9% → 1.1%. Answer retention: 100% both. Latency: 69 ms → 81 m
 Milestone ledger and exit criteria live in [ADAPTATION §7](docs/ADAPTATION.md#7-milestones).
 Detailed evidence for each ✅ is in [ADAPTATION §8](docs/ADAPTATION.md#8-current-state).
 
-### 3.0 The slice plan — every milestone has two halves
+### 3.0 The plan — four phases, and the sentence each one earns
 
-`M13` ("Next.js frontend, all pages") **no longer exists.** Building every screen at the
-end meant the screens would be designed against APIs shaped without them, and would land
-as one unreviewable drop. Its contents are now distributed: a foundation task (`F0`) plus
-a UI slice attached to each milestone that produces something a user can see.
+Every milestone ships its backend *and* its UI (C12), and every milestone ends with a
+sentence of the form **"you can now ___"** performable at `http://localhost:3000` (C14).
+That right-hand column is not a summary — it is the exit criterion.
 
-**Read the frontend column as part of the milestone, not as a follow-up.** A milestone is
-complete when both halves are (C12).
+**Phase A — make it a chatbot.** The product surface, in the order that makes it usable.
 
-| ID | Backend half | Frontend half | Status |
+| ID | What it builds | You can now… | Status |
 |---|---|---|---|
-| **M1** | Container stack, backend skeleton | — (no UI to build yet) | ✅ |
-| **M2** | Alembic + 41-table schema | — | ✅ |
-| **F0** | — | **App shell**: Next.js, design tokens, three-column layout, theming, base primitives, generated API client | ⬜ **next** |
-| **M3** | identity: `3.4` JWT · `3.5` API keys · `3.6` RBAC · ~~`3.7` bootstrap~~ ✅ | **Sign-in screen**, session handling, protected shell, API-key management, org switcher (`3.7` has no UI half — see §5) | 🟡 `3.1`–`3.3` + `3.7` ✅ backend; UI not started |
-| **M4** | port memory/retrieval/context kernel to PG | **Context inspector** — the bundle viewer. The signature screen of the product | ⬜ |
-| **M5** | objectstore (MinIO) + connectors + Redis Streams | **Sources**: connect a source, browse it, watch events arrive | ⬜ |
-| **M6** | knowledge: extract, chunk, embed, ingest jobs | **Knowledge library** + upload + live job progress | ⬜ |
-| **M7** | LLM gateway (Ollama) + prompt store + cost ledger | **Prompt manager** (versions, activate) + **cost dashboard** | ⬜ |
-| **M8** | chat: sessions, messages, SSE streaming | **The chat surface.** Streaming, folders, bookmarks, feedback | ⬜ |
-| **M9** | RAG flow + citations | **Citations** in the message, click-through into the inspector | ⬜ |
-| **M10** | NL2SQL: introspection, AST guard, narration | **SQL panel**: generated SQL, result grid, narration | ⬜ |
-| **M11** | MCP tool runtime | **Tool console** + approval dialogs for gated calls | ⬜ |
-| **M12** | router: classify → flow | **Flow indicator** on each message, and why it was chosen | ⬜ |
-| **M13** | ~~Next.js frontend~~ | **dissolved** into `F0` + the slices above | — |
-| **M14** | realtime WS, nginx, e2e, docs | **Live streaming/presence** polish; Playwright e2e over the whole stack | ⬜ |
+| **A0** | Sign-in screen + browser session handling (M3.4's UI half) + the fail-closed route guard (deny by default, from old `M3.6`) | **sign in through Keycloak, stay signed in across a reload, and sign out** — and no route added after this is reachable unauthenticated | ⬜ **next** |
+| **A1** | LLM gateway (Ollama) · chat sessions + messages · SSE streaming · the chat surface | **talk to it** — ask a question and watch the answer stream in token by token | ⬜ |
+| **A2** | Upload → extract → chunk → embed (pgvector HNSW) · retrieval ported from `_v1` · RAG flow · citations · knowledge library | **upload a document and ask questions about it**, with citations you click into | ⬜ |
+| **A3** | NL2SQL: introspection · glossary · generate · AST read-only guard · `mnemos_ro` execution · narration · SQL panel | **ask a question about your data in English** and see the SQL, the rows and the narration — and see the guard visibly refuse a write | ⬜ |
+| **A4** | Router: classify a message → chat / RAG / NL2SQL · flow indicator | **ask anything without choosing a mode**, and see which flow answered and why | ⬜ |
 
-**Why `F0` before `M3.4`.** `frontend/` is an empty directory: there is nothing for a
-sign-in screen to be built *in*. `F0` is the one task with no backend half, because it is
-the scaffolding every later UI slice lands on. After it, the pattern is uniform.
+**At the end of Phase A the thing this project is for exists.** Everything after deepens it.
+
+**Phase B — make it a platform.**
+
+| ID | What it builds | You can now… | Status |
+|---|---|---|---|
+| **B1** | Object storage · source connectors (MinIO/S3, local FS, HTTP) · Redis Streams event bus · sources UI | **connect a source, browse it, and watch ingestion events arrive live** | ⬜ |
+| **B2** | Ingestion jobs at scale: heartbeat, retries, status history, stuck-job reaper · per-job progress UI | **ingest a folder and watch every job's progress — including one that dies, surfaced as stuck rather than silently lost** | ⬜ |
+| **B3** | MCP tool runtime: registry, per-user credentials, trust tiers, approval gates · tool console | **register a tool, have the assistant call it, and approve a gated call** — with a denial that names the offending source on screen | ⬜ |
+| **B4** | Agent flow: bounded state machine over tools, checkpoints, step trace | **give it a multi-step task and watch it plan, call tools and finish — with every step inspectable** | ⬜ |
+
+**Phase C — make it enterprise, and land the deep claim.**
+
+| ID | What it builds | You can now… | Status |
+|---|---|---|---|
+| **C1** | API keys (old `M3.5`) · full RBAC permission matrix + tag-scoped document ACLs (old `M3.6`) · keys UI + real 403 states | **issue an API key, call the API with it, and watch a user without the permission be refused** — in the UI and at the wire | ⬜ |
+| **C2** | Versioned prompt store (diff, activate) · cost + token ledger · prompt manager + cost dashboard | **change the prompt behind a flow, activate the new version, and see what every answer cost** | ⬜ |
+| **C3** | Chat history depth: folders, bookmarks, feedback · audit log · search over history | **organise, bookmark, rate and search your conversations, and read the audit trail of who did what** | ⬜ |
+| **C4** | **The context layer.** Bitemporal memory + supersession · the budgeted context compiler · the context inspector · re-run the benchmark on Postgres | **open any answer and see its compiled context** — what was admitted, what was excluded and why, and the token spend against budget | ⬜ |
+
+**Phase D — ship it.**
+
+| ID | What it builds | You can now… | Status |
+|---|---|---|---|
+| **D1** | Realtime WebSocket presence + streaming polish · nginx · Playwright e2e over the whole stack · README rewritten on measured numbers | **run one command, get the whole system, and read a README whose every number was produced by a command in the repo** | ⬜ |
+
+**Already built — the foundation the above stands on.**
+
+| ID | What it built | Status |
+|---|---|---|
+| **M1** | Container stack, backend skeleton | ✅ |
+| **M2** | Alembic + 41-table schema | ✅ |
+| **M2a** | Tenant isolation made real — the unprivileged app role and the RLS policy fix | ✅ |
+| **M3.1–M3.3** | Identity domain types · the provider seam (internal + OIDC) · the split-horizon OIDC round trip | ✅ |
+| **M3.4** (backend) | Platform JWT on HS256 · refresh rotation with family revocation · token endpoints | ✅ |
+| **M3.7** | `mnemosctl bootstrap` — first org, admin, system roles, provider rows | ✅ |
+| **F0** | The app shell: Next.js, design tokens, three-column layout, theming, primitives, generated API client | ✅ |
+| **F0a** | CI — pytest, ruff, mypy `--strict`, `alembic check`, and the frontend gate on every PR | ✅ |
+
+**Old milestone numbers, mapped.** Nothing was dropped; `M4`–`M14` were re-cut, not
+discarded. If you find a reference to an old ID anywhere, this is the translation:
+
+| Old | New | Note |
+|---|---|---|
+| `M3.5` API keys | `C1` | Deferred: an API key is a second credential type, and nothing consumes the first one yet |
+| `M3.6` RBAC | split — guard to `A0`, matrix to `C1` | The **fail-closed guard** moves early because every route added in Phase A must be covered by it; the permission *matrix* can wait for something to permission |
+| `M4` kernel port | split — retrieval to `A2`, memory + compiler + inspector to `C4` | Retrieval lands where RAG needs it so it is never built twice; the governance layer is a deep slice of its own |
+| `M5` objectstore/connectors/events | `B1` | Minimal upload lands in `A2`; the connector *abstraction* is `B1` |
+| `M6` knowledge + jobs | split — extract/chunk/embed to `A2`, job machinery to `B2` | |
+| `M7` LLM gateway + prompts + cost | split — gateway to `A1`, prompts + cost to `C2` | The gateway is a prerequisite for talking at all; prompt versioning is not |
+| `M8` chat | split — sessions/messages/streaming to `A1`, folders/bookmarks/feedback to `C3` | |
+| `M9` RAG | `A2` | |
+| `M10` NL2SQL | `A3` | |
+| `M11` MCP tools | `B3` | |
+| `M12` router | `A4` | Moved **earlier**: without it the user has to pick a mode, which is not what a chatbot is |
+| `M13` frontend | dissolved into `F0` + a UI slice per milestone | Unchanged by this re-plan |
+| `M14` realtime + e2e + docs | `D1` | |
 
 ### 🟡 M3 prerequisite — RLS made real, verified 2026-07-27
 
@@ -651,221 +746,113 @@ Recorded so they are not rediscovered as surprises:
 
 ## 5. NEXT TASK
 
-### `F0` — frontend foundation: the shell every later UI slice lands on
+### `A0` — the auth surface: sign in, stay signed in, and close every door behind you
 
-**Do this one only.** It is the single task with no backend half, because `frontend/` is
-an empty directory and there is nothing for a sign-in screen to be built *in*. After F0
-the pattern is uniform: each milestone ships its endpoints and its screens together (C12).
+**Do this one only.** It is the last piece of identity that Phase A actually needs, and it
+is what makes every milestone after it safe to build. It has three parts and they belong
+together: without the screen nobody can sign in, without session handling nobody stays
+signed in, and without the guard every route `A1` adds is open to the world.
 
-**Why now, before `M3.4`.** The old plan built every screen at the end. That guarantees
-the APIs get shaped without a consumer, and that the entire UI lands as one drop nobody
-can review. It also means the system cannot be *shown* to anyone until the last milestone.
-Frontloading the shell costs one task and changes the shape of everything after it.
+**Why this and not straight to chat.** `M3.4`'s backend half issues tokens that nothing
+presents; `frontend/` has a shell with no way in. Building the chat surface first would
+mean building it unauthenticated and retrofitting a principal through every handler — the
+retrofit that fails closed in tests and fails open in production. One session now removes
+that risk permanently.
 
-**Read first:** [`docs/DesignSystem.md`](docs/DesignSystem.md) **in full** — it is
-normative. §0 lists what the system takes from Apple's design resources (type scale,
-spatial rhythm, semantic colour, materials, motion character, accessibility floors) and
-what it deliberately does not (SF Pro as a webfont, SF Symbols, anything resembling Apple's
-visual identity — the accent and neutrals are Mnemos's own). Then the `web` service in
-`docker-compose.yml`, which is already written and waiting, and `entrypoints/api/main.py`
-for the CORS origins and `/openapi.json`.
+**Read first:** [`docs/DesignSystem.md`](docs/DesignSystem.md) §4 (forms, destructive
+actions, empty states) and §3 (accessibility floors); the M3.4 entry in §3 of this file for
+the token shape, the cookie, and the rotation semantics; `docs/APIContract.md` §1–§2;
+`backend/src/mnemos/entrypoints/api/routers/auth.py` and
+`backend/src/mnemos/features/identity/application/tokens.py`.
 
-**Scope.** A running, themed, accessible shell with **no feature screens** — resist
-building the sign-in form here; that is `M3.4`'s UI slice and it needs JWT issuance to
-exist first.
+**Scope.**
 
-1. **The app.** Next.js 15 App Router, TypeScript `strict`. `frontend/Dockerfile`,
-   multi-stage and non-root, matching `backend/Dockerfile`'s shape — compose already
-   references it by that exact path.
-2. **Tokens as the single source of truth.** Every custom property from DesignSystem §2
-   in one `app/globals.css`, wired into Tailwind v4 via `@theme`. **v4 reads CSS custom
-   properties natively, so the tokens *are* the config** — do not maintain a parallel
-   `tailwind.config.js` palette, which is exactly the second source of truth C13 exists to
-   prevent.
-3. **Theming.** Light/dark following `prefers-color-scheme`, plus an explicit user choice
-   stored and applied as `data-theme` on `<html>`. The explicit choice must win **in both
-   directions** — a user on a dark OS choosing light must get light. Set it before first
-   paint (a blocking inline script in `<head>`) or the page flashes the wrong theme.
-4. **The three-column shell** from DesignSystem §1: sidebar 260px, fluid content with a
-   `46rem` measure, collapsible 320px inspector. Sidebar and toolbar use the translucent
-   material — **with the `@supports not (backdrop-filter:...)` opaque fallback**, because
-   translucent chrome over unblurred content is illegible. Below `1024px` the inspector
-   becomes an overlay sheet; below `768px` the sidebar does too.
-5. **Base primitives only**, on Radix where a behaviour exists: `Button` (the three ranks
-   — filled, tinted, plain, and no fourth), grouped-inset `List` with separators inset to
-   the text origin, `EmptyState`, `Skeleton`, `ThemeToggle`. Each with a Vitest test that
-   queries **by role and accessible name**, which is an accessibility assertion as much as
-   a behavioural one.
-6. **The generated API client.** `openapi-typescript` (or equivalent) against
-   `http://localhost:8000/openapi.json`, output committed, with the generate command in
-   `package.json`. **No hand-written interface mirroring a Pydantic model** — that is a
-   second source of truth that drifts silently and surfaces as a runtime error in front of
-   a user.
-7. **One real call, end to end:** a health indicator in the shell reading `/readyz` through
-   the generated client and TanStack Query. It is small, and it is what proves the
-   container, the CORS config, the generated types and the query layer all actually work
-   together rather than each working alone.
-8. **Un-gate the service.** Delete `profiles: ["web"]` from `docker-compose.yml` and its
-   now-wrong comment, so `docker compose up -d` brings the frontend up with everything
-   else. Update the "Stack up" and "UI" rows in §3 Environment.
+1. **The fail-closed route guard.** A FastAPI dependency that resolves the bearer access
+   token to a `Principal` (hydrating roles and tags from the repository — *not* from the
+   token, see M3.4's `test_access_token_carries_no_roles_or_permissions`), installed so that
+   **a route with no explicit decoration is authenticated by default**. Deny by default is
+   the whole point: the acceptance test is
+   `test_unauthenticated_request_is_denied_by_default` **on a route that declares no guard
+   at all**, added specifically for the test. Public routes (`/healthz`, `/readyz`, `/`,
+   the auth endpoints, `/docs`, `/openapi.json`) are an explicit, enumerated allow-list —
+   never a prefix match, because a prefix match is one careless route name away from
+   exposing everything under it.
+   *Not in scope:* the permission matrix. `require_permission(...)` may exist and be
+   applied where obvious, but the full RBAC role/permission surface is `C1`.
+2. **The sign-in route.** Org slug field, then "Continue with Keycloak" driving
+   `GET /api/v1/auth/oidc/authorize?org=…`. Real `<form>` semantics, one `filled` button,
+   `aria-live` on the error. **Every failure renders the same message.** The backend
+   already guarantees one constant denial string and M3.4 proved the wire carries no
+   distinguishing detail; the UI must not undo that by branching on a status code to say
+   "no such org". That is the M3.2a mistake one layer further out.
+3. **Session handling.** Access token in memory only — never `localStorage`, which any XSS
+   can read. Refresh token in the `httpOnly` cookie the API already sets. A TanStack Query
+   interceptor refreshes once on a 401 and, on a second 401, clears state and returns to
+   sign-in. **Concurrent 401s must trigger exactly one refresh**, not one per in-flight
+   request: rotation treats a second use of the same refresh token as theft and kills the
+   family, so a naive interceptor logs the user out every time two requests race. Note §4
+   item 23 — two open tabs are the same hazard, and this is where it is solved or shipped.
+4. **The protected shell.** `F0`'s layout behind an auth boundary. An unauthenticated visit
+   redirects to sign-in **preserving the intended destination**. Sign-out calls
+   `POST /v1/auth/token:revoke` and clears the cookie. The signed-in user's email and org
+   appear in the sidebar footer — the shell currently renders a placeholder identity, and
+   this is where it becomes real.
 
 **Acceptance**
-- `docker compose up -d` → `http://localhost:3000` serves the shell, and `docker compose
-  ps` shows `web` healthy alongside the other eight.
-- `test_theme_toggle_overrides_the_system_preference_in_both_directions` — the failure
-  mode is one-directional and easy to ship.
-- **No flash of the wrong theme** on hard reload with a dark OS. Assert the pre-paint
-  script exists; verify the absence of flash by eye and say so in the tracker.
-- `axe` clean on the shell (`vitest-axe` or Playwright's `@axe-core/playwright`).
-- `test_every_interactive_target_is_at_least_44px` over the rendered primitives.
-- `test_no_component_hardcodes_a_colour` — grep the component sources for `#` hex literals
-  and `rgb(`/`hsl(` outside `globals.css` and fail on a hit. Crude, and it is the check
-  that keeps C13 true after the twentieth component.
-- Reduced motion: the global `prefers-reduced-motion` block from DesignSystem §2.5 is
-  present and a test asserts transitions collapse under it.
-- `npm run build` clean, `tsc --noEmit` clean, ESLint clean.
-- **Backend untouched**: `pytest` still 97 passed, `alembic check` still clean. F0 changes
-  no Python.
 
-**Explicitly not in F0:** any sign-in form, any chat UI, any inspector *content*. The
-inspector renders an `EmptyState` until M4 fills it.
+- `test_unauthenticated_request_is_denied_by_default` — on a route with **no** explicit
+  guard. This is the one that matters; write it first and watch it fail.
+- `test_a_route_in_the_public_allowlist_is_reachable_without_a_token` — the control, so the
+  guard is not passing by refusing everything.
+- `test_concurrent_401s_trigger_exactly_one_refresh` — frontend. Fire N requests, stub two
+  401s, assert exactly one call to the refresh endpoint.
+- `test_signin_error_is_identical_for_unknown_org_and_denied_login` — frontend, asserting
+  the rendered text, not the network layer.
+- `test_signout_revokes_the_refresh_family_and_clears_the_cookie`.
+- **A Playwright run against the live Keycloak**: sign in as the seeded admin, land on the
+  shell, reload and stay signed in, sign out, confirm the protected route bounces back to
+  sign-in. This closes M3.4's "could not verify" — the Keycloak login *form* was never
+  driven, because `httpx` cannot satisfy Keycloak 26's browser-session requirements and a
+  browser can. Make it skip cleanly when the stack is down, and **verify it skips** by
+  stopping the stack rather than assuming.
+- `pytest` green, `ruff` + `mypy --strict` clean, `alembic check` clean (no migration).
+  Frontend: `tsc`, ESLint, `axe`, `npm run build` clean. **CI green on the PR** — this is
+  now a real check, not a pasted local gate.
 
-### `M3.4` — platform JWT + refresh rotation, **and the sign-in screen**
+**Prerequisite, already satisfied:** `M3.7` seeded org `mnemos` with `admin@mnemos.local`
+and both provider rows, so there is something to sign in *as*. See §3.
 
-The first slice under the new rule: backend and UI in the same milestone.
+**Explicitly not in `A0`:** the permission matrix, API keys, an org switcher, user
+management screens. All `C1`.
 
-**Backend half.** Unchanged from the previous specification and still fully valid:
+### Then, in order — the phase tables in §3.0 are the plan
 
-1. **Settle the algorithm conflict first.** `ThreatModel.md` §5 says **EdDSA (Ed25519)**;
-   `core/config.py` says **HS256**. Pick one, implement it, and **reconcile both
-   documents in the same commit** — do not leave both standing, which is the state today.
-   HS256 is defensible while api/worker/realtime share one trust domain and one secret;
-   the security-critical half is the **allow-list**, never reading `alg` from the token.
-   `providers/oidc.py` already shows that shape. Record the decision in §4.
-2. **Access tokens**, 15 min, **identity only — no roles, no permissions, no tags**
-   (`APIContract.md` §2). A token carrying `roles` keeps working after the role is
-   revoked. Claims: `sub`, `org`, `sid`, `iat`, `exp`, `iss`, `jti`.
-3. **Refresh tokens**: high-entropy from `secrets`, stored SHA-256-hashed via the existing
-   `core.security.digest_token` — not argon2id, and that docstring already carries the
-   reason. Compare with `tokens_equal`.
-4. **Rotation and the family kill.** Every use issues a new token and sets the old row's
-   `rotated_to`. Presenting a token whose row *already* has `rotated_to` set proves theft —
-   the legitimate holder and the thief cannot both hold the current token — so revoke the
-   **entire chain**, and set `revoked_reason`.
-5. **The org travels in the credential** (settled in M3.2): `<org_slug>.<secret>`.
-   `APIContract.md` §1 currently specifies `X-API-Key: <key_id>.<secret>`; update it in
-   this commit either way.
-6. Replace the OIDC callback's `SubjectResponse` with the token pair, mapping the subject
-   to a local `app_user` — this is where just-in-time provisioning is decided.
-   `POST /v1/auth/token` (`grant_type=refresh_token`) and `POST /v1/auth/token:revoke`.
+Each row there is one session, and each carries its own "you can now ___" (C14). The next
+few, so the shape is visible without scrolling back:
 
-**Frontend half — the sign-in screen and session handling.**
+- **`A1` — talk to it.** LLM gateway over Ollama behind a port (the model is swappable and
+  the benchmark depends on it staying so), `chat_session` + `chat_message` persistence, an
+  SSE streaming endpoint, and the chat surface: composer, message list, **token-by-token
+  rendering — never a spinner over a blank region** (DesignSystem §4), session list in the
+  sidebar. No retrieval yet; it answers from the model alone, and that is a complete
+  milestone because you can talk to it.
+- **`A2` — ask about your documents.** Upload to MinIO, extract, chunk with char offsets
+  retained, embed, and **port `_v1`'s retrieval onto pgvector HNSW** — the port lands here
+  rather than in its own milestone precisely so retrieval is not written twice (§3.0's
+  mapping table). Then the RAG flow and citations that click through. §4 item 3 (brute-force
+  cosine) is discharged here.
+- **`A3` — ask about your data.** Introspect `mnemos_analytics`, glossary terms, generate
+  SQL, **AST read-only guard plus the `mnemos_ro` role** as two independent defences, execute,
+  narrate. The UI shows the SQL, the grid and the narration — and shows the guard refusing a
+  write, because a defence nobody can see is a defence nobody believes.
+- **`A4` — stop choosing a mode.** Classify each message to a flow and show which one
+  answered and why.
 
-7. **Sign-in route.** Org slug field, then "Continue with Keycloak" driving
-   `GET /api/v1/auth/oidc/authorize?org=…`. Design per DesignSystem §4: one `filled`
-   button, real `<form>` semantics, `aria-live` for the error.
-   **Every failure renders the same message** — the backend already guarantees one constant
-   denial string, and the UI must not undo that by branching on anything to say "no such
-   org" (this is exactly the M3.2a mistake, one layer further out).
-8. **Session handling.** Access token in memory, refresh in an `httpOnly` cookie set by
-   the API — *not* `localStorage`, which is readable by any XSS. A TanStack Query
-   interceptor refreshes on 401 once, and on a second 401 clears state and returns to
-   sign-in. Concurrent 401s must trigger **one** refresh, not one per in-flight request:
-   the rotation chain treats the second use as theft and would kill the family.
-9. **The protected shell.** F0's layout behind an auth boundary; unauthenticated visits
-   redirect to sign-in preserving the intended destination. Sign-out calls
-   `token:revoke`. The signed-in user appears in the sidebar footer.
+Then Phase B (`B1`–`B4`), Phase C (`C1`–`C4`), Phase D (`D1`) — §3.0.
 
-**Acceptance (both halves)**
-- `test_rotated_refresh_token_revokes_family` — the M3-level criterion.
-- `test_access_token_carries_no_roles_or_permissions` — inspect the claims directly.
-- `test_a_token_signed_with_another_algorithm_is_rejected`, including `alg: none`. Mirror
-  `test_oidc_provider_rejects_an_unsigned_token`, which hand-forges rather than relying on
-  PyJWT to mint the forgery.
-- `test_expired_access_token_is_rejected`, zero leeway.
-- `test_refresh_token_for_one_org_is_useless_against_another`.
-- `test_concurrent_401s_trigger_exactly_one_refresh` — frontend, and it is the one that
-  prevents a self-inflicted family revocation.
-- `test_signin_error_is_identical_for_unknown_org_and_denied_login` — frontend.
-- A **Playwright** run: sign in against the live Keycloak, land on the shell, reload and
-  stay signed in, sign out. Skippable like M3.3's live tests, and **verify it actually
-  skips** with the stack down rather than assuming it does.
-- `pytest` green, `ruff` + `mypy --strict` clean, `alembic check` clean (no migration —
-  `session` already has every column). Frontend: `tsc`, ESLint, `axe` clean.
-
-### Then, still in M3 — each with its UI slice, one commit each
-
-- **`M3.5` API keys** — argon2id (same `PasswordHasher`; an API-key secret is low-entropy
-  enough to deserve it), `prefix` for identification, plaintext shown once, org folded into
-  the id half.
-  **UI:** a keys list, a create dialog that shows the secret **exactly once** with a copy
-  button and an unmissable "this will not be shown again", and revoke with a confirmation
-  that names the key (DesignSystem §4, destructive actions).
-- **`M3.6` RBAC dependency** — deny by default, permission as set membership against
-  `PermissionSet`. `test_unauthenticated_request_is_denied_by_default` on a route with
-  **no** explicit guard is the one that matters: it must fail closed.
-  **UI:** the shell hides what the principal cannot reach and renders a real 403 state for
-  what it reaches anyway. Hiding a control is a courtesy, never the control itself.
-- ~~**`M3.7` `mnemosctl bootstrap`**~~ **✅ done 2026-08-02** — first org, admin user,
-  system roles, both `identity_provider` rows and `org.settings.default_provider`. The
-  elevation is one statement wide: only the org insert runs in
-  `Database.elevated_session()`, and the other nine run under the tenant GUC. Idempotent
-  as create-if-absent with no updates. Evidence, the live run and the discharged
-  "nothing can be exercised by hand" claim are in §3; the costs are §4 items 20–23.
-  **UI: deliberately none, and that is the C12 record.** A CLI is its own interface. This
-  command runs *before* anybody can sign in, so an authenticated screen for it would be
-  one nobody can reach and an unauthenticated one would be org creation open to the
-  internet. Stated here rather than left implied, as C12 requires.
-
-**Acceptance for M3 overall**
-
-- ~~Keycloak login round-trips~~ ✅ to a verified subject (M3.3); to a **platform JWT** is
-  `M3.4`.
-- ~~`test_cross_org_read_returns_zero_rows`~~ ✅ done in the prerequisite; see §3.
-- `test_rotated_refresh_token_revokes_family`.
-- `test_unauthenticated_request_is_denied_by_default` on a route with no explicit guard.
-- **A person can sign in through the browser and stay signed in.** New, and it is the
-  criterion that makes M3 real rather than merely tested.
-- `alembic check` still clean; `pytest` green.
-
-**Commit shape:** one commit per numbered deliverable, not one for the milestone. A
-backend deliverable and its UI slice may share a commit or be adjacent commits — but not
-adjacent *milestones* (C12).
-
-### Then, in order — each milestone is both halves (§3.0, C12)
-
-- **`M4`** — port the `_v1` kernel to asyncpg + pgvector; re-run the benchmark on Postgres
-  and update the README numbers. Rolls in old tasks `N2` (cache `all_chunks()`) and
-  `N3` (`tiktoken` adapter), cheap once the code has moved.
-  **UI: the context inspector** — the signature screen. For a selected message: what was
-  admitted, what was excluded and *why* (superseded revision, failed ACL, deduped,
-  over budget), token spend against the budget, and the ranked candidates that lost.
-  This is the screen that makes the headline numbers legible instead of a README claim,
-  so it is worth more design attention than anything else in the app.
-- **`M5`** — objectstore (MinIO) + connectors port/factory + Redis Streams events.
-  **UI:** connect a source, browse it, watch events arrive live.
-- **`M6`** — knowledge: extract, chunk, embed, ingest jobs. The worker's reaper exists;
-  give it real jobs to reap.
-  **UI:** knowledge library, drag-and-drop upload, per-job progress with the heartbeat and
-  stuck-job states surfaced — a job that silently dies is the failure this milestone's
-  backend is specifically built to detect, so the UI must show it.
-- **`M7`** — LLM gateway (Ollama), versioned prompt store, cost ledger.
-  **UI:** prompt manager with version diff and activate; cost dashboard.
-- **`M8`** — chat: sessions, messages, SSE, bookmarks, feedback, folders.
-  **UI: the chat surface** — the main product screen. Token-by-token streaming (never a
-  spinner over a blank region, DesignSystem §4), folders, bookmarks, feedback.
-- **`M9`** — RAG flow with citations. **UI:** citations inline, click-through into the M4
-  inspector.
-- **`M10`** — NL2SQL. **UI:** generated SQL, result grid, narration, and a visible refusal
-  when the AST guard rejects a statement.
-- **`M11`** — MCP tool runtime. **UI:** tool console and approval dialogs; a call denied by
-  trust tier must name the offending source on screen, not only in a log.
-- **`M12`** — router. **UI:** which flow handled each message, and why.
-- **`M14`** — realtime WS, nginx, e2e, docs. **UI:** live streaming/presence polish and
-  Playwright coverage over the whole stack.
-
-`M13` is dissolved; see §3.0. [ADAPTATION §7](docs/ADAPTATION.md#7-milestones) carries the
-same table.
+**Commit shape:** one commit per numbered deliverable, not one per milestone. A backend
+deliverable and its UI slice may share a commit or be adjacent commits — never adjacent
+*milestones* (C12).
 
 ---
 
