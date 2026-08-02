@@ -427,6 +427,12 @@ retrofit across forty of them.
   streamed text, render tokens as they arrive.
 - **Destructive actions.** `--danger`, and confirmation names the specific thing being
   destroyed. "Delete document?" is not good enough; "Delete *Q3 Revenue Policy*?" is.
+- **Appearance.** Three choices, not two: **Match system**, **Light**, **Dark**. "System"
+  is a real preference — it means *keep following the OS* — and a light/dark switch throws
+  the user's answer away the moment they change their OS setting. The explicit choice is
+  stored and stamped on `<html>` as `data-theme` before first paint, and it must win in
+  both directions (§2.1). Each option carries a text label as its accessible name; a sun
+  and a moon are not self-evident to everyone, and to a screen reader they are nothing.
 
 ---
 

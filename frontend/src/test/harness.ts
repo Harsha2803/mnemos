@@ -40,6 +40,39 @@ export function flattenCascadeLayers(css: string): string {
   return out;
 }
 
+/**
+ * jsdom's selector parser rejects CSS identifier escapes, so every Tailwind
+ * variant that puts a bracket in the class name — `data-[state=on]:bg-bg`,
+ * `size-[18px]` — makes it fail the *whole* stylesheet parse and log
+ * "Could not parse CSS stylesheet". The rules were being discarded either way;
+ * dropping them here keeps the parse clean and the failure honest, because a
+ * test that silently lost half the sheet is worse than one that never had it.
+ *
+ * Nothing asserted in this suite depends on a bracketed variant. If something
+ * ever does, it needs a browser — Playwright, from M3.4 — not a looser jsdom.
+ */
+export function dropRulesJsdomCannotParse(css: string): string {
+  const kept: string[] = [];
+  let depth = 0;
+  let start = 0;
+
+  for (let i = 0; i < css.length; i += 1) {
+    const ch = css[i];
+    if (ch === "{") depth += 1;
+    else if (ch === "}") {
+      depth -= 1;
+      if (depth === 0) {
+        const chunk = css.slice(start, i + 1);
+        start = i + 1;
+        const selector = chunk.slice(0, chunk.indexOf("{"));
+        if (!selector.includes("\\")) kept.push(chunk);
+      }
+    }
+  }
+
+  return kept.join("\n");
+}
+
 function matchingBrace(text: string, openIndex: number): number {
   let depth = 0;
   for (let i = openIndex; i < text.length; i += 1) {

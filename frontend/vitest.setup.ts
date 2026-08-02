@@ -4,6 +4,7 @@ import { cleanup } from "@testing-library/react";
 
 import compiledCss from "./src/app/globals.css?inline";
 import {
+  dropRulesJsdomCannotParse,
   flattenCascadeLayers,
   installMatchMedia,
   resetMediaQueries,
@@ -14,7 +15,7 @@ import {
 // component resolves to instead of asserting on the class names it was handed.
 const style = document.createElement("style");
 style.setAttribute("data-mnemos", "globals");
-style.textContent = flattenCascadeLayers(compiledCss);
+style.textContent = dropRulesJsdomCannotParse(flattenCascadeLayers(compiledCss));
 document.head.appendChild(style);
 
 installMatchMedia();
