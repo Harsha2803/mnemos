@@ -963,7 +963,10 @@ Recorded so they are not rediscovered as surprises:
     it takes effect is not verified.** The concrete gap is that CI builds no images and
     runs no `docker compose up`, so "the stack starts" is asserted by nobody. A compose
     smoke job — build, `up -d`, poll `/readyz` and `:3000`, tear down — is the check that
-    would have caught this, and it should be added to `.github/workflows/ci.yml`.
+    would have caught this. **It now exists** — the `compose` job in
+    `.github/workflows/ci.yml` builds the images, starts the stack, waits for `/readyz` and
+    for `:3000`, and checks `mnemosctl` shipped in the image. `ollama` is the one service it
+    excludes, because nothing it asserts needs a 2 GB model pull.
 
 33. **`core/config.py`'s default `database_url` points at `localhost:5432`, which on the
     development machine is a *different Postgres*.** The compose stack maps its Postgres to
