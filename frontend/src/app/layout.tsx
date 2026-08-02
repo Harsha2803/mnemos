@@ -4,6 +4,7 @@ import { AppShell } from "@/components/shell/AppShell";
 import { THEME_INIT_SCRIPT } from "@/lib/theme";
 
 import "./globals.css";
+import { Providers } from "./providers";
 
 export const metadata: Metadata = {
   title: "Mnemos",
@@ -36,7 +37,9 @@ export default function RootLayout({
         <script dangerouslySetInnerHTML={{ __html: THEME_INIT_SCRIPT }} />
       </head>
       <body>
-        <AppShell>{children}</AppShell>
+        <Providers>
+          <AppShell>{children}</AppShell>
+        </Providers>
       </body>
     </html>
   );

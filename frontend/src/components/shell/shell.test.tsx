@@ -1,6 +1,6 @@
-import { render, screen } from "@testing-library/react";
+import { screen } from "@testing-library/react";
 import userEvent from "@testing-library/user-event";
-import { describe, expect, it, vi } from "vitest";
+import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import { axe } from "vitest-axe";
 
 // `usePathname` reads the App Router context, which only exists under a real
@@ -10,6 +10,7 @@ vi.mock("next/navigation", () => ({ usePathname: () => "/" }));
 
 import compiledCss from "@/app/globals.css?inline";
 import { resolvedPx, setMediaQueries } from "@/test/harness";
+import { renderWithProviders, stubJsonResponse } from "@/test/render";
 
 import { AppShell } from "./AppShell";
 import { INSPECTOR_INLINE, SIDEBAR_INLINE } from "./useMediaQuery";
@@ -24,12 +25,23 @@ function viewport(width: number): void {
 }
 
 function renderShell() {
-  return render(
+  return renderWithProviders(
     <AppShell>
       <h1>Overview</h1>
     </AppShell>,
   );
 }
+
+beforeEach(() => {
+  // The sidebar footer calls /readyz for real. A healthy answer keeps these
+  // tests about layout rather than about what a failed probe looks like — that
+  // is `health.test.tsx`'s job.
+  stubJsonResponse(200, { status: "ready", checks: { postgres: "ok", redis: "ok" } });
+});
+
+afterEach(() => {
+  vi.unstubAllGlobals();
+});
 
 describe("the three-column shell", () => {
   it("test_the_desktop_shell_has_all_three_columns", () => {

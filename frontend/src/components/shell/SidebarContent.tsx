@@ -6,6 +6,8 @@ import type { ReactNode } from "react";
 
 import { List, ListItem } from "@/components/ui/List";
 
+import { HealthIndicator } from "./HealthIndicator";
+
 type Destination = {
   href: string;
   label: string;
@@ -42,6 +44,13 @@ export function SidebarContent() {
           </ListItem>
         ))}
       </List>
+
+      {/* The footer is where the signed-in user lands at M3.4. Until then it
+          carries the one fact the shell can already state truthfully: whether
+          the API behind it is answering. */}
+      <div className="mt-auto border-t border-separator pt-2">
+        <HealthIndicator />
+      </div>
     </div>
   );
 }
