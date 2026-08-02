@@ -229,8 +229,8 @@ Two rules govern every row.
 
 | ID | What it builds | You can now… | Status |
 |---|---|---|---|
-| **A0** | Sign-in screen + browser session handling (`M3.4`'s UI half) + the fail-closed route guard (deny by default) | **sign in through Keycloak, stay signed in across a reload, and sign out** — and no route added after this is reachable unauthenticated | ⬜ **next** |
-| **A1** | LLM gateway (Ollama) · chat sessions + messages · SSE streaming · the chat surface | **talk to it** — ask a question and watch the answer stream in token by token | ⬜ |
+| **A0** | Sign-in screen + browser session handling (`M3.4`'s UI half) + the fail-closed route guard (deny by default) | **sign in through Keycloak, stay signed in across a reload, and sign out** — and no route added after this is reachable unauthenticated | ✅ 2026-08-03 |
+| **A1** | LLM gateway (Ollama) · chat sessions + messages · SSE streaming · the chat surface | **talk to it** — ask a question and watch the answer stream in token by token | ⬜ **next** |
 | **A2** | Upload → extract → chunk → embed (pgvector HNSW) · retrieval ported from `_v1` · RAG flow · citations · knowledge library | **upload a document and ask questions about it**, with citations you click into | ⬜ |
 | **A3** | NL2SQL: introspection · glossary · generate · AST read-only guard · `mnemos_ro` execution · narration · SQL panel | **ask a question about your data in English** and see the SQL, the rows and the narration — and see the guard visibly refuse a write | ⬜ |
 | **A4** | Router: classify a message → chat / RAG / NL2SQL · flow indicator | **ask anything without choosing a mode**, and see which flow answered and why | ⬜ |
@@ -299,15 +299,17 @@ own system — its own accent, neutrals and identity — informed by Apple's des
 for typography, spatial rhythm, materials and motion character. §0 there records which
 Apple assets are off-limits (SF Pro as a webfont, SF Symbols) and what is used instead.
 
-**Current position.** Everything in the "Already built" table above is on `main`: `M1`,
-`M2`, `M2a`, `M3.1`–`M3.3`, `M3.4`'s backend half, `M3.7`, `F0` and `F0a` (PR #1, PR #2 at
-`98fe47a`, PR #3, PR #4, PR #5, PR #6, PR #7). `docker compose up -d` brings up nine
-services and serves the app shell at `http://localhost:3000`. **The next task is `A0`** —
-the sign-in screen, browser session handling and the fail-closed route guard, fully
-specified in [TRACKER §5](../TRACKER.md#5-next-task). It is the last piece of identity
-Phase A needs, and it is what makes every milestone after it safe to build: a route added
-under a deny-by-default guard is covered before it exists, and a chat surface built
-unauthenticated would have to be retrofitted with a principal through every handler. See §8.
+**Current position.** Everything in the "Already built" table above is on `main`, plus
+**`A0`** (PR #11): the sign-in screen, browser session handling and the fail-closed route
+guard. `docker compose up -d` brings up nine services, and at `http://localhost:3000` a
+person can now sign in through Keycloak, stay signed in across a reload, and sign out —
+the first C14 sentence this project has been able to write. See §8.
+
+**The next task is `A1`** — the LLM gateway over Ollama, chat persistence, SSE streaming
+and the chat surface, fully specified in [TRACKER §5](../TRACKER.md#5-next-task). It is the
+milestone that makes the shell worth signing in to. It answers from the model alone; the
+documents arrive in `A2` and the database in `A3`, both behind the same gateway and the
+same streaming endpoint `A1` builds.
 
 `M3`'s exit criterion "RLS blocks cross-org" turned out to be unmet by `M2` rather than
 merely untested; that is written up in §8 and in
@@ -378,7 +380,8 @@ CDP screencast over a hard reload, dark OS + stored light choice:
 | axe on the shell | 0 violations |
 | `pytest` · `alembic check` | **97 passed** · no drift — F0 changes no Python |
 
-Deliberately absent: any sign-in form (`A0`), any chat UI (`A1`), any inspector *content*
+Deliberately absent at `F0`: any sign-in form (built in `A0`), any chat UI (`A1`),
+any inspector *content*
 (`C4`). The inspector renders an `EmptyState` saying so, because an empty pane with no
 explanation reads as a bug and the user cannot tell "not built yet" from "broken".
 
@@ -412,6 +415,74 @@ reversible (`0005` and `0006` were added by M3 — see below):
 
 `alembic check` is wired as the models-vs-migrations drift guard and currently reports
 no diff. Downgrade to base was tested and leaves only `alembic_version`.
+
+### A0 — the auth surface ✅
+
+Verified 2026-08-03 on branch `feat/a0-auth-surface` (PR #11). **The first milestone that
+earns a C14 sentence:** you can sign in through Keycloak at `http://localhost:3000`, stay
+signed in across a reload, and sign out. Before it, `M3.4` issued tokens that nothing
+presented and `F0` was a shell with no way in.
+
+**Authenticated by default, public by enumeration.** The guard is an *application-level*
+FastAPI dependency, so it is merged into every route the framework registers — routers
+included later, routes added after startup, all of them. A route that decorates itself with
+nothing is authenticated; the only way to be public is to be named in an **exact set of
+literal paths**. Never a prefix: `/api/v1/auth` as a prefix would make a future
+`/auth/users` public and the person adding it would have no reason to look at a list they
+never touched. `/auth/me` is deliberately absent from the set and is therefore guarded,
+which is precisely the property a prefix throws away.
+
+| Layer | What landed |
+|---|---|
+| `entrypoints/api/security.py` | `enforce_authentication`, `public_route_paths()`, `require_caller` |
+| `features/identity/application/principals.py` | `PrincipalResolver` — token in, `Principal` out; the `PrincipalRepository` port |
+| `features/identity/adapters/principals.py` | The SQL. Four statements in one org-scoped transaction, so RLS is underneath every predicate |
+| `entrypoints/api/routers/auth.py` | `GET /auth/me`; `authorize`/`callback` now answer a browser with redirects |
+| `frontend/src/lib/auth/` | The in-memory token store, the single-flight refresh, the destination stash |
+| `frontend/src/components/auth/` | Sign-in form, completion screen, auth boundary |
+| `frontend/e2e/` | Playwright over the live stack |
+
+**Roles and tags are read from the repository on every request, never from the token.**
+`M3.4` kept authorization claims out of the token so a revoked role takes effect on the
+next call rather than in fifteen minutes; that is only worth something if the reader
+honours it. Proved against a real Postgres with **one token minted once and reused
+verbatim**: no binding → `[]`, bound to `analyst` → `['knowledge:read', 'memory:read']`,
+unbound → `[]`. The third step is the one an additive cache would fail, and it is the one
+that keeps a demoted user's authority alive if it is missing.
+
+The guard also checks that the `session` row named by `sid` is neither revoked nor expired.
+Without it, signing out would revoke the refresh family and leave the access token working
+until it expired — a sign-out with fifteen minutes' notice. A *rotated* predecessor stays
+live: rotation retires a refresh token, it does not end a session.
+
+**The browser never holds a token anywhere a script can read it.** The access token lives
+in a module variable; the refresh token stays in the API's `httpOnly` cookie. A reload
+loses the access token and recovers it by exchanging the cookie — the same call a 401
+makes, so "stay signed in across a reload" and "recover from an expired token" cannot drift
+apart. Concurrent 401s collapse into **one** refresh (within a tab, a shared promise;
+across tabs, `navigator.locks`), because rotation treats a second presentation as theft and
+kills the chain.
+
+| Command | Result |
+|---|---|
+| `make test` | **230 passed** (was 191; +39) |
+| `make lint` · `make types` | clean; `mypy --strict`, 106 source files |
+| `make check` | "No new upgrade operations detected" — **no migration** |
+| `npm run test` | **76 passed**, 11 files (was 41); `lint`, `tsc --noEmit`, `build`, `audit` clean |
+| `npm run test:e2e` | **7 passed** in a real browser against the live Keycloak; **7 skipped** with the API stopped |
+| CI | three jobs green, including `compose` — the images build and the stack starts |
+
+**That e2e run closes `M3.4`'s one "could not verify".** Its live evidence drove
+`authorize` and everything after the callback with `httpx`; what it could not do was fill
+in Keycloak's own login form, because Keycloak 26 binds that form to a browser session
+established with cookies on the auth page.
+
+**Two deviations, both argued in [TRACKER §4](../TRACKER.md#4-known-gaps-and-honest-weaknesses)
+items 34 and 35:** `authorize` and `callback` answer a browser with redirects rather than
+JSON — one constant flag for every failure, and no token in any URL — and `GET /auth/me` is
+pulled forward from `C1` because the shell has to name the signed-in user and the token
+carries no email by design. It reports grants and enforces none; the permission matrix is
+still `C1`.
 
 ### M3 — identity 🟡 in progress
 
@@ -751,8 +822,9 @@ between what `docs/` describes and what runs is the thing this file exists to ke
   role is proven read-only (below), but nothing generates SQL against them. `A3`.
 - **There is no router, no tool runtime, no agent flow, no prompt store, no cost ledger
   and no context inspector content.** `A4`, `B3`, `B4`, `C2`, `C4`.
-- **There is no sign-in screen.** The backend issues tokens that nothing in the browser
-  presents. `A0`, and it is next.
+- ~~**There is no sign-in screen.**~~ **Built in `A0`.** What is missing now is anything
+  to *say* to it: the shell has one Overview page, no composer and no model behind it.
+  `A1`, and it is next.
 
 What *is* built is the foundation those stand on: the container stack, the 41-table schema
 with row-level security that is in force rather than merely declared, identity through a
@@ -792,6 +864,15 @@ the app shell. Evidence for each is above.
   end in a sentence a stranger could perform at `http://localhost:3000` is infrastructure,
   and infrastructure folds into the milestone it serves. That rule exists because the plan
   it replaced reached its own subject — a chatbot — at `M8`.
+- **Every new API route is authenticated by doing nothing** (`A0`). Do not add a route to
+  `public_route_paths` without a reason you would defend in review, and never turn that set
+  into a prefix match. If a handler needs to know who is calling, it asks for
+  `require_caller`; if it forgets and needs one anyway, it raises — that is deliberate, and
+  making the caller optional to silence it is how a route quietly stops being scoped.
+- **The frontend test suite is offline by construction** (`A0`). `vitest.setup.ts` installs
+  a `fetch` that answers 401 before any test runs, which is also what
+  `vi.unstubAllGlobals()` restores. A test that reaches the real network will pass on a
+  machine with the stack up and fail on CI — that is how it was found.
 - The v0.1 benchmark numbers in the root `README.md` were measured on SQLite. The kernel
   finishes its port in `C4`; **re-run and update them there**, in the same commit, and do
   not let published numbers drift in the meantime.

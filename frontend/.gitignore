@@ -25,3 +25,9 @@ next-env.d.ts
 # Editor / OS
 .DS_Store
 *.pem
+
+# Playwright. `test:e2e` is run on purpose against a live stack, never in CI.
+/test-results/
+/playwright-report/
+/blob-report/
+/.playwright/

@@ -3,6 +3,8 @@
 import { QueryClient, QueryClientProvider } from "@tanstack/react-query";
 import { useState, type ReactNode } from "react";
 
+import { AuthProvider } from "@/lib/auth/AuthProvider";
+
 export function Providers({ children }: { children: ReactNode }) {
   // Created in state, not at module scope. A module-level client is shared
   // across every request the server process handles, which on a server-rendered
@@ -26,5 +28,13 @@ export function Providers({ children }: { children: ReactNode }) {
       }),
   );
 
-  return <QueryClientProvider client={queryClient}>{children}</QueryClientProvider>;
+  // `AuthProvider` inside `QueryClientProvider` rather than outside: it is the
+  // thing that bootstraps the session, and the queries beneath it are the ones
+  // that need a token attached. Reversing the order would have queries mounting
+  // against a session nothing had started resolving yet.
+  return (
+    <QueryClientProvider client={queryClient}>
+      <AuthProvider>{children}</AuthProvider>
+    </QueryClientProvider>
+  );
 }

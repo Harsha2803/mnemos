@@ -25,23 +25,54 @@ the browser does not attach it to every other API call.
 A non-browser client may send the token in the request body instead; both
 endpoints read the body first and fall back to the cookie. Deliberately *not* a
 `refresh_token` field in the response — see :class:`TokenResponse`.
+
+**`authorize` and `callback` answer a browser, so they answer with a redirect.**
+Both are reached by top-level navigation — one from a form, one from Keycloak —
+and a 401 with a JSON body is, in a browser, a page of machine-readable text
+where a sign-in screen should be. Both therefore send the browser back to the
+sign-in URL with :data:`AUTH_ERROR_FLAG`, which is **one constant for every
+failure**: an unknown org, a disabled provider, a cancelled login, a replayed
+state and a refused provisioning all produce the same URL, exactly as they all
+produced the same JSON body before. The redirect target is configuration
+(`Settings.web_base_url`), never anything from the request — a redirect built
+from a `Host` header or a query parameter is an open redirect, on the one route
+where a credential has just been minted.
+
+The *successful* callback redirects too, and carries no token in the URL. It has
+already set the refresh cookie; the page it lands on exchanges that cookie for
+an access token over `POST /auth/token`. A token in a query string is a token in
+browser history, in the `Referer` of the next request, and in every proxy log
+along the way.
 """
 
 from __future__ import annotations
 
 from typing import Annotated, Literal
+from urllib.parse import urlencode
 
-from fastapi import APIRouter, Query, Request, Response, status
+from fastapi import APIRouter, Depends, Query, Request, Response, status
 from fastapi.responses import RedirectResponse
 from pydantic import BaseModel, Field
 
 from mnemos.core.config import Settings
+from mnemos.core.errors import AuthenticationError
+from mnemos.core.logging import get_logger
+from mnemos.entrypoints.api.security import require_caller
 from mnemos.features.identity.application.oidc_login import OidcLoginFlow
+from mnemos.features.identity.application.principals import AuthenticatedCaller
 from mnemos.features.identity.application.tokens import TokenService
 from mnemos.features.identity.domain import TokenPair
 from mnemos.features.identity.providers import denied
 
+log = get_logger(__name__)
+
 router = APIRouter(prefix="/auth", tags=["auth"])
+
+#: The only thing a failed login tells the browser. Not an error *code* — there
+#: is deliberately nothing to branch on, and the sign-in screen renders one
+#: message whatever it is handed. One value, so that "unknown org" and "the IdP
+#: refused you" are indistinguishable on the wire as well as on screen.
+AUTH_ERROR_FLAG = "auth_failed"
 
 
 class TokenResponse(BaseModel):
@@ -84,6 +115,32 @@ class TokenRequest(BaseModel):
         default=None,
         description="Omit when the refresh cookie is present, which is the browser case.",
     )
+
+
+class MeResponse(BaseModel):
+    """Who the bearer of this access token is, resolved against the live database.
+
+    **Every field here was read on this request, not carried in the token.** The
+    token names a user, an org and a session and says nothing about authority
+    (`domain/token.py`), so `permissions` and `tags` are the repository's answer
+    a moment ago rather than the IdP's answer at login. That is what makes a
+    revoked role take effect on the next call instead of in fifteen minutes, and
+    it is observable here: mint a token, change a binding, call this again.
+
+    `permissions` is reported, not enforced. The permission matrix — requiring a
+    concrete `resource:action` per route — is a later milestone; listing the
+    grants is how the shell knows what to offer, and hiding a control is a
+    courtesy rather than the control itself.
+    """
+
+    user_id: str
+    email: str
+    display_name: str
+    org_id: str
+    org_slug: str
+    session_id: str
+    permissions: list[str] = Field(description="Effective `resource:action` grants, live")
+    tags: list[str] = Field(description="Tag slugs this principal can reach (constraint C4)")
 
 
 class RevokeRequest(BaseModel):
@@ -164,6 +221,21 @@ def _to_response(pair: TokenPair) -> TokenResponse:
     )
 
 
+def _signin_failed(settings: Settings, exc: AuthenticationError) -> RedirectResponse:
+    """The one answer a browser gets for a failed login.
+
+    The diagnostic reason is logged here rather than lost, because the redirect
+    replaces the error handler that would otherwise have logged it — the
+    exception never reaches `handle_domain_error` once it is caught.
+
+    303, not 307: the browser must follow with a GET regardless of how it
+    arrived, and must not repeat a body it no longer has.
+    """
+    log.warning("auth.signin_failed", **exc.details)
+    query = urlencode({"error": AUTH_ERROR_FLAG})
+    return RedirectResponse(f"{settings.web_signin_url}?{query}", status_code=303)
+
+
 @router.get(
     "/oidc/authorize",
     summary="Begin OIDC authorization code + PKCE",
@@ -177,52 +249,101 @@ async def oidc_authorize(
         str | None, Query(description="Provider slug; the org default if omitted")
     ] = None,
 ) -> RedirectResponse:
-    """302 the browser to the IdP's **public** issuer.
+    """307 the browser to the IdP's **public** issuer.
 
-    307 rather than 302 in the OpenAPI declaration only; `RedirectResponse`
-    defaults to 307 and the method is GET either way, so no body is at stake.
+    `RedirectResponse` defaults to 307 and the method is GET either way, so no
+    body is at stake.
+
+    A denial here — unknown org, disabled provider, an org whose default is a
+    password provider — sends the browser back to the sign-in screen rather than
+    rendering a JSON 401 at it. See the module docstring: the answer is one
+    constant either way, and the caller is a browser.
     """
-    redirect = await _flow(request).begin(
-        org_slug=org,
-        provider_slug=provider,
-        redirect_uri=_settings(request).oidc_redirect_uri,
-    )
+    settings = _settings(request)
+    try:
+        redirect = await _flow(request).begin(
+            org_slug=org,
+            provider_slug=provider,
+            redirect_uri=settings.oidc_redirect_uri,
+        )
+    except AuthenticationError as exc:
+        return _signin_failed(settings, exc)
     return RedirectResponse(redirect.url)
 
 
-@router.get("/oidc/callback", summary="OIDC callback: exchange the code for a token pair")
+@router.get(
+    "/oidc/callback",
+    summary="OIDC callback: open a session and return the browser to the app",
+    response_class=RedirectResponse,
+    status_code=303,
+)
 async def oidc_callback(
     request: Request,
-    response: Response,
     state: Annotated[str, Query(min_length=1, max_length=512)],
     code: Annotated[str | None, Query(max_length=4096)] = None,
     error: Annotated[str | None, Query(max_length=256)] = None,
-) -> TokenResponse:
+) -> RedirectResponse:
     """Verify `state`, exchange `code` server-side, validate the token, open a session.
 
-    M3.3 ended here with a `SubjectResponse` — proof that a login *happened*, with
-    no way to stay logged in. It now returns the access token and sets the refresh
-    cookie, which is what makes a session survive a reload.
+    M3.3 ended here with a `SubjectResponse` — proof that a login *happened*,
+    with no way to stay logged in. M3.4 made it a token pair in a JSON body,
+    which is right for a test client and wrong for the only caller it has: this
+    endpoint is reached by a top-level navigation from Keycloak, so a JSON body
+    is a page of text rendered at a person who expected an application.
+
+    It therefore sets the refresh cookie and redirects, **carrying no token in
+    the URL**. The page it lands on exchanges the cookie for an access token.
 
     `error` is what the IdP sends when the user cancels or is refused. It is a
-    denial like any other and must not be echoed back: the IdP's error strings are
+    denial like any other and is never echoed back: the IdP's error strings are
     diagnostic and can name internal configuration.
     """
-    if error is not None or code is None:
-        raise denied(f"IdP returned error={error!r}, code_present={code is not None}")
+    settings = _settings(request)
+    try:
+        if error is not None or code is None:
+            raise denied(f"IdP returned error={error!r}, code_present={code is not None}")
 
-    completed = await _flow(request).complete(state=state, code=code)
-    user_agent, ip_address = _client(request)
-    pair = await _tokens(request).issue_for_subject(
-        subject=completed.subject,
-        # From the state stored before the redirect, never from this request's
-        # query string.
-        org_slug=completed.org_slug,
-        user_agent=user_agent,
-        ip_address=ip_address,
+        completed = await _flow(request).complete(state=state, code=code)
+        user_agent, ip_address = _client(request)
+        pair = await _tokens(request).issue_for_subject(
+            subject=completed.subject,
+            # From the state stored before the redirect, never from this
+            # request's query string.
+            org_slug=completed.org_slug,
+            user_agent=user_agent,
+            ip_address=ip_address,
+        )
+    except AuthenticationError as exc:
+        return _signin_failed(settings, exc)
+
+    # Built on the response that is actually returned. FastAPI's injected
+    # `Response` is a different object, and relying on its headers being merged
+    # into a `RedirectResponse` returned from the handler is relying on an
+    # implementation detail for the one header that carries the credential.
+    redirect = RedirectResponse(settings.web_signin_complete_url, status_code=303)
+    _set_refresh_cookie(redirect, settings, pair)
+    return redirect
+
+
+@router.get("/me", summary="The current principal, resolved against the live database")
+async def read_me(caller: Annotated[AuthenticatedCaller, Depends(require_caller)]) -> MeResponse:
+    """The first route in the system that is **not** in the public allow-list.
+
+    It declares no guard of its own — `require_caller` only *reads* the identity
+    the application-level dependency already resolved — which is the whole point:
+    being authenticated is what a route gets for doing nothing.
+    """
+    principal = caller.principal
+    return MeResponse(
+        user_id=str(principal.principal_id),
+        email=caller.email,
+        display_name=caller.display_name,
+        org_id=str(principal.org_id),
+        org_slug=caller.org_slug,
+        session_id=str(principal.session_id),
+        permissions=sorted(str(p) for p in principal.permissions),
+        tags=sorted(principal.tags.slugs),
     )
-    _set_refresh_cookie(response, _settings(request), pair)
-    return _to_response(pair)
 
 
 @router.post("/token", summary="Exchange a refresh token for a new access token")

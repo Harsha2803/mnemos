@@ -61,12 +61,70 @@ Cookie: mnemos_refresh=<org_slug>.<secret>
 | Endpoint | Purpose | Status |
 |---|---|---|
 | `GET /v1/auth/oidc/authorize` | Begin OIDC authorization code + PKCE | ✅ M3.3 |
-| `GET /v1/auth/oidc/callback` | OIDC callback → token pair, refresh cookie set | ✅ M3.4 |
+| `GET /v1/auth/oidc/callback` | OIDC callback → refresh cookie set, browser returned to the app | ✅ M3.4, redirect since `A0` |
 | `POST /v1/auth/token` | `grant_type=refresh_token`; rotates | ✅ M3.4 |
 | `POST /v1/auth/token:revoke` | Revoke a refresh token and its whole chain | ✅ M3.4 |
-| `POST /v1/auth/token` (`password`, `api_key`) | The other two grants | M3.5 |
-| `GET /v1/auth/providers` | Enabled identity providers for a given email domain | M3.5 |
-| `GET /v1/auth/me` | Current principal, effective roles, scopes | M3.6 |
+| `GET /v1/auth/me` | Current principal, hydrated from the database on this request | ✅ `A0` |
+| `POST /v1/auth/token` (`password`, `api_key`) | The other two grants | `C2` |
+| `GET /v1/auth/providers` | Enabled identity providers for a given email domain | `C2` |
+
+### Every route is authenticated by default (`A0`)
+
+The guard is an **application-level** dependency
+(`FastAPI(dependencies=[Depends(enforce_authentication)])`), so it is merged into
+every route FastAPI registers — including routers included later and routes added
+after startup. **A route that decorates itself with nothing is authenticated.**
+The alternative, a `@requires_auth` somebody remembers to write, fails open
+exactly once: on the endpoint nobody reviewed.
+
+Public routes are an **exact enumerated allow-list**, never a prefix:
+`/`, `/healthz`, `/readyz`, `/docs`, `/docs/oauth2-redirect`, `/redoc`,
+`/openapi.json`, and the four auth routes above. `/v1/auth/me` is deliberately
+*absent* from it and is therefore guarded — which is the property a
+`startswith("/v1/auth")` would have thrown away, one careless route name later.
+
+`GET /v1/auth/me` answers from the live database, never from the token:
+
+```json
+{
+  "user_id": "018f…", "email": "admin@mnemos.local", "display_name": "Ada Admin",
+  "org_id": "018f…", "org_slug": "mnemos", "session_id": "018f…",
+  "permissions": ["*:*"], "tags": []
+}
+```
+
+The guard also checks that the `session` row named by `sid` is neither revoked
+nor expired. That is what makes `token:revoke` a sign-out rather than a
+fifteen-minute notice: without it the access token would outlive the revocation
+it was supposed to obey. A *rotated* predecessor stays live — rotation retires a
+refresh token, it does not end a session.
+
+### The browser-facing routes answer with redirects (`A0`)
+
+`authorize` and `callback` are reached by top-level navigation — one from the
+sign-in form, one from Keycloak — so a JSON 401 is, to a browser, a page of
+machine-readable text where a sign-in screen should be. Both now redirect:
+
+| Outcome | Answer |
+|---|---|
+| `authorize`, org resolved | `307` to the IdP's **public** issuer (unchanged) |
+| `authorize`, any denial | `303` to `{web_base_url}/signin?error=auth_failed` |
+| `callback`, login completed | `303` to `{web_base_url}/signin/complete`, **refresh cookie set, no token in the URL** |
+| `callback`, any denial | `303` to `{web_base_url}/signin?error=auth_failed` |
+
+`error=auth_failed` is **one constant for every failure** — unknown org, disabled
+provider, replayed state, cancelled login, refused provisioning. It is not an
+error *code*; there is deliberately nothing to branch on, and the sign-in screen
+renders one message whatever it is handed. This is the same guarantee the
+constant JSON denial made, expressed in the medium the caller is actually using.
+
+The redirect target comes from `Settings.web_base_url` and never from the
+request. A redirect built from a `Host` header, a `Referer` or a query parameter
+is an open redirect, and this is the route where a credential has just been
+minted. The successful callback carries **no access token in the URL** either:
+the page it lands on exchanges the `httpOnly` cookie for one over
+`POST /v1/auth/token`. A token in a query string is a token in browser history,
+in the next request's `Referer`, and in every proxy log on the way.
 
 **Access tokens are 15 minutes and carry no authorization decisions** — only identity.
 The claims are exactly `sub`, `org`, `sid`, `iat`, `exp`, `iss`, `jti`, and the codec

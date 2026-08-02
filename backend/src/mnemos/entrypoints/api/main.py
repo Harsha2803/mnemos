@@ -16,7 +16,7 @@ from contextlib import asynccontextmanager
 from typing import Any
 
 import httpx
-from fastapi import FastAPI, Request
+from fastapi import Depends, FastAPI, Request
 from fastapi.middleware.cors import CORSMiddleware
 from fastapi.responses import JSONResponse
 
@@ -27,10 +27,13 @@ from mnemos.core.ids import DEFAULT_ID_GENERATOR
 from mnemos.core.logging import configure_logging, get_logger, request_id_var
 from mnemos.core.security import PasswordHasher
 from mnemos.entrypoints.api.routers import auth as auth_router
+from mnemos.entrypoints.api.security import enforce_authentication, public_route_paths
 from mnemos.features.identity.adapters.directory import SqlOrgDirectory, SqlUserDirectory
 from mnemos.features.identity.adapters.login_state import RedisLoginStateStore
+from mnemos.features.identity.adapters.principals import SqlPrincipalRepository
 from mnemos.features.identity.adapters.sessions import SqlAppUserStore, SqlSessionStore
 from mnemos.features.identity.application.oidc_login import OidcLoginFlow
+from mnemos.features.identity.application.principals import PrincipalResolver
 from mnemos.features.identity.application.tokens import TokenService
 from mnemos.features.identity.providers import (
     HttpJwksCache,
@@ -81,23 +84,33 @@ async def lifespan(app: FastAPI) -> AsyncIterator[None]:
     # `PlatformTokenConfig` validates the secret, the algorithm and the TTL here,
     # in the lifespan — so a deployment with an unusable signing secret fails to
     # start rather than failing at somebody's first login (CodingStandards §7).
+    codec = PlatformTokenCodec(
+        config=PlatformTokenConfig(
+            secret=settings.jwt_secret.get_secret_value(),
+            issuer=settings.jwt_issuer,
+            algorithm=settings.jwt_algorithm,
+            access_ttl_s=settings.access_token_ttl_s,
+            min_secret_length=settings.jwt_min_secret_length,
+        ),
+        clock=SYSTEM_CLOCK,
+        ids=DEFAULT_ID_GENERATOR,
+    )
     app.state.token_service = TokenService(
         orgs=SqlOrgDirectory(app.state.db),
         users=SqlAppUserStore(app.state.db, DEFAULT_ID_GENERATOR),
         sessions=SqlSessionStore(app.state.db, DEFAULT_ID_GENERATOR),
-        codec=PlatformTokenCodec(
-            config=PlatformTokenConfig(
-                secret=settings.jwt_secret.get_secret_value(),
-                issuer=settings.jwt_issuer,
-                algorithm=settings.jwt_algorithm,
-                access_ttl_s=settings.access_token_ttl_s,
-                min_secret_length=settings.jwt_min_secret_length,
-            ),
-            clock=SYSTEM_CLOCK,
-            ids=DEFAULT_ID_GENERATOR,
-        ),
+        codec=codec,
         clock=SYSTEM_CLOCK,
         refresh_ttl_s=settings.refresh_token_ttl_s,
+    )
+    # The same codec object on both sides. One `PlatformTokenConfig` means the
+    # guard cannot end up verifying against a secret, issuer or algorithm the
+    # minter is not using — a divergence that would present as "everyone is
+    # signed out" and would be looked for anywhere but here.
+    app.state.principals = PrincipalResolver(
+        codec=codec,
+        repository=SqlPrincipalRepository(app.state.db),
+        clock=SYSTEM_CLOCK,
     )
 
     log.info("api.startup", env=str(settings.env), api_prefix=settings.api_prefix)
@@ -121,7 +134,22 @@ def create_app() -> FastAPI:
         lifespan=lifespan,
         docs_url="/docs",
         openapi_url="/openapi.json",
+        # **The guard, installed once, for every route there will ever be.**
+        # FastAPI merges application-level dependencies into every route it
+        # registers — including routers included below and routes added after
+        # startup — so an endpoint that decorates itself with nothing is
+        # authenticated, and the only way to be public is to be named in
+        # `public_route_paths`. The opposite arrangement, a decorator somebody
+        # remembers to add, fails open exactly once: on the route nobody
+        # reviewed. See `entrypoints/api/security.py`.
+        dependencies=[Depends(enforce_authentication)],
     )
+
+    # Read by the guard on every request. Computed here rather than imported as
+    # a constant because the auth routes hang off `api_prefix`, and a list that
+    # silently stopped matching a reconfigured prefix would lock everybody out
+    # of the login endpoints.
+    app.state.public_route_paths = public_route_paths(settings.api_prefix)
 
     # `allow_credentials=True` is what lets the frontend at :3000 send and receive
     # the `httpOnly` refresh cookie cross-origin. It only works alongside an
@@ -213,8 +241,9 @@ def create_app() -> FastAPI:
             "name": settings.app_name,
             "version": "0.2.0",
             "docs": "/docs",
-            "milestone": "M3 — identity: OIDC login issues a platform JWT with "
-            "refresh rotation; API keys and RBAC next",
+            "milestone": "A0 — identity: OIDC login issues a platform JWT with "
+            "refresh rotation, and every route is authenticated by default; "
+            "the LLM gateway and the chat surface are next",
         }
 
     app.include_router(auth_router.router, prefix=settings.api_prefix)

@@ -64,10 +64,15 @@ export interface paths {
         };
         /**
          * Begin OIDC authorization code + PKCE
-         * @description 302 the browser to the IdP's **public** issuer.
+         * @description 307 the browser to the IdP's **public** issuer.
          *
-         *     307 rather than 302 in the OpenAPI declaration only; `RedirectResponse`
-         *     defaults to 307 and the method is GET either way, so no body is at stake.
+         *     `RedirectResponse` defaults to 307 and the method is GET either way, so no
+         *     body is at stake.
+         *
+         *     A denial here — unknown org, disabled provider, an org whose default is a
+         *     password provider — sends the browser back to the sign-in screen rather than
+         *     rendering a JSON 401 at it. See the module docstring: the answer is one
+         *     constant either way, and the caller is a browser.
          */
         get: operations["oidc_authorize_api_v1_auth_oidc_authorize_get"];
         put?: never;
@@ -86,16 +91,105 @@ export interface paths {
             cookie?: never;
         };
         /**
-         * OIDC callback: exchange the code for a subject
-         * @description Verify `state`, exchange `code` server-side, validate the returned token.
+         * OIDC callback: open a session and return the browser to the app
+         * @description Verify `state`, exchange `code` server-side, validate the token, open a session.
+         *
+         *     M3.3 ended here with a `SubjectResponse` — proof that a login *happened*,
+         *     with no way to stay logged in. M3.4 made it a token pair in a JSON body,
+         *     which is right for a test client and wrong for the only caller it has: this
+         *     endpoint is reached by a top-level navigation from Keycloak, so a JSON body
+         *     is a page of text rendered at a person who expected an application.
+         *
+         *     It therefore sets the refresh cookie and redirects, **carrying no token in
+         *     the URL**. The page it lands on exchanges the cookie for an access token.
          *
          *     `error` is what the IdP sends when the user cancels or is refused. It is a
-         *     denial like any other and must not be echoed back — the IdP's error strings
-         *     are diagnostic and can name internal configuration.
+         *     denial like any other and is never echoed back: the IdP's error strings are
+         *     diagnostic and can name internal configuration.
          */
         get: operations["oidc_callback_api_v1_auth_oidc_callback_get"];
         put?: never;
         post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/v1/auth/me": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /**
+         * The current principal, resolved against the live database
+         * @description The first route in the system that is **not** in the public allow-list.
+         *
+         *     It declares no guard of its own — `require_caller` only *reads* the identity
+         *     the application-level dependency already resolved — which is the whole point:
+         *     being authenticated is what a route gets for doing nothing.
+         */
+        get: operations["read_me_api_v1_auth_me_get"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/v1/auth/token": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /**
+         * Exchange a refresh token for a new access token
+         * @description Rotate the refresh token and mint a fresh access token.
+         *
+         *     **Every call rotates.** The token that came in is retired and a new one goes
+         *     out on the cookie; presenting the retired one again revokes the entire chain,
+         *     because at that point two parties hold copies of one credential and nothing
+         *     here can tell which one is the thief.
+         *
+         *     The practical consequence for a client is that *concurrent* refreshes are
+         *     indistinguishable from theft and must be collapsed into one in-flight call.
+         *     That is the frontend half of M3.4 and it is written down in TRACKER §5.
+         */
+        post: operations["issue_token_api_v1_auth_token_post"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/v1/auth/token:revoke": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /**
+         * Revoke a refresh token and its whole rotation chain
+         * @description Sign out. **Always 204**, whatever was presented.
+         *
+         *     RFC 7009 §2.2 asks for the same, and the reason is worth stating: an endpoint
+         *     that answers 401 for an unknown token and 204 for a known one is a free oracle
+         *     for testing stolen credentials — and the caller is unauthenticated, because
+         *     presenting the token *is* the authentication. So unknown, expired, malformed
+         *     and absent all get one answer, and the cookie is cleared either way rather
+         *     than leaving a client holding a credential it believes it revoked.
+         */
+        post: operations["revoke_token_api_v1_auth_token_revoke_post"];
         delete?: never;
         options?: never;
         head?: never;
@@ -112,28 +206,114 @@ export interface components {
             detail?: components["schemas"]["ValidationError"][];
         };
         /**
-         * SubjectResponse
-         * @description The verified subject.
+         * MeResponse
+         * @description Who the bearer of this access token is, resolved against the live database.
          *
-         *     **Interim.** M3.4 replaces this with an access/refresh token pair; it is here
-         *     so the flow is end-to-end testable now rather than half-built behind a
-         *     feature flag. It deliberately carries no roles or tags — those are resolved
-         *     per request against the live database so a revoked role takes effect at once.
+         *     **Every field here was read on this request, not carried in the token.** The
+         *     token names a user, an org and a session and says nothing about authority
+         *     (`domain/token.py`), so `permissions` and `tags` are the repository's answer
+         *     a moment ago rather than the IdP's answer at login. That is what makes a
+         *     revoked role take effect on the next call instead of in fifteen minutes, and
+         *     it is observable here: mint a token, change a binding, call this again.
+         *
+         *     `permissions` is reported, not enforced. The permission matrix — requiring a
+         *     concrete `resource:action` per route — is a later milestone; listing the
+         *     grants is how the shell knows what to offer, and hiding a control is a
+         *     courtesy rather than the control itself.
          */
-        SubjectResponse: {
+        MeResponse: {
+            /** User Id */
+            user_id: string;
+            /** Email */
+            email: string;
+            /** Display Name */
+            display_name: string;
+            /** Org Id */
+            org_id: string;
             /** Org Slug */
             org_slug: string;
+            /** Session Id */
+            session_id: string;
             /**
-             * Provider
-             * @description Slug of the identity_provider row that authenticated this
+             * Permissions
+             * @description Effective `resource:action` grants, live
              */
-            provider: string;
-            /** External Subject */
-            external_subject?: string | null;
-            /** Email */
-            email?: string | null;
-            /** Display Name */
-            display_name?: string | null;
+            permissions: string[];
+            /**
+             * Tags
+             * @description Tag slugs this principal can reach (constraint C4)
+             */
+            tags: string[];
+        };
+        /** RevokeRequest */
+        RevokeRequest: {
+            /**
+             * Refresh Token
+             * @description Omit when the refresh cookie is present.
+             */
+            refresh_token?: string | null;
+        };
+        /**
+         * TokenRequest
+         * @description `grant_type=refresh_token`.
+         *
+         *     `refresh_token` is optional because a browser sends it as an `httpOnly`
+         *     cookie and has no way to read it back into a body. A non-browser client that
+         *     holds its own token sends it here instead.
+         */
+        TokenRequest: {
+            /**
+             * Grant Type
+             * @description Only `refresh_token` is supported here. The password and api_key grants are M3.5; OIDC logins go through `/auth/oidc/authorize`.
+             * @constant
+             */
+            grant_type: "refresh_token";
+            /**
+             * Refresh Token
+             * @description Omit when the refresh cookie is present, which is the browser case.
+             */
+            refresh_token?: string | null;
+        };
+        /**
+         * TokenResponse
+         * @description A minted access token, and where to send it.
+         *
+         *     **There is no `refresh_token` field, and that is the design.** The refresh
+         *     token is set as an `httpOnly` cookie on this same response; returning it in
+         *     the body would invite a browser client to keep it in `localStorage`, which
+         *     any cross-site scripting bug can read. A response body is also the thing most
+         *     likely to end up in a log, a proxy cache, or a pasted bug report.
+         *
+         *     `APIContract.md` §2 used to show a `refresh_token` field. It is corrected in
+         *     the same commit as this class rather than left to disagree with the code.
+         *
+         *     No `scope` field either: an access token carries identity and no
+         *     authorization, so there is no scope to report. Effective permissions come
+         *     from `GET /auth/me` (M3.6) against the live database, which is what makes a
+         *     revoked role take effect on the next request rather than in fifteen minutes.
+         */
+        TokenResponse: {
+            /**
+             * Access Token
+             * @description Bearer token, 15 minutes, identity claims only
+             */
+            access_token: string;
+            /**
+             * Token Type
+             * @default Bearer
+             * @constant
+             */
+            token_type: "Bearer";
+            /**
+             * Expires In
+             * @description Access token lifetime in seconds
+             */
+            expires_in: number;
+            /**
+             * Org Slug
+             * @description Tenant this session belongs to
+             */
+            org_slug: string;
         };
         /** ValidationError */
         ValidationError: {
@@ -267,13 +447,95 @@ export interface operations {
         requestBody?: never;
         responses: {
             /** @description Successful Response */
+            303: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content?: never;
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
+    read_me_api_v1_auth_me_get: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Successful Response */
             200: {
                 headers: {
                     [name: string]: unknown;
                 };
                 content: {
-                    "application/json": components["schemas"]["SubjectResponse"];
+                    "application/json": components["schemas"]["MeResponse"];
                 };
+            };
+        };
+    };
+    issue_token_api_v1_auth_token_post: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["TokenRequest"];
+            };
+        };
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["TokenResponse"];
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
+    revoke_token_api_v1_auth_token_revoke_post: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["RevokeRequest"];
+            };
+        };
+        responses: {
+            /** @description Successful Response */
+            204: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content?: never;
             };
             /** @description Validation Error */
             422: {
