@@ -20,17 +20,23 @@ from fastapi import FastAPI, Request
 from fastapi.middleware.cors import CORSMiddleware
 from fastapi.responses import JSONResponse
 
+from mnemos.core.clock import SYSTEM_CLOCK
 from mnemos.core.config import Settings, get_settings
 from mnemos.core.errors import MnemosError
+from mnemos.core.ids import DEFAULT_ID_GENERATOR
 from mnemos.core.logging import configure_logging, get_logger, request_id_var
 from mnemos.core.security import PasswordHasher
 from mnemos.entrypoints.api.routers import auth as auth_router
 from mnemos.features.identity.adapters.directory import SqlOrgDirectory, SqlUserDirectory
 from mnemos.features.identity.adapters.login_state import RedisLoginStateStore
+from mnemos.features.identity.adapters.sessions import SqlAppUserStore, SqlSessionStore
 from mnemos.features.identity.application.oidc_login import OidcLoginFlow
+from mnemos.features.identity.application.tokens import TokenService
 from mnemos.features.identity.providers import (
     HttpJwksCache,
     HttpOidcMetadata,
+    PlatformTokenCodec,
+    PlatformTokenConfig,
     ProviderFactory,
 )
 from mnemos.platform.cache import Cache
@@ -72,6 +78,27 @@ async def lifespan(app: FastAPI) -> AsyncIterator[None]:
         client=app.state.http,
         state_ttl_s=settings.oidc_login_state_ttl_s,
     )
+    # `PlatformTokenConfig` validates the secret, the algorithm and the TTL here,
+    # in the lifespan — so a deployment with an unusable signing secret fails to
+    # start rather than failing at somebody's first login (CodingStandards §7).
+    app.state.token_service = TokenService(
+        orgs=SqlOrgDirectory(app.state.db),
+        users=SqlAppUserStore(app.state.db, DEFAULT_ID_GENERATOR),
+        sessions=SqlSessionStore(app.state.db, DEFAULT_ID_GENERATOR),
+        codec=PlatformTokenCodec(
+            config=PlatformTokenConfig(
+                secret=settings.jwt_secret.get_secret_value(),
+                issuer=settings.jwt_issuer,
+                algorithm=settings.jwt_algorithm,
+                access_ttl_s=settings.access_token_ttl_s,
+                min_secret_length=settings.jwt_min_secret_length,
+            ),
+            clock=SYSTEM_CLOCK,
+            ids=DEFAULT_ID_GENERATOR,
+        ),
+        clock=SYSTEM_CLOCK,
+        refresh_ttl_s=settings.refresh_token_ttl_s,
+    )
 
     log.info("api.startup", env=str(settings.env), api_prefix=settings.api_prefix)
     try:
@@ -96,6 +123,11 @@ def create_app() -> FastAPI:
         openapi_url="/openapi.json",
     )
 
+    # `allow_credentials=True` is what lets the frontend at :3000 send and receive
+    # the `httpOnly` refresh cookie cross-origin. It only works alongside an
+    # explicit origin list: a browser refuses a credentialed response whose
+    # `Access-Control-Allow-Origin` is `*`, so `cors_origins` must stay a list of
+    # real origins and must never be widened to a wildcard "to make CORS work".
     app.add_middleware(
         CORSMiddleware,
         allow_origins=settings.cors_origins,
@@ -181,7 +213,8 @@ def create_app() -> FastAPI:
             "name": settings.app_name,
             "version": "0.2.0",
             "docs": "/docs",
-            "milestone": "M3 — identity: OIDC login round-trip live; JWT issuance next",
+            "milestone": "M3 — identity: OIDC login issues a platform JWT with "
+            "refresh rotation; API keys and RBAC next",
         }
 
     app.include_router(auth_router.router, prefix=settings.api_prefix)

@@ -17,8 +17,18 @@ the rationale.
 | Idempotency | Every unsafe method accepts `Idempotency-Key`. Required on `POST /v1/memories` and all tool invocations. |
 | Partial responses | `?fields=` projection on read endpoints returning large payloads. |
 | Errors | RFC 9457 Problem Details. One shape, always. |
-| Auth | `Authorization: Bearer <jwt>` or `X-API-Key: <key_id>.<secret>`. |
+| Auth | `Authorization: Bearer <jwt>` or `X-API-Key: <org_slug>.<secret>`. The refresh token travels as an `httpOnly` cookie, never in a body. |
 | Tenancy | Derived from the credential. **Never** from a header or query parameter. |
+
+**Why the credential's first half is the org slug and not a key id** (settled in M3.2,
+implemented in M3.4). Every table an authenticated caller touches is under row-level
+security, so *nothing about them is readable until an org is known* — a bare secret, or a
+bare key id, identifies nobody. Looking one up across all tenants first would mean
+`BYPASSRLS` in the request path, which is exactly the exemption the M3 prerequisite
+removed. Naming the tenant in the credential costs nothing and keeps the authentication
+path unprivileged. The slug is hashed *together with* the secret, so it is a binding and
+not a hint: the same secret presented under another tenant's slug digests to something no
+row holds.
 
 **Why the colon-action convention.** Context compilation is not a resource creation in
 any honest REST sense — it is a computation with a cached, content-addressed result.
@@ -28,11 +38,15 @@ plainly that this is an operation, while keeping the resource namespace meaningf
 
 ## 2. Authentication
 
+Routes are served under the configured `api_prefix`, which is `/api/v1` — so the paths
+below are `/api/v1/auth/…` in a running system.
+
 ```http
 POST /v1/auth/token
 Content-Type: application/json
+Cookie: mnemos_refresh=<org_slug>.<secret>
 
-{ "grant_type": "password", "email": "…", "password": "…" }
+{ "grant_type": "refresh_token" }
 ```
 
 ```json
@@ -40,29 +54,60 @@ Content-Type: application/json
   "access_token": "eyJhbGciOi…",
   "token_type": "Bearer",
   "expires_in": 900,
-  "refresh_token": "…",
-  "scope": "memory:read memory:write context:compile"
+  "org_slug": "acme"
 }
 ```
 
-| Endpoint | Purpose |
-|---|---|
-| `POST /v1/auth/token` | Password, refresh_token, or api_key grant |
-| `POST /v1/auth/token:revoke` | Revoke a refresh token |
-| `GET /v1/auth/providers` | Enabled identity providers for a given email domain |
-| `GET /v1/auth/oidc/{provider}/authorize` | Begin OIDC authorization code + PKCE |
-| `GET /v1/auth/oidc/{provider}/callback` | OIDC callback |
-| `GET /v1/auth/me` | Current principal, effective roles, scopes |
+| Endpoint | Purpose | Status |
+|---|---|---|
+| `GET /v1/auth/oidc/authorize` | Begin OIDC authorization code + PKCE | ✅ M3.3 |
+| `GET /v1/auth/oidc/callback` | OIDC callback → token pair, refresh cookie set | ✅ M3.4 |
+| `POST /v1/auth/token` | `grant_type=refresh_token`; rotates | ✅ M3.4 |
+| `POST /v1/auth/token:revoke` | Revoke a refresh token and its whole chain | ✅ M3.4 |
+| `POST /v1/auth/token` (`password`, `api_key`) | The other two grants | M3.5 |
+| `GET /v1/auth/providers` | Enabled identity providers for a given email domain | M3.5 |
+| `GET /v1/auth/me` | Current principal, effective roles, scopes | M3.6 |
 
 **Access tokens are 15 minutes and carry no authorization decisions** — only identity.
-Roles and grants are resolved from the database on every request. A token that carries
-a `roles` claim is a token that keeps working after the role is revoked, which is a
-window an attacker will find. The cost is a Redis-cached lookup; the benefit is that
-revocation is immediate.
+The claims are exactly `sub`, `org`, `sid`, `iat`, `exp`, `iss`, `jti`, and the codec
+refuses a token carrying `roles`, `scope`, `permissions` or their relatives in *both*
+directions — minting and verifying. Roles and grants are resolved from the database on
+every request. A token that carries a `roles` claim is a token that keeps working after
+the role is revoked, which is a window an attacker will find. The cost is a cached lookup;
+the benefit is that revocation is immediate.
 
-API keys are `key_id.secret`; the `key_id` half is indexed, the secret half is
-argon2id-hashed. Revocation and expiry are checked against the live row on every
-request.
+There is no `scope` field in the response, for the same reason: there is no authorization
+in the token to report. `GET /v1/auth/me` (M3.6) answers that against the live database.
+
+**The refresh token is never in a response body.** It is set as an `httpOnly`,
+`SameSite=Lax`, `Path=/api/v1/auth` cookie, `Secure` outside local development. A body is
+the part of a response most likely to reach a log, a proxy cache or a pasted bug report,
+and a browser client handed a refresh token in JSON keeps it where any XSS can read it.
+`SameSite=Lax` plus POST-only endpoints is what makes a cookie-borne credential safe to
+accept: Lax withholds it from cross-site POSTs, so a forged cross-origin form sends
+nothing. A non-browser client may send `refresh_token` in the request body instead; both
+endpoints read the body first and fall back to the cookie.
+
+**Every use of a refresh token rotates it, and reuse kills the family.** The old row
+records its successor in `session.rotated_to`; presenting a token whose row already names
+one is proof of theft — the legitimate holder and the thief cannot both hold the current
+token — so the entire chain is revoked with `revoked_reason`, and both parties log in
+again. *Concurrent* refreshes are indistinguishable from theft and must be collapsed by
+the client into one in-flight call.
+
+`POST /v1/auth/token:revoke` **always answers 204**, whatever was presented (RFC 7009
+§2.2). Answering 401 for an unknown token and 204 for a known one is a free oracle for
+testing stolen credentials, from a caller whose only authentication *is* the token.
+
+Every failure at these endpoints returns the same body —
+`{"error":{"code":"unauthenticated","message":"authentication failed"}}` — for an unknown
+org, an unknown token, a malformed credential and a revoked family alike. The diagnostic
+reason goes to the log. A client must not branch on it to say anything more specific.
+
+API keys are `<org_slug>.<secret>` (M3.5); the secret half is argon2id-hashed, because an
+API-key secret is low-entropy enough to deserve it. Refresh tokens are 256 bits from
+`secrets` and are SHA-256 digested instead — there is no dictionary for a work factor to
+slow down, and the digest column has to stay searchable by a unique index.
 
 ## 3. Memory
 
