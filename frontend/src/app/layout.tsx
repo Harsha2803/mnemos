@@ -1,6 +1,5 @@
 import type { Metadata, Viewport } from "next";
 
-import { AppShell } from "@/components/shell/AppShell";
 import { THEME_INIT_SCRIPT } from "@/lib/theme";
 
 import "./globals.css";
@@ -36,10 +35,14 @@ export default function RootLayout({
         */}
         <script dangerouslySetInnerHTML={{ __html: THEME_INIT_SCRIPT }} />
       </head>
+      {/*
+        No `AppShell` here. The shell belongs to the `(app)` route group, which
+        sits behind the auth boundary — `/signin` must render for somebody with
+        no session, and a sign-in form wrapped in a sidebar full of destinations
+        they cannot reach is a screen arguing with itself.
+      */}
       <body>
-        <Providers>
-          <AppShell>{children}</AppShell>
-        </Providers>
+        <Providers>{children}</Providers>
       </body>
     </html>
   );

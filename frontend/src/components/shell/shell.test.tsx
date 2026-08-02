@@ -3,10 +3,11 @@ import userEvent from "@testing-library/user-event";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import { axe } from "vitest-axe";
 
-// `usePathname` reads the App Router context, which only exists under a real
-// router. Standing in for the router is the smallest possible substitution: the
-// sidebar's only use of it is deciding which row is the current page.
-vi.mock("next/navigation", () => ({ usePathname: () => "/" }));
+// The App Router double lives in `vitest.setup.ts` from A0, because the shell
+// now contains components that *navigate* — `useRouter` throws outside a router,
+// where `usePathname` merely returned `null`. A file-local `vi.mock` here would
+// replace the global one wholesale rather than extend it, and the shell would
+// lose the router it needs.
 
 import compiledCss from "@/app/globals.css?inline";
 import { resolvedPx, setMediaQueries } from "@/test/harness";

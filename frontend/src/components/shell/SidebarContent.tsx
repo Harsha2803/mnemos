@@ -4,6 +4,7 @@ import { usePathname } from "next/navigation";
 
 import { List, ListItem } from "@/components/ui/List";
 
+import { AccountFooter } from "./AccountFooter";
 import { DESTINATIONS } from "./destinations";
 import { HealthIndicator } from "./HealthIndicator";
 
@@ -30,10 +31,13 @@ export function SidebarContent() {
         ))}
       </List>
 
-      {/* The footer is where the signed-in user lands at M3.4. Until then it
-          carries the one fact the shell can already state truthfully: whether
-          the API behind it is answering. */}
-      <div className="mt-auto border-t border-separator pt-2">
+      {/* The footer the shell reserved at F0, now carrying a real identity
+          rather than a placeholder: who is signed in, which tenant, and the way
+          out. The readiness line stays underneath it — "the API is unreachable"
+          and "you are signed out" send whoever reads them to different places,
+          and collapsing the two would cost real debugging time. */}
+      <div className="mt-auto flex flex-col gap-1 border-t border-separator pt-2">
+        <AccountFooter />
         <HealthIndicator />
       </div>
     </div>
