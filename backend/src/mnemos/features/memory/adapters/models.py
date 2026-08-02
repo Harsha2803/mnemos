@@ -29,6 +29,7 @@ from __future__ import annotations
 
 import uuid
 from datetime import datetime
+from typing import Any
 
 from pgvector.sqlalchemy import HALFVEC
 from sqlalchemy import (
@@ -69,7 +70,7 @@ class Subject(Base, TimestampMixin):
     kind: Mapped[str] = mapped_column(String(64), nullable=False)
     external_ref: Mapped[str] = mapped_column(Text, nullable=False)
     display_name: Mapped[str] = mapped_column(Text, nullable=False)
-    attributes: Mapped[dict] = mapped_column(
+    attributes: Mapped[dict[str, Any]] = mapped_column(
         JSONB, nullable=False, server_default=text("'{}'::jsonb")
     )
 
@@ -102,7 +103,7 @@ class Memory(Base):
 
     predicate: Mapped[str] = mapped_column(Text, nullable=False)
     object_text: Mapped[str] = mapped_column(Text, nullable=False)
-    object_json: Mapped[dict] = mapped_column(
+    object_json: Mapped[dict[str, Any]] = mapped_column(
         JSONB, nullable=False, server_default=text("'{}'::jsonb")
     )
 
@@ -113,7 +114,9 @@ class Memory(Base):
     # legitimately coexist (a preference "for project X" vs "for project Y").
     # Hashed because it participates in the exclusion constraint, and a hash is
     # a fixed-width equality key regardless of how baroque the scope gets.
-    scope: Mapped[dict] = mapped_column(JSONB, nullable=False, server_default=text("'{}'::jsonb"))
+    scope: Mapped[dict[str, Any]] = mapped_column(
+        JSONB, nullable=False, server_default=text("'{}'::jsonb")
+    )
     scope_hash: Mapped[str] = mapped_column(String(64), nullable=False)
 
     # --- world time ---

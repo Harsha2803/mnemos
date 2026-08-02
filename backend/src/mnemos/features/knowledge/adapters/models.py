@@ -20,6 +20,7 @@ from __future__ import annotations
 
 import uuid
 from datetime import datetime
+from typing import Any
 
 from pgvector.sqlalchemy import HALFVEC
 from sqlalchemy import (
@@ -111,7 +112,7 @@ class Document(Base, TimestampMixin):
     trust_tier: Mapped[int] = mapped_column(
         SmallInteger, nullable=False, server_default=sa_text("10")
     )
-    doc_metadata: Mapped[dict] = mapped_column(
+    doc_metadata: Mapped[dict[str, Any]] = mapped_column(
         JSONB, nullable=False, server_default=sa_text("'{}'::jsonb")
     )
 
@@ -224,7 +225,7 @@ class IngestJob(Base, TimestampMixin):
     status: Mapped[str] = mapped_column(
         String(32), nullable=False, server_default=sa_text("'queued'")
     )
-    payload: Mapped[dict] = mapped_column(
+    payload: Mapped[dict[str, Any]] = mapped_column(
         JSONB, nullable=False, server_default=sa_text("'{}'::jsonb")
     )
 

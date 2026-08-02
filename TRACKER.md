@@ -132,7 +132,7 @@ complete when both halves are (C12).
 | **M1** | Container stack, backend skeleton | — (no UI to build yet) | ✅ |
 | **M2** | Alembic + 41-table schema | — | ✅ |
 | **F0** | — | **App shell**: Next.js, design tokens, three-column layout, theming, base primitives, generated API client | ⬜ **next** |
-| **M3** | identity: ~~`3.4` JWT~~ · `3.5` API keys · `3.6` RBAC · `3.7` bootstrap | **Sign-in screen**, session handling, protected shell, API-key management, org switcher | 🟡 `3.1`–`3.4` ✅ backend; UI not started (§4 item 20) |
+| **M3** | identity: `3.4` JWT · `3.5` API keys · `3.6` RBAC · ~~`3.7` bootstrap~~ ✅ | **Sign-in screen**, session handling, protected shell, API-key management, org switcher (`3.7` has no UI half — see §5) | 🟡 `3.1`–`3.3` + `3.7` ✅ backend; UI not started |
 | **M4** | port memory/retrieval/context kernel to PG | **Context inspector** — the bundle viewer. The signature screen of the product | ⬜ |
 | **M5** | objectstore (MinIO) + connectors + Redis Streams | **Sources**: connect a source, browse it, watch events arrive | ⬜ |
 | **M6** | knowledge: extract, chunk, embed, ingest jobs | **Knowledge library** + upload + live job progress | ⬜ |
@@ -440,6 +440,116 @@ redundant:
 - **The forgeries are hand-built from `base64`/`hmac`**, including the malformed-claim ones
   — PyJWT refuses to *mint* a non-string `iss`, which is a courtesy on the signing side and
   no help at all on the verifying side.
+### ✅ M3.7 — `mnemosctl bootstrap`, verified 2026-08-02
+
+M3.2 and M3.3 built a provider seam and an OIDC round trip that **nothing could
+reach**: `ProviderFactory` reads `identity_provider` to decide which strategy to
+build, and the table was empty on every database in existence. `bootstrap` is the
+command that makes a fresh database one a person can sign in to.
+
+| File | What it is |
+|---|---|
+| `domain/roles.py` | `SystemRole` + `SYSTEM_ROLES` — `admin` (`*:*`), `analyst` (11 grants), `user` (5). In `domain/` because M3.6's guard must require against the same roles this seeds; a constant duplicated between writer and reader drifts. Resources are the feature packages of ADAPTATION §5 so every permission traces to the code that will enforce it; actions are exactly four (`read`/`write`/`invoke`/`manage`). Slugs are the realm's roles minus the `mnemos-` prefix — realm roles are global and need a namespace, a `role` row is already scoped by `org_id` |
+| `application/bootstrap.py` | `Bootstrap.execute()`, `BootstrapRequest` (validated at construction, so a future admin API inherits the rules), and the `BootstrapStore`/`BootstrapWriter` ports. **Both transactions are opened here**, so how much runs elevated is visible in the use case rather than buried in an adapter |
+| `adapters/bootstrap_store.py` | The SQLAlchemy side and the system's only `elevated_session()` call site |
+| `entrypoints/cli.py` | `mnemosctl bootstrap`, in `db doctor`'s argparse shape. Password from `MNEMOS_BOOTSTRAP_ADMIN_PASSWORD` or a double `getpass` prompt — **never an argument**, because argv is world-readable through `/proc/<pid>/cmdline`, lands verbatim in shell history and shows in `ps` |
+
+**The elevation is one statement wide.** `without_a_tenant()` inserts the org and
+nothing else — it is the only statement in the system that provably cannot carry
+`app.current_org`, because the value it would carry is the value it is generating.
+`scoped_to(org_id)` runs the other nine with the GUC bound, so a bug that computed
+the wrong `org_id` is rejected by the policy's `WITH CHECK` instead of committed
+by a privileged session left open because it was convenient.
+
+**Idempotency: create-if-absent, and nothing existing is ever updated.** Not the
+org name, not the admin's password hash, not `org.settings.default_provider`, not
+a role's grants. An upsert wired into a deploy script would reset the
+administrator's credential on every release, and would silently revert a default
+changed through the app. The report is read back from the rows rather than echoed
+from the request — the first draft printed the *requested* org name on a re-run
+that had not renamed anything, which is the command lying about a write it did not
+make. The cost of this choice is §4 item 20.
+
+**Evidence against the live stack.** The `mnemos` database was empty (`SELECT
+count(*) FROM org` → 0), so this is a genuine first bootstrap and not a re-run:
+
+```
+$ mnemosctl bootstrap --org-slug mnemos --org-name Mnemos \
+      --admin-email admin@mnemos.local --admin-name "Ada Admin" \
+      --oidc-issuer-public   http://localhost:8080/realms/mnemos \
+      --oidc-issuer-internal http://keycloak:8080/realms/mnemos
+
+org              : mnemos  (Mnemos) — created
+org id           : 019fc0a6-c844-7332-97cd-63a811916a39
+admin            : admin@mnemos.local — created
+admin role       : admin — bound
+
+  role         grants       status
+  admin        1 grants     created
+  analyst      11 grants    created
+  user         5 grants     created
+
+  provider     kind         status
+  internal     internal     created
+  keycloak     oidc         created
+
+default provider : keycloak — set
+sign in with     : org 'mnemos', email 'admin@mnemos.local'
+
+second run, different password and different --org-name:
+  every line reads "already present"; org name still 'Mnemos'
+```
+
+**The claim "nothing in M3.2/M3.3 can be exercised by hand" is now discharged**,
+on the running API at `:8000`, and the contrast is the evidence:
+
+```
+GET /api/v1/auth/oidc/authorize?org=nope
+  401 {"code":"unauthenticated","message":"authentication failed"}
+
+GET /api/v1/auth/oidc/authorize?org=mnemos
+  307 -> http://localhost:8080/realms/mnemos/protocol/openid-connect/auth
+         ?response_type=code&client_id=mnemos-web
+         &redirect_uri=http%3A%2F%2Flocalhost%3A8000%2Fapi%2Fv1%2Fauth%2Foidc%2Fcallback
+         &scope=openid+profile+email&state=...&code_challenge=...
+         &code_challenge_method=S256
+
+GET /api/v1/auth/oidc/authorize?org=mnemos&provider=internal
+  401 — a password provider reached through the OIDC endpoint is a misrouted
+        request, not a fallback to try
+```
+
+That redirect is **split horizon working off the seeded row**: the API discovered
+the endpoint over `issuer_internal` (`keycloak:8080`, which only resolves inside
+the compose network) and re-hosted it on `issuer_public` (`localhost:8080`, the
+only one a browser can reach). One URL in both columns would have produced a
+redirect no browser could follow.
+
+| Check | Result |
+|---|---|
+| `pytest` | **105 passed** in 13.1s (was 97; +8 in `tests/test_bootstrap.py`) |
+| `ruff check` + `ruff format --check` on the diff | clean — see §4 item 22 for why the *repo-wide* run is not |
+| `mypy --strict src/mnemos/core src/mnemos/features src/mnemos/entrypoints` | clean on everything new; the 19 remaining are all pre-existing (§4 item 19) |
+| `alembic check` | "No new upgrade operations detected" — **M3.7 needed no migration**, as expected: every column it writes was created by `0001` |
+| `gh auth status` | `Harsha2803` active, `harshaJKT` inactive (C9) |
+
+The two tests worth keeping deliberately:
+
+- `test_bootstrap_admin_can_authenticate_through_the_internal_provider` is the end
+  of the loop. It goes through `ProviderFactory` rather than constructing an
+  `InternalProvider` by hand, so it proves the seeded rows are the **shape** M3.2
+  expects rather than merely present — the failure a row-count assertion cannot
+  see, and the same lesson §4.7 records about `db doctor`.
+- `test_bootstrap_does_not_leave_an_elevated_session_open` opens with a **control**
+  asserting `current_user = mnemos_admin` inside `elevated_session()`. Without it,
+  the assertions after the bootstrap would also pass against an implementation
+  that never elevated at all, and the test would pin nothing.
+
+**UI slice: deliberately none, and this is the record C12 requires.** A CLI is its
+own interface. `bootstrap` is the command that runs *before* anybody can sign in,
+so an authenticated screen for it would be a screen nobody can reach, and an
+unauthenticated one would be an org-creation endpoint open to the internet. The
+same sentence is in `cli.py`'s module docstring, where the next reader will be.
 
 ### ✅ M3.2a — the API error boundary stopped leaking `details`, 2026-08-02
 
@@ -507,6 +617,8 @@ not a defect.
 | Migrations | `cd backend && alembic upgrade head \| downgrade base \| check` |
 | Tests | `cd backend && ../.venv/bin/python -m pytest` → **183 passed** (needs Docker + Keycloak; see §4.8) |
 | Fast tests | everything except `test_tenant_isolation.py` and `test_session_store.py` → **167 passed in 5.5s**, no Docker. The 2 live-Keycloak tests skip cleanly when the stack is down |
+| First-run setup | `mnemosctl bootstrap --org-slug <slug> --org-name <name> --admin-email <addr>`, password from `MNEMOS_BOOTSTRAP_ADMIN_PASSWORD` or the prompt. Idempotent; re-running is safe |
+| Bootstrapped locally | org `mnemos` / admin `admin@mnemos.local` / password `mnemos-dev-admin-password` — a **dev-stack credential**, in the same class as Keycloak's `admin`/`admin` and MinIO's `mnemos-dev-secret`, and never to be reused anywhere real |
 | Type check | `../.venv/bin/mypy --strict src/mnemos/core src/mnemos/features src/mnemos/entrypoints` — clean on everything M3 has touched; what still fails project-wide is listed in §4 item 19 |
 | DB roles | `migrate` connects as `mnemos` (owner). api/worker/realtime connect as `mnemos_app` |
 | Host ports | postgres `15432`, redis `6380`, api `8000`, realtime `8001`, keycloak `8080`, minio `9000/9001`, ollama `11434` |
@@ -617,15 +729,53 @@ Recorded so they are not rediscovered as surprises:
     the 2 live-Keycloak tests need a Keycloak service — so the workflow wants
     `services:` containers, or it must run the 92-test hermetic subset and accept that the
     Postgres and Keycloak tests only run locally.
-19. **`mypy --strict` is not clean repo-wide.** ~~Two `type-arg` errors in
-    `features/identity/adapters/models.py`~~ **fixed by M3.4**, which touched that file.
-    The remainder is the quarantined `_v1/` plus the same `dict`-without-parameters pattern
-    in the other features' `models.py` (chat, memory, knowledge) and one
-    `no-untyped-call` in `entrypoints/realtime/main.py`. None is in any recent diff; the
-    `models.py` ones are a two-line fix each whenever those files are next touched, and
-    `_v1/` is fixed by the M4 port.
+19. **`mypy --strict` is not clean repo-wide.** Two `type-arg` errors in
+    `features/identity/adapters/models.py` (M2, `dict` without parameters) and four files
+    in the quarantined `_v1/`. Neither is in any recent diff. The `models.py` pair is a
+    two-line fix whenever that file is next touched; `_v1/` is fixed by the M4 port.
+    **Updated 2026-08-02 (M3.7):** it is 19 errors, not 6, because `dict`-without-args
+    appears in **seven** `adapters/models.py` files, not one — plus one `no-untyped-call`
+    in `realtime/main.py` and one `no-any-return` in `routers/auth.py`. All pre-existing
+    and none in the M3.7 diff. `type_annotation_map` already maps `dict[str, Any]`, so the
+    fix is genuinely mechanical.
+20. **`bootstrap` does not reconcile an existing org with a changed `SYSTEM_ROLES`.**
+    The idempotency rule is create-if-absent and *never update* (§3, M3.7) — chosen
+    because the command takes a password and an upsert in a deploy script would reset the
+    administrator's credential on every release. The cost lands here: adding a grant to
+    `admin`/`analyst`/`user` in `domain/roles.py` reaches only orgs bootstrapped *after*
+    the change. Nothing depends on this yet because M3.6's guard does not exist, but it
+    must be solved before it does — either a data migration per grant change or a separate
+    `mnemosctl roles sync` that reconciles `is_system` roles only. A "just re-run
+    bootstrap" answer is the wrong one and would drag the password rewrite back with it.
+21. **`Database.elevated_session()` is not load-bearing today, and the M3.7 code says so
+    rather than implying otherwise.** `org` is the one table migration `0004` deliberately
+    left without a policy, so the bootstrap's org `INSERT` would also succeed on an
+    ordinary `mnemos_app` session; the elevation is not what makes it work. It is used
+    anyway, for one statement, because that statement is the only one in the system that
+    provably cannot carry `app.current_org` — naming that in code is worth more than
+    saving a statement — and because bringing `org` under a policy later (a parent org, a
+    reseller, a soft-delete) would otherwise break bootstrap at the worst possible moment.
+    The reasoning is in `adapters/bootstrap_store.py`'s module docstring, so a later reader
+    who notices the same thing finds the answer instead of deleting the call.
+22. **"`ruff` is clean" depends on which `ruff` you installed.** `pyproject.toml` pins
+    `ruff>=0.7` and `mypy>=1.13`; a fresh venv on 2026-08-02 resolved **ruff 0.16.1** and
+    **mypy 2.3.0**. Under that ruff, `ruff format --check .` wants to reformat **14
+    pre-existing files** (`_v1/` and `tests/`, none touched by M3.7) and `ruff check .`
+    reports 11 findings, 10 of them pre-existing. M3.7's gate was therefore run **scoped to
+    the changed files**, which is honest but is not the same claim earlier milestones made.
+    Two consequences: the CI workflow of item 18 must pin exact tool versions or it will
+    fail its first run on code nobody changed, and the repo-wide reformat is a one-commit
+    chore somebody should land on its own so it never contaminates a feature diff.
+23. **The Keycloak realm users are not local `app_user` rows.** `bootstrap` seeds exactly
+    one user, the admin, and it is a *password* account on the `internal` provider. The
+    three realm users (`admin@`, `analyst@`, `user@mnemos.local`) can complete the OIDC
+    round trip — M3.3 proved that — but land as an `AuthenticatedSubject` carrying an
+    external subject and no local user. Just-in-time provisioning is M3.4's decision
+    (§5), which is why bootstrap does not guess at it. The practical effect until then:
+    the seeded admin signs in with the **internal** provider by naming it, while the org
+    default sends the browser to Keycloak.
 
-20. **C12 is not satisfied for `M3.4`: the backend landed without its UI slice.** Written
+24. **C12 is not satisfied for `M3.4`: the backend landed without its UI slice.** Written
     down rather than implied, because "the backend landed and the UI is next" is exactly
     the drift C12 exists to prevent. The reason is sequencing and it is not an excuse
     that generalises: `frontend/` is still an empty directory, so `F0` (the app shell)
@@ -633,14 +783,7 @@ Recorded so they are not rediscovered as surprises:
     `M3.4`** are the outstanding work and remain fully specified there. Until they land,
     the only way to exercise a login end to end is by hand or through the test suite.
 
-21. **Nothing seeds an org, so the login path cannot be exercised by hand out of the box.**
-    `mnemosctl bootstrap` is `M3.7`. The live evidence in §3 needed an `org` row plus an
-    `identity_provider` row inserted directly, and they were removed afterwards to leave
-    the shared dev stack as found. Two consequences: the running stack has **no signable-in
-    tenant**, and `M3.7` is now a prerequisite for the `M3.4` frontend half rather than a
-    tidy-up at the end of M3. Consider pulling it forward.
-
-22. **The refresh window slides; there is no absolute session lifetime.** Every rotation
+25. **The refresh window slides; there is no absolute session lifetime.** Every rotation
     sets `expires_at = now + refresh_token_ttl_s`, so an actively used session never
     reaches an end — fourteen days is an *idle* timeout, not a maximum. Capping it needs
     the chain root's `issued_at`, which means either a walk to the root on every refresh or
@@ -648,7 +791,7 @@ Recorded so they are not rediscovered as surprises:
     it. Pinned by `test_the_refresh_window_slides_on_every_rotation` so it stays a decision
     somebody made rather than one nobody noticed.
 
-23. **A user who deliberately opens two tabs mid-refresh revokes their own session.** This
+26. **A user who deliberately opens two tabs mid-refresh revokes their own session.** This
     is the cost of treating a lost compare-and-set as reuse, and it is the right trade —
     the alternative is two live chains from one credential, which is the state the family
     kill exists to prevent. It does mean the frontend interceptor in §5 item 8 is a
@@ -656,13 +799,14 @@ Recorded so they are not rediscovered as surprises:
     has the same obligation. If it proves painful in practice the fix is a short grace
     window keyed on `(session_id, presented_hash)` — deliberately not built on speculation.
 
-24. **`ruff check` over the whole repo reports 10 findings on `main`, not 1.** §4 item 9
-    recorded a single `RUF059` in `tests/test_invariants.py`; with ruff 0.16.1 the count is
-    ten — nine `F401`/`SIM905`/`RUF100` in the quarantined `_v1/` and that one `RUF059`.
-    All pre-existing and confirmed present on `bb097ca` before any M3.4 change. `_v1/` has
-    per-file-ignores that predate these rules. Not fixed here because `_v1/` is rewritten by
-    the M4 port and reformatting it now would make that port an unreadable diff (the reason
-    already recorded in `pyproject.toml`), but the tracker should not keep claiming "one".
+27. **M3.4's original §4 items 21 and 24 are resolved, not deleted.** Item 21 ("nothing
+    seeds an org") is discharged by `M3.7`, which merged first and seeded org `mnemos`;
+    the prerequisite it warned about is satisfied. Item 24 (repo-wide `ruff` reports 10
+    findings, not the 1 that item 9 claims) is the same finding as item 22 above, reached
+    independently by two agents on two branches — which is itself the evidence that it is
+    real and that the repo-wide format chore is overdue. Item 9's "one finding" claim is
+    wrong and both of those items supersede it.
+
 
 ---
 
@@ -851,11 +995,16 @@ Frontend, remaining:
   **no** explicit guard is the one that matters: it must fail closed.
   **UI:** the shell hides what the principal cannot reach and renders a real 403 state for
   what it reaches anyway. Hiding a control is a courtesy, never the control itself.
-- **`M3.7` `mnemosctl bootstrap`** — first org, admin user, system roles, through
-  `Database.elevated_session()` because the first insert has no org to scope to. Seed
-  `org.settings.default_provider` and the `identity_provider` rows; without them nothing
-  in M3.2/M3.3 can be exercised by hand.
-  **UI:** none. A CLI is its own interface — say so rather than inventing a screen.
+- ~~**`M3.7` `mnemosctl bootstrap`**~~ **✅ done 2026-08-02** — first org, admin user,
+  system roles, both `identity_provider` rows and `org.settings.default_provider`. The
+  elevation is one statement wide: only the org insert runs in
+  `Database.elevated_session()`, and the other nine run under the tenant GUC. Idempotent
+  as create-if-absent with no updates. Evidence, the live run and the discharged
+  "nothing can be exercised by hand" claim are in §3; the costs are §4 items 20–23.
+  **UI: deliberately none, and that is the C12 record.** A CLI is its own interface. This
+  command runs *before* anybody can sign in, so an authenticated screen for it would be
+  one nobody can reach and an unauthenticated one would be org creation open to the
+  internet. Stated here rather than left implied, as C12 requires.
 
 **Acceptance for M3 overall**
 
