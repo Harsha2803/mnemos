@@ -327,3 +327,79 @@ jobs:
         if: steps.check.outputs.exists == 'true'
         working-directory: frontend
         run: npm run build
+
+  # ------------------------------------------------------------------------
+  # The gate the other two jobs cannot be: does the system actually start?
+  #
+  # Added after `main` shipped an API that crash-looped on boot (TRACKER §4
+  # item 32). M3.4 introduced a minimum length for `jwt_secret` while
+  # `docker-compose.yml` still carried a 19-byte one; 191 tests passed either
+  # side of it, because every one of them constructs the config object directly
+  # and none reads the compose file. The lesson is old here — `db doctor`
+  # (§4 item 7) and the error boundary (§3, M3.2a) are the same shape — and it
+  # is always the same fix: assert the control where it takes effect.
+  #
+  # So this job builds the images and starts the stack, exactly as a person
+  # cloning the repo would, and asks the two questions that matter: does the
+  # API become ready, and does the web app serve. Nothing is mocked, nothing is
+  # substituted; a fake stack would only prove the fake starts.
+  compose:
+    name: compose — the stack builds and starts
+    runs-on: ubuntu-latest
+    timeout-minutes: 30
+    steps:
+      - uses: actions/checkout@v4
+
+      # `ollama` pulls ~2GB and no smoke assertion needs a model loaded, so it
+      # is the one service excluded. Everything the API depends on to reach
+      # `ready` is included, which is what the readiness probe is asserting.
+      - name: Build and start the stack
+        run: |
+          docker compose up -d --build \
+            postgres redis minio keycloak migrate api worker realtime web
+
+      - name: Wait for /readyz
+        run: |
+          for i in $(seq 1 60); do
+            code=$(curl -s -m 5 -o /dev/null -w '%{http_code}' http://localhost:8000/readyz || true)
+            if [ "$code" = "200" ]; then
+              echo "api ready after ${i} attempt(s)"
+              curl -s http://localhost:8000/readyz
+              exit 0
+            fi
+            sleep 5
+          done
+          echo "::error::api never became ready"
+          exit 1
+
+      - name: Wait for the web app
+        run: |
+          for i in $(seq 1 60); do
+            code=$(curl -s -m 5 -o /dev/null -w '%{http_code}' http://localhost:3000 || true)
+            if [ "$code" = "200" ]; then
+              echo "web serving after ${i} attempt(s)"
+              exit 0
+            fi
+            sleep 5
+          done
+          echo "::error::web never served"
+          exit 1
+
+      # The CLI is how an operator creates the first tenant, and it lives in the
+      # api image. `--help` proves the subcommand shipped; running bootstrap for
+      # real is a separate concern and needs a password this job should not hold.
+      - name: mnemosctl is present in the image
+        run: docker compose exec -T api mnemosctl --help
+
+      # Runs whatever the outcome: a failure without logs is a failure nobody
+      # can act on, and this job's whole purpose is catching what unit tests
+      # structurally cannot see.
+      - name: Service state and logs
+        if: always()
+        run: |
+          docker compose ps -a
+          docker compose logs --tail 80
+
+      - name: Tear down
+        if: always()
+        run: docker compose down -v
