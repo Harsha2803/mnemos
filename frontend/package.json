@@ -2,7 +2,7 @@
   "name": "mnemos-web",
   "version": "0.2.0",
   "private": true,
-  "description": "Mnemos app shell — the frontend every later UI slice lands on.",
+  "description": "Mnemos app shell \u2014 the frontend every later UI slice lands on.",
   "scripts": {
     "dev": "next dev",
     "build": "next build",
@@ -51,6 +51,6 @@
     "sharp": "^0.35.3"
   },
   "engines": {
-    "node": ">=22"
+    "node": "^20.19.0 || >=22.12.0"
   }
 }
