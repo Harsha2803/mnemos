@@ -166,26 +166,38 @@ Every tenant-scoped table: `org_id` + RLS `FORCE` on `app.current_org` GUC.
 
 ## 7. Milestones
 
-| ID | Milestone | Exit criteria |
+| ID | Backend half | Frontend half (same milestone — see TRACKER §3.0) |
 |---|---|---|
-| **M1** | Container stack + backend skeleton | `docker compose up` → all healthy; `/healthz` 200 |
-| **M2** | Alembic + full schema | `alembic upgrade head` clean; downgrade tested |
-| **M3** | Identity: internal auth, JWT, RBAC, tags, OIDC via Strategy/Factory, API keys | Keycloak login → platform JWT; RLS blocks cross-org |
-| **M4** | Port memory/retrieval/context kernel to Postgres + pgvector | Bitemporal tests pass on PG; ACL pushdown in EXPLAIN |
-| **M5** | objectstore (MinIO) + connectors (port/factory) + Redis Streams events | Upload → bucket → event → consumer |
-| **M6** | Knowledge: extract, chunk, embed, ingest jobs w/ heartbeat + stuck detection | PDF upload → searchable; killed worker → job resumes |
-| **M7** | LLM gateway (Ollama) + versioned prompt store + cost ledger | Streaming generation; prompt version switch without redeploy |
-| **M8** | Chat: sessions, messages, SSE streaming, bookmarks, feedback, folders | Multi-turn conversation persists |
-| **M9** | RAG flow + per-message context inspector | Answer with citations → click → EXPLAIN |
-| **M10** | NL2SQL: introspection, schema-as-claims, AST guard, read-only role, narration | DML rejected in CTE/UNION; unauthorized table never in bundle |
-| **M11** | MCP tool runtime: registry, calling, per-user creds, approval gates | Tool call denied by trust tier names the offending source |
-| **M12** | Router: classify → RAG / NL2SQL / tools / memory / chat | Correct flow chosen per message; shown in UI |
-| **M13** | Next.js frontend: chat, memory, knowledge, data, tools, inspector, cost | All pages functional against the API |
-| **M14** | Realtime WS, nginx, e2e verification, docs, push | Full stack from clean clone |
+| **M1** | Container stack + backend skeleton | — |
+| **M2** | Alembic + full schema | — |
+| **F0** | — | App shell: Next.js, design tokens, three-column layout, theming, primitives, generated client |
+| **M3** | Identity: internal auth, JWT, RBAC, tags, OIDC, API keys | Sign-in, session handling, protected shell, API-key management |
+| **M4** | Port memory/retrieval/context kernel to PG + pgvector | **Context inspector** — admitted vs excluded and why, budget spend, losing candidates |
+| **M5** | objectstore (MinIO) + connectors + Redis Streams events | Sources: connect, browse, watch events |
+| **M6** | Knowledge: extract, chunk, embed, jobs w/ heartbeat | Knowledge library, upload, live job progress incl. stuck-job state |
+| **M7** | LLM gateway (Ollama) + versioned prompts + cost ledger | Prompt manager (version diff, activate) + cost dashboard |
+| **M8** | Chat: sessions, messages, SSE, bookmarks, feedback, folders | **The chat surface** — token streaming, folders, bookmarks |
+| **M9** | RAG flow + citations | Citations inline, click-through into the M4 inspector |
+| **M10** | NL2SQL: introspection, AST guard, read-only role, narration | SQL panel: generated SQL, result grid, narration, visible guard refusals |
+| **M11** | MCP tool runtime: registry, calling, creds, approval gates | Tool console + approval dialogs; denials name the offending source on screen |
+| **M12** | Router: classify → RAG / NL2SQL / tools / memory / chat | Flow indicator per message, and why it was chosen |
+| **M13** | ~~Next.js frontend~~ — **dissolved** into F0 + the slices above | — |
+| **M14** | Realtime WS, nginx, e2e verification, docs | Live streaming/presence polish; Playwright over the whole stack |
 
-**Current position: M1 and M2 complete and verified. M3 is in progress — its RLS
-prerequisite, `M3.1` (domain types), `M3.2` (the provider seam) and `M3.3` (the OIDC
-round trip, proved against the live realm) are done; deliverables 4–7 remain. See §8.**
+**Exit criterion for every milestone from F0 onward: both halves land.** A milestone with
+an untouched `frontend/` is not complete (TRACKER C12). `M13` used to be "build every
+screen at the end"; that guaranteed the APIs would be shaped without a consumer and that
+the whole UI would land as one unreviewable drop, so it was dissolved on 2026-08-02.
+
+The UI follows [`DesignSystem.md`](DesignSystem.md), which is normative. It is Mnemos's
+own system — its own accent, neutrals and identity — informed by Apple's design resources
+for typography, spatial rhythm, materials and motion character. §0 there records which
+Apple assets are off-limits (SF Pro as a webfont, SF Symbols) and what is used instead.
+
+**Current position: M1, M2 and `M3.1`–`M3.3` are merged to `main` (PR #1, PR #2 at
+`98fe47a`). The next task is `F0`, the frontend foundation — see
+[TRACKER §5](../TRACKER.md#5-next-task). `M3.4`–`M3.7` follow, each now carrying a UI
+slice. See §8.**
 
 M3's exit criterion "RLS blocks cross-org" turned out to be unmet by M2 rather than merely
 untested; that is written up in §8 and in [TRACKER §3](../TRACKER.md#3-current-state--what-is-actually-built).
