@@ -1,32 +1,122 @@
 # Mnemos
 
-**Context is a compiled artifact, not a concatenated string.**
+**An enterprise AI assistant — chat over your documents (RAG), your database (NL2SQL) and
+your tools (MCP). Multi-tenant, authenticated, audited.**
 
-Mnemos is a working RAG system built around one idea: the prompt you hand an LLM should
-be *planned and budgeted*, not string-joined and truncated. It takes a question, a
-governance policy and a hard token budget, and emits a **context bundle** — a
-content-addressed prompt with a provenance manifest in which every included passage
-records its source, its score, the operator that retrieved it, and the authorization
-rule that admitted it.
+One conversation surface. Ask it something and a router decides whether the answer needs
+your documents, your database, a tool, memory, or a combination — then answers with
+citations you can click into. Underneath it is per-tenant row-level security, real OIDC,
+RBAC, an audit trail and a cost ledger, because that is what separates an assistant from a
+demo.
 
-It ships with a benchmark that measures the difference against a naive concatenated
-prompt on the same corpus, same budget, same embedder.
+Everything is free and self-hosted: Postgres + pgvector, Redis, MinIO, Keycloak and Ollama
+in containers. No API key is required for any capability.
 
-```bash
-git clone https://github.com/Harsha2803/mnemos && cd mnemos
-python3 -m venv .venv && .venv/bin/pip install -e .
-.venv/bin/mnemosctl serve        # → http://127.0.0.1:8000
-.venv/bin/mnemosctl bench        # → the table below
-```
-
-No API key. No model download in the default path. Runs offline.
+It carries **one deep technical claim, and it is measured rather than asserted**: the
+prompt handed to the model is a *compiled, budgeted artifact you can open*, not a
+concatenated string. [The numbers are below.](#the-deep-technical-claim-context-is-a-compiled-artifact)
 
 ---
 
-## The result
+## What is actually built today
+
+The gap between what `docs/` describes and what runs is stated here rather than left for
+you to discover. `docs/` is the full target architecture; this is the honest status.
+
+**Built and running:**
+
+| | |
+|---|---|
+| **The stack** | Nine containers — postgres (pgvector), redis, minio, keycloak, ollama, api, worker, realtime, web — plus a one-shot `migrate` that runs `alembic upgrade head` and must exit successfully before the API starts. Healthchecks on the seven that serve a port |
+| **The schema** | 41 tables across identity, memory, knowledge, chat, context, datasources, tools, prompts and observability. **40 with `FORCE` row-level security**, enforced against an unprivileged app role and proven by a test against a real Postgres — not merely declared in the catalogue |
+| **Identity** | Full OIDC round trip against Keycloak (PKCE S256, split-horizon issuers), internal password auth behind the same provider seam, platform JWT with refresh-token rotation and family revocation, and `mnemosctl bootstrap` to create the first org and admin |
+| **CI** | Every PR runs pytest against a real Postgres and a real Keycloak, ruff, `mypy --strict`, `alembic check`, and a frontend gate of lint + `tsc` + tests + a real `next build` |
+| **The app shell** | A themed, accessible three-column Next.js app at `http://localhost:3000`, with a generated API client and one real call end to end |
+
+**Not built yet.** Stated plainly, because a README that lets you assume otherwise is
+lying by omission:
+
+- **There is no chat surface.** No conversation UI, no LLM gateway wired in, no streaming
+  endpoint. Ollama is running and nothing talks to it yet.
+- **There is no RAG in this stack.** Nothing uploads, extracts, chunks or embeds. The
+  `chunk` and `chunk_embedding` tables exist and are empty. The retrieval and compiler code
+  that will fill them is real and tested, but it is quarantined in `backend/src/mnemos/_v1/`
+  on SQLite — it is the v0.1 kernel that produced the benchmark below, and it has not been
+  ported yet.
+- **There is no NL2SQL.** The `mnemos_analytics` warehouse is seeded and its `mnemos_ro`
+  role is proven read-only, but nothing generates SQL against it.
+- **There is no sign-in screen, no tool runtime, no agent flow, no prompt store, no cost
+  dashboard and no context inspector content.**
+
+**Phase A builds the product surface** — sign-in, then chat, then documents, then the
+database, then the router. The milestone plan is [`TRACKER.md`](TRACKER.md) §3.0 and the
+architecture is [`docs/ADAPTATION.md`](docs/ADAPTATION.md); `TRACKER.md` §3 is the
+authoritative list of what is built, with the evidence for each claim.
+
+---
+
+## Quickstart
+
+```bash
+git clone https://github.com/Harsha2803/mnemos && cd mnemos
+docker compose up -d                    # nine services, web included
+docker compose exec api mnemosctl bootstrap \
+    --org-slug mnemos --org-name Mnemos --admin-email admin@mnemos.local
+```
+
+`bootstrap` reads the admin password from `MNEMOS_BOOTSTRAP_ADMIN_PASSWORD` or prompts for
+it — never from an argument, because `argv` is world-readable through `/proc` and lands in
+shell history. It is idempotent: a second run creates whatever is missing and changes
+nothing that exists.
+
+| | Where |
+|---|---|
+| The app | `http://localhost:3000` |
+| API + Swagger | `http://localhost:8000` · `http://localhost:8000/docs` |
+| Keycloak | `http://localhost:8080` (`admin`/`admin`) |
+| MinIO console | `http://localhost:9001` (`mnemos`/`mnemos-dev-secret`) |
+| Postgres · Redis | `localhost:15432` · `localhost:6380` — shifted off the default ports so they do not clash with a host installation |
+
+Check it came up:
+
+```bash
+curl http://localhost:8000/readyz             # {"status":"ready","checks":{"postgres":"ok","redis":"ok"}}
+docker compose exec api mnemosctl db doctor   # 41 tables, 40 with FORCE row-level security
+```
+
+Those credentials are dev-stack credentials in the same class as Keycloak's `admin`/`admin`.
+They are never to be reused anywhere real.
+
+---
+
+## The deep technical claim: context is a compiled artifact
+
+The prompt you hand an LLM should be *planned and budgeted*, not string-joined and
+truncated. Mnemos takes a question, a governance policy and a hard token budget, and emits
+a **context bundle** — a content-addressed prompt with a provenance manifest in which every
+included passage records its source, its score, the operator that retrieved it, and the
+authorization rule that admitted it.
+
+It ships with a benchmark measuring the difference against a naive concatenated prompt on
+the same corpus, same budget, same embedder.
+
+> ### These numbers were measured on the v0.1 SQLite kernel
+>
+> They come from `backend/src/mnemos/_v1/`, which runs on SQLite and numpy and is
+> quarantined from the new stack. **The kernel finishes its port to Postgres + pgvector in
+> milestone `C4`, and the benchmark must be re-run and these numbers replaced at that
+> point** — see [TRACKER §1](TRACKER.md#1-what-this-is-30-seconds). Until then they are
+> honest about what they measured and silent about the system as it now stands.
+>
+> Reproduce the zero-download arm in seconds:
+>
+> ```bash
+> python3 -m venv .venv && .venv/bin/pip install -e "./backend[dev]"
+> .venv/bin/python -m mnemos._v1.cli bench --budgets 800,1500,3000
+> ```
 
 Same corpus (8 documents, 56 chunks, 8 memory claims), same 23 questions, same embedder,
-same token budget. `mnemosctl bench --embedder neural`, budget 800:
+same token budget. `bench --embedder neural`, budget 800:
 
 | | naive concat | **compiled bundle** |
 |---|---|---|
@@ -116,10 +206,13 @@ Stated plainly, because a benchmark that only reports its wins is marketing:
   but it is not a public benchmark and these numbers are not comparable to one.
 - **Duplicate waste rises at budget 3000** (14%) because more near-threshold content is
   admitted. Dedup is a similarity threshold, not a guarantee.
+- **There is no LLM in the loop.** The benchmark measures *what reaches the model*, not
+  answer correctness. That arm becomes possible once the gateway lands in `A1`, and it
+  must not replace the deterministic metrics.
 
 ---
 
-## How it works
+## How the compiler works
 
 Six phases, modelled on a query compiler:
 
@@ -158,14 +251,15 @@ Greedy on utility density with per-section floors and ceilings. Floors are why a
 high-scoring document cannot evict the entire memory section — a failure that presents
 as amnesia while retrieval "worked correctly". The assembled prompt is then *measured*
 and re-allocated if it overshoots, with a final hard trim, so `tokens ≤ budget` is an
-invariant rather than an estimate. A randomised test asserts it over 300 configurations.
+invariant rather than an estimate. A randomised test asserts it over 300 configurations,
+and the new schema backs it with a CHECK constraint on `context_bundle`.
 
 ### `EXPLAIN`
 
 Every compilation is introspectable:
 
 ```bash
-mnemosctl ask "How many days of unused leave can I carry over?" --explain
+.venv/bin/python -m mnemos._v1.cli ask "How many days of unused leave can I carry over?" --explain
 ```
 
 Actual output, abridged:
@@ -203,26 +297,23 @@ out of tokens.
 `binding_constraint` names the resource that actually ran out. That single field turns
 "the answer was bad" into "you were token-bound — raise the budget."
 
----
+**This is what becomes the context inspector in `C4`**, as a panel in the app rather than
+a JSON dump: open any answer and see what was admitted, what was excluded and why, and
+the token spend against budget.
 
-## The localhost inspector
+### The v0.1 inspector
+
+Until `C4` lands, the compiler has its own standalone UI, served from the quarantined
+kernel and unconnected to the container stack:
 
 ```bash
-mnemosctl serve --embedder neural     # or omit for the zero-download default
+.venv/bin/python -m mnemos._v1.cli serve      # → http://127.0.0.1:8000
 ```
 
 Side-by-side naive vs compiled for any question, with obsolete / restricted / superseded
 content highlighted in red in both prompts, the full provenance manifest, and the
-`EXPLAIN` tree.
-
-| Endpoint | Purpose |
-|---|---|
-| `GET /` | The inspector UI |
-| `POST /v1/compare` | Both arms + metrics for one question |
-| `POST /v1/context:compile` | Compile a bundle |
-| `GET /v1/memory` | All claims, including retracted, with belief state |
-| `POST /v1/memory` | Write a claim — response reports what it superseded |
-| `GET /readyz` | Corpus and embedder status |
+`EXPLAIN` tree. Note that it binds port 8000, which the containerised `api` also uses —
+run one or the other.
 
 ---
 
@@ -235,46 +326,53 @@ content highlighted in red in both prompts, the full provenance manifest, and th
 | Budget is verified against the assembled prompt, not estimated | Section headers, trust fences and citation labels are real tokens. Estimating them makes the guarantee approximate, and an approximate guarantee is not one. |
 | Conflict losers are demoted, not dropped | Silently discarding a contradiction is how a system becomes confidently wrong. |
 | Default embedder needs no download | The benchmark must reproduce on any machine in seconds. The neural adapter implements the identical port and is one flag away. |
-| SQLite, not Postgres | Single-node, zero-setup, and the bitemporal logic is identical. The scaling story is in `docs/`, and it is labelled as design intent, not as something exercised. |
+| The v0.1 kernel was SQLite; the platform is Postgres + pgvector | SQLite was the right call for a single-node kernel with zero setup, and the bitemporal logic is identical either way. The platform needs what SQLite cannot give: real row-level security, real exclusion constraints and real migrations. That is why the kernel is a *port* (`A2` and `C4`) rather than a rewrite. |
+| NL2SQL targets a separate database with a read-only role | The AST guard becomes the second line of defence rather than the only one. A guard that is the only defence is one parser bug away from a write. |
+| Zero paid dependencies in the default path | The benchmark must reproduce on any machine, and a portfolio piece that needs somebody's API key is a portfolio piece nobody runs. |
 
 ---
 
 ## Layout
 
 ```
-src/mnemos/
-  core.py        ids · clock · tokenizer · canonical digest · trust tiers · ACL predicate
-  embed.py       Embedder port + hashing (default) and sentence-transformers adapters
-  store.py       SQLite: bitemporal claims, supersession edges, chunks, doc currency
-  retrieval.py   operators w/ ACL pushdown · RRF · utility calibration · dedup · conflicts
-  compiler.py    ▲ the six phases, the allocator, EXPLAIN ▲
-  baseline.py    the control arm — three naive variants
-  ingest.py      PDF/text extraction + structure-aware chunking with char offsets
-  dataset.py     the evaluation corpus and gold labels
-  bench.py       the metrics harness
-  app.py         FastAPI + the inspector UI
-  cli.py         mnemosctl
-tests/           23 tests, each guarding a claim made above
-docs/            architecture, ADRs, threat model, roadmap
+backend/src/mnemos/
+  core/           config · errors · logging · security · ids · clock · shared enums
+  platform/       async engine + tenant-scoped session · redis · models registry
+  features/       identity · memory · retrieval · context · knowledge · connectors
+                  datasources · chat · tools · prompts · observability
+  flows/          rag · nl2sql · agent · router
+  entrypoints/    api (FastAPI) · worker · realtime (WS) · cli.py (mnemosctl)
+  migrations/     alembic, one logical change per revision, reversible
+  _v1/            ▲ the v0.1 kernel — compiler, retrieval, benchmark, on SQLite ▲
+                    quarantined; ported in A2 (retrieval) and C4 (memory + compiler)
+backend/tests/    the suite — identity, tenant isolation, tokens, invariants
+frontend/src/     Next.js app router · components · generated API client
+deploy/           postgres init (extensions + analytics warehouse) · keycloak realm
+docs/             architecture, design system, threat model, 12 ADRs
+bench_results/    the JSON behind the tables above
 ```
 
-Run the suite:
+Run the gates the way CI does:
 
 ```bash
-.venv/bin/python -m pytest -q       # 23 passed
+cd backend  && ../.venv/bin/python -m pytest      # 183 passed (needs Docker + Keycloak)
+cd frontend && npm ci && npm run lint && npx tsc --noEmit && npm run test && npm run build
 ```
 
 ---
 
 ## Relationship to `docs/`
 
-`docs/` describes the full target architecture — Postgres + pgvector, Neo4j, an agent
-runtime, an MCP tool service, a knowledge graph. **This repository implements the
-kernel and the RAG flow of that design**, on SQLite and numpy, as a single-node system.
+`docs/` (Architecture, SystemDesign, DatabaseDesign, APIContract, ThreatModel, DesignSystem
+and 12 ADRs) describes the **full target architecture**. This repository implements the
+foundation of it — the stack, the schema with tenant isolation in force, identity, CI and
+the app shell — plus the v0.1 kernel that produced the benchmark above.
 
-The documents are honest about the gap: scaling stages beyond single-node are labelled
-as design intent rather than as anything measured. See
-[`TRACKER.md`](TRACKER.md) for exactly what is built versus planned.
+The gap is deliberate and is stated rather than hidden: scaling stages beyond single-node
+are labelled as design intent rather than as anything measured, and the "Not built yet"
+list near the top of this file is the current, specific version of the same admission. See
+[`TRACKER.md`](TRACKER.md) §3 for exactly what is built, with evidence, and §3.0 for the
+order the rest arrives in.
 
 ## License
 
