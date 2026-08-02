@@ -54,7 +54,7 @@ def _flow(request: Request) -> OidcLoginFlow:
     Not a `Depends` factory: rebuilding it per request would rebuild the JWKS and
     discovery caches per request, which is precisely what they exist to avoid.
     """
-    flow = getattr(request.app.state, "oidc_login", None)
+    flow: OidcLoginFlow | None = getattr(request.app.state, "oidc_login", None)
     if flow is None:  # pragma: no cover - only reachable if the lifespan changed
         msg = "OIDC login flow is not configured"
         raise RuntimeError(msg)

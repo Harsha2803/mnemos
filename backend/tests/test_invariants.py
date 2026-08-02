@@ -199,7 +199,7 @@ def test_allocator_respects_budget_under_random_inputs():
             for i in range(rng.randint(1, 60))
         ]
         calibrate_utility(cands)
-        admitted, _, report = allocate(cands, sections, budget, tok, reserved=0)
+        admitted, _, _report = allocate(cands, sections, budget, tok, reserved=0)
         assert sum(c.token_count for c in admitted) <= budget
         for spec in sections:
             used = sum(c.token_count for c in admitted if c.section == spec.name)
