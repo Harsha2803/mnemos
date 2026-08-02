@@ -1,0 +1,329 @@
+# CI — the four gates that, until now, were run by hand and pasted into merge
+# commits (TRACKER.md §4 item 18). This workflow runs the same four commands as
+# a real control: it can fail a PR, and `gh pr checks` reports something.
+#
+#   1. pytest             — including the tenant-isolation suite (testcontainers)
+#                            and the 2 live-Keycloak tests (a real Keycloak is
+#                            stood up below, realm imported, so they run for
+#                            real rather than skip).
+#   2. ruff check + ruff format --check
+#   3. mypy --strict       — scoped to core/features/entrypoints; see the job
+#                            step for exactly what that excludes and why.
+#   4. alembic check
+#
+# Constraint C1 (no paid or cloud-account-requiring dependency): every image
+# here is free and self-hosted (pgvector/pgvector, quay.io/keycloak/keycloak),
+# every action is pinned to a major-version tag, and nothing needs a secret.
+
+name: CI
+
+on:
+  pull_request:
+  push:
+    branches: [main]
+  workflow_dispatch:
+
+# A push that supersedes an in-flight run (another push to the same PR branch,
+# or a second push to main) cancels the superseded run rather than burning
+# runner minutes on a result nobody will read.
+concurrency:
+  group: ${{ github.workflow }}-${{ github.ref }}
+  cancel-in-progress: true
+
+permissions:
+  contents: read
+
+jobs:
+  backend:
+    name: backend — pytest, ruff, mypy --strict, alembic check
+    runs-on: ubuntu-latest
+
+    # Long-lived for the whole job, used by the `alembic check` steps at the
+    # end. `pytest` does NOT use this container — test_tenant_isolation.py
+    # starts its own throwaway Postgres via testcontainers (see
+    # backend/tests/conftest.py), on the grounds that tenant isolation is a
+    # property of a real Postgres and a shared, already-migrated instance
+    # would not prove the same thing. Docker is available on ubuntu-latest
+    # runners, so that container starts the same way it does on a laptop.
+    #
+    # This one exists only so `alembic check` has somewhere durable to point
+    # at after the testcontainers instance from the pytest step is long gone.
+    # pgvector/pgvector:pg16 is the same image docker-compose.yml uses — plain
+    # `postgres` does not ship the `vector` extension.
+    services:
+      postgres:
+        image: pgvector/pgvector:pg16
+        env:
+          POSTGRES_USER: mnemos
+          POSTGRES_PASSWORD: mnemos
+          POSTGRES_DB: mnemos
+        ports:
+          - 5432:5432
+        options: >-
+          --health-cmd "pg_isready -U mnemos -d mnemos"
+          --health-interval 5s
+          --health-timeout 3s
+          --health-retries 20
+
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.12"
+          cache: pip
+          cache-dependency-path: backend/pyproject.toml
+
+      - name: Install backend + dev extra
+        run: pip install -e "./backend[dev]"
+
+      # ---- fast, docker-free gates first, so a trivial lint break fails in
+      # seconds instead of after Keycloak and testcontainers have booted. ----
+
+      - name: ruff check
+        working-directory: backend
+        run: |
+          # `_v1/` is the quarantined v0.1 kernel, preserved byte-for-byte
+          # until the M4 port (see pyproject.toml's per-file-ignores comment:
+          # "Reformatting it now would make that port a diff nobody can
+          # read, so its pre-existing lint findings are carried rather than
+          # fixed"). Excluding it here is that same policy applied to the
+          # rules its per-file-ignore list does not already cover (F401 in
+          # particular). Nothing outside `_v1/` is excluded, so a new finding
+          # anywhere else in `src/` or `tests/` still fails the build.
+          ruff check . --exclude src/mnemos/_v1
+
+      - name: ruff format --check
+        working-directory: backend
+        run: |
+          # Same `_v1/` exclusion as above, plus `tests/test_invariants.py`:
+          # it is the hermetic test file for the same frozen v0.1 kernel (23
+          # of its tests are the ones TRACKER.md counts as "_v1 tests"), was
+          # never reformatted when the rest of the tree adopted `ruff
+          # format`, and reformatting it now would be a ~300-line diff with
+          # zero behavioural content, landing in a CI-only PR. It is still
+          # linted (see the step above) — only formatting is exempted.
+          ruff format --check . --exclude src/mnemos/_v1 --exclude tests/test_invariants.py
+
+      - name: mypy --strict
+        working-directory: backend
+        run: |
+          # Scope is exactly core/features/entrypoints, i.e. everything
+          # except the quarantined `_v1/` kernel (fixed at the M4 port —
+          # currently 6 pre-existing strict errors in 5 files, none of them
+          # reachable from this scope since `_v1` is simply never named
+          # below) and `platform/`, which is covered transitively wherever
+          # `features`/`entrypoints` import it and mypy still type-checks the
+          # imported symbols.
+          #
+          # TRACKER.md §4 item 19 previously carried 2 known `type-arg`
+          # errors in `features/identity/adapters/models.py`. Running this
+          # scope for the first time surfaced the same `Mapped[dict]` pattern
+          # (missing `[str, Any]`) in 6 more `adapters/models.py` files across
+          # other feature groups, plus two unrelated strict findings in
+          # `entrypoints/`. All of them were fixed in this same PR — see the
+          # commit for the diff — so this command runs with zero exclusions
+          # and zero `# type: ignore`s beyond one narrowly-scoped,
+          # commented `type: ignore[no-untyped-call]` on a redis-py call
+          # whose upstream signature has no annotations at all.
+          mypy --strict src/mnemos/core src/mnemos/features src/mnemos/entrypoints
+
+      # ---- the two gates that need real infrastructure ----
+
+      - name: Create the extensions alembic's migrations assume
+        # `deploy/postgres/init/01-extensions.sql` does this for the compose
+        # stack via a mounted docker-entrypoint-initdb.d script; the
+        # `services:` container above has no such mount (and, being started
+        # before `actions/checkout`, could not read one from this repo even
+        # if it did), so the equivalent statements are issued directly here.
+        # `02-analytics-seed.sql`'s NL2SQL warehouse is not needed for
+        # `alembic check` and is deliberately not replicated.
+        run: |
+          python3 - <<'PY'
+          import asyncio
+          import asyncpg
+
+          EXTENSIONS = ("vector", "pg_trgm", "btree_gist", "citext", '"uuid-ossp"')
+
+          async def main() -> None:
+              conn = await asyncpg.connect("postgresql://mnemos:mnemos@localhost:5432/mnemos")
+              try:
+                  for extension in EXTENSIONS:
+                      await conn.execute(f"CREATE EXTENSION IF NOT EXISTS {extension}")
+              finally:
+                  await conn.close()
+
+          asyncio.run(main())
+          PY
+
+      - name: Stand up Keycloak with the mnemos realm imported
+        # Deliberate choice for TRACKER.md §4 item 18's wrinkle: stand
+        # Keycloak up for real, with the actual realm
+        # (deploy/keycloak/mnemos-realm.json) imported, rather than let the 2
+        # live-Keycloak tests skip. A `services:` container cannot do this —
+        # service containers start before `actions/checkout`, so a bind mount
+        # of `deploy/keycloak/` would be empty at import time — hence a plain
+        # `docker run` here, after checkout, mounting the real directory.
+        #
+        # This step does NOT fail the job on timeout. If Keycloak cannot be
+        # reached within the wait window (image pull trouble, a runner
+        # network hiccup), the two tests that need it fall back to their own
+        # `skipif` and the pytest step below still runs and still reports
+        # honestly — the job degrades to "2 tests skipped, loudly reported"
+        # rather than either a hard, infrastructure-flake-driven failure or a
+        # silent green. See the summary step after pytest.
+        run: |
+          docker run -d --name keycloak \
+            -p 8080:8080 \
+            -e KC_BOOTSTRAP_ADMIN_USERNAME=admin \
+            -e KC_BOOTSTRAP_ADMIN_PASSWORD=admin \
+            -e KC_HEALTH_ENABLED=true \
+            -e KC_HTTP_ENABLED=true \
+            -e KC_HOSTNAME_STRICT=false \
+            -v "${{ github.workspace }}/deploy/keycloak:/opt/keycloak/data/import:ro" \
+            quay.io/keycloak/keycloak:26.0 \
+            start-dev --import-realm --http-port=8080
+
+          echo "waiting for the mnemos realm to be reachable..."
+          up=false
+          for _ in $(seq 1 40); do
+            if curl -fsS "http://localhost:8080/realms/mnemos/.well-known/openid-configuration" >/dev/null 2>&1; then
+              up=true
+              break
+            fi
+            sleep 3
+          done
+
+          if [ "$up" = true ]; then
+            echo "keycloak is up; the live-Keycloak tests will run for real"
+          else
+            echo "::warning::keycloak did not become ready in time — the 2 live-Keycloak tests will skip, and the job summary below will say so"
+            docker logs keycloak || true
+          fi
+
+      - name: pytest
+        working-directory: backend
+        run: python -m pytest -v --junitxml=pytest-report.xml
+
+      - name: Report how many tests ran, passed, and skipped
+        # TRACKER.md §4 item 18: "if they skip, the workflow must print how
+        # many tests skipped and the job summary must say so, so nobody reads
+        # a green check as 'everything ran'." This runs even if pytest failed
+        # (`if: always()`), so a run that fails still says what it ran.
+        if: always()
+        working-directory: backend
+        run: |
+          python3 - <<'PY'
+          import os
+          import xml.etree.ElementTree as ET
+
+          tree = ET.parse("pytest-report.xml")
+          root = tree.getroot()
+          suite = root.find("testsuite") if root.tag == "testsuites" else root
+
+          total = int(suite.get("tests", 0))
+          skipped = int(suite.get("skipped", 0))
+          failed = int(suite.get("failures", 0)) + int(suite.get("errors", 0))
+          passed = total - skipped - failed
+
+          skipped_tests = [
+              f'{tc.get("classname")}::{tc.get("name")}'
+              for tc in suite.iter("testcase")
+              if tc.find("skipped") is not None
+          ]
+
+          line = f"pytest: {total} collected, {passed} passed, {skipped} skipped, {failed} failed"
+          print(line)
+          for name in skipped_tests:
+              print(f"  skipped: {name}")
+
+          summary_path = os.environ.get("GITHUB_STEP_SUMMARY")
+          if summary_path:
+              with open(summary_path, "a") as fh:
+                  fh.write("### Backend test summary\n\n")
+                  fh.write(f"**{line}**\n\n")
+                  if skipped_tests:
+                      fh.write(
+                          "This run did **not** exercise every test — treat this as "
+                          "less than a full green check:\n\n"
+                      )
+                      for name in skipped_tests:
+                          fh.write(f"- skipped: `{name}`\n")
+                  else:
+                      fh.write("All collected tests ran (none skipped).\n")
+
+          if skipped:
+              print(f"::warning::{skipped} test(s) skipped — see the job summary for which ones")
+          PY
+
+      - name: alembic upgrade head
+        working-directory: backend
+        env:
+          # The owning role — the same one `migrate` in docker-compose.yml
+          # connects as. `alembic check` below connects the same way: RLS
+          # must not obstruct DDL, and it never applies to a superuser anyway.
+          MNEMOS_DATABASE_URL: postgresql+asyncpg://mnemos:mnemos@localhost:5432/mnemos
+          # Read by migration 0005 to create `mnemos_app`; matches the
+          # default in core/config.py and the value docker-compose.yml uses.
+          MNEMOS_APP_DATABASE_PASSWORD: mnemos-app-dev
+        run: alembic upgrade head
+
+      - name: alembic check
+        working-directory: backend
+        env:
+          MNEMOS_DATABASE_URL: postgresql+asyncpg://mnemos:mnemos@localhost:5432/mnemos
+          MNEMOS_APP_DATABASE_PASSWORD: mnemos-app-dev
+        run: alembic check
+
+  frontend:
+    name: frontend — lint, typecheck, test, build
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      # F0 (frontend foundation) is landing on a different branch while this
+      # workflow is being written; on this branch `frontend/` does not exist
+      # yet. This job must be green either way, so every real step below is
+      # conditional on the app actually existing rather than the job failing
+      # outright on a missing directory.
+      - name: Check whether the frontend app has landed yet
+        id: check
+        run: |
+          if [ -f frontend/package.json ]; then
+            echo "exists=true" >> "$GITHUB_OUTPUT"
+          else
+            echo "exists=false" >> "$GITHUB_OUTPUT"
+            echo "::notice::frontend/package.json not found — F0 has not landed on this branch yet, skipping the frontend gate"
+          fi
+
+      - uses: actions/setup-node@v4
+        if: steps.check.outputs.exists == 'true'
+        with:
+          node-version: "20"
+          cache: npm
+          cache-dependency-path: frontend/package-lock.json
+
+      - name: npm ci
+        if: steps.check.outputs.exists == 'true'
+        working-directory: frontend
+        run: npm ci
+
+      - name: npm run lint
+        if: steps.check.outputs.exists == 'true'
+        working-directory: frontend
+        run: npm run lint
+
+      - name: tsc --noEmit
+        if: steps.check.outputs.exists == 'true'
+        working-directory: frontend
+        run: npx tsc --noEmit
+
+      - name: npm run test
+        if: steps.check.outputs.exists == 'true'
+        working-directory: frontend
+        run: npm run test
+
+      - name: npm run build
+        if: steps.check.outputs.exists == 'true'
+        working-directory: frontend
+        run: npm run build

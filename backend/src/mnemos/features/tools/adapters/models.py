@@ -19,6 +19,7 @@ from __future__ import annotations
 
 import uuid
 from datetime import datetime
+from typing import Any
 
 from sqlalchemy import (
     Boolean,
@@ -91,7 +92,7 @@ class McpTool(Base, TimestampMixin):
     )
     name: Mapped[str] = mapped_column(Text, nullable=False)
     description: Mapped[str | None] = mapped_column(Text, nullable=True)
-    input_schema: Mapped[dict] = mapped_column(
+    input_schema: Mapped[dict[str, Any]] = mapped_column(
         JSONB, nullable=False, server_default=text("'{}'::jsonb")
     )
     is_enabled: Mapped[bool] = mapped_column(Boolean, nullable=False, server_default=text("true"))
@@ -179,7 +180,7 @@ class McpInvocation(Base):
         UUID(as_uuid=True), ForeignKey("chat_message.id", ondelete="CASCADE"), nullable=True
     )
 
-    arguments: Mapped[dict] = mapped_column(
+    arguments: Mapped[dict[str, Any]] = mapped_column(
         JSONB, nullable=False, server_default=text("'{}'::jsonb")
     )
     status: Mapped[str] = mapped_column(String(32), nullable=False)
@@ -197,7 +198,9 @@ class McpInvocation(Base):
     )
     approved_at: Mapped[datetime | None] = mapped_column(nullable=True)
 
-    result: Mapped[dict] = mapped_column(JSONB, nullable=False, server_default=text("'{}'::jsonb"))
+    result: Mapped[dict[str, Any]] = mapped_column(
+        JSONB, nullable=False, server_default=text("'{}'::jsonb")
+    )
     duration_ms: Mapped[int | None] = mapped_column(Integer, nullable=True)
     error_code: Mapped[str | None] = mapped_column(String(64), nullable=True)
     error_detail: Mapped[str | None] = mapped_column(Text, nullable=True)
