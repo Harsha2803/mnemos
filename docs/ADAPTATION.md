@@ -361,12 +361,72 @@ therefore correct and the instruction was wrong; both are recorded in TRACKER §
 | `ruff` / `mypy --strict` | clean on all new files |
 | `alembic check` | no new operations — neither M3.2a nor M3.3 touched schema |
 
-**Remaining: deliverables 4–7** — JWT issuance and refresh rotation, API keys, the RBAC
-dependency, and `mnemosctl bootstrap`. Specified in
-[TRACKER §5](../TRACKER.md#5-next-task) (next up: **M3.4**). One design question is still
-open and M3.4 must settle it: **`ThreatModel.md` §5 and `core/config.py` disagree on the
-token algorithm** (EdDSA vs HS256). Whichever is chosen, both documents must be
-reconciled in the same commit.
+**Done: M3.7 — `mnemosctl bootstrap` (2026-08-02).** M3.2 and M3.3 built a provider seam
+and an OIDC round trip that nothing could reach: `ProviderFactory` reads
+`identity_provider` to choose a strategy, and that table was empty on every database in
+existence. `bootstrap` creates the first `org`, the three system roles, **both**
+`identity_provider` rows, the admin `app_user` with an argon2id hash, the admin
+`role_binding`, and `org.settings.default_provider`.
+
+| File | What it is |
+|---|---|
+| `domain/roles.py` | `SYSTEM_ROLES` — `admin` (`*:*`), `analyst`, `user`. In `domain/` because M3.6's guard must require against the roles this seeds. Resources are §5's feature packages so a permission traces to the code that enforces it; slugs are the realm's roles minus the `mnemos-` prefix, since a `role` row is already scoped by `org_id` and a Keycloak realm role is not |
+| `application/bootstrap.py` | The use case, its `BootstrapStore`/`BootstrapWriter` ports, and a `BootstrapRequest` validated at construction. Both transactions are opened here, so how much runs elevated is visible where the work is described |
+| `adapters/bootstrap_store.py` | The SQLAlchemy side, and the system's only `elevated_session()` call site |
+| `entrypoints/cli.py` | The command, in `db doctor`'s argparse shape. Password from an env var or a double `getpass` prompt, **never an argument** — argv is world-readable through `/proc/<pid>/cmdline` and lands in shell history |
+
+**The elevation is one statement wide.** Only the org insert runs elevated; it is the one
+statement in the system that provably cannot carry `app.current_org`, because the value it
+would carry is the value it is generating. The other nine run under the tenant GUC, so a
+bug that computed the wrong `org_id` is rejected by the policy's `WITH CHECK` rather than
+committed by a privileged session left open for convenience. Splitting the work across two
+transactions is also why **idempotency is not optional**: a crash between them would
+otherwise leave an unrecoverable half-bootstrapped database. Every step is
+create-if-absent and **nothing existing is ever updated** — an upsert wired into a deploy
+script would reset the administrator's password on every release.
+
+**The live stack proves the claim the task was justified by.** Against the empty `mnemos`
+database, one run created org `mnemos` + admin `admin@mnemos.local` + 3 roles + 2
+providers + 1 binding; a second run with a different password and a different `--org-name`
+reported "already present" on every line and left the hash and the name untouched. On the
+running API:
+
+| Request | Before bootstrap | After |
+|---|---|---|
+| `GET /api/v1/auth/oidc/authorize?org=mnemos` | 401, constant denial | **307 → `http://localhost:8080/realms/mnemos/protocol/openid-connect/auth?...code_challenge_method=S256`** |
+| `...?org=nope` | 401 | 401 — unchanged, as it must be |
+| `...?org=mnemos&provider=internal` | 401 | 401 — a password provider reached through the OIDC endpoint is a misrouted request |
+
+That redirect is split horizon working off the seeded row: discovery ran over
+`issuer_internal` (`keycloak:8080`, resolvable only inside the compose network) and the
+browser is sent to `issuer_public` (`localhost:8080`). One URL in both columns would have
+produced a redirect no browser could follow.
+
+| Command | Result |
+|---|---|
+| `pytest` | **105 passed** in 13.1s (was 97; +8 in `tests/test_bootstrap.py`, six against a real Postgres as the unprivileged role) |
+| `ruff check` + `ruff format --check`, scoped to the diff | clean; the repo-wide run is not, and why is TRACKER §4 item 22 |
+| `mypy --strict` | clean on everything new |
+| `alembic check` | "No new upgrade operations detected" — **no migration**; every column written was created by `0001` |
+
+`test_bootstrap_admin_can_authenticate_through_the_internal_provider` is the test that
+matters: it goes through `ProviderFactory`, so it proves the seeded rows are the *shape*
+M3.2 expects rather than merely present.
+`test_bootstrap_does_not_leave_an_elevated_session_open` guards the one silent,
+catastrophic mistake available here — a leaked `SET ROLE` disables tenant isolation for
+every later query on that pooled connection — and opens with a control asserting the
+elevated session really does elevate, so it cannot pass vacuously.
+
+**M3.7 has no UI half, deliberately** (TRACKER C12 requires this be written down): the
+command runs before anybody can sign in, so an authenticated screen would be unreachable
+and an unauthenticated one would be org creation open to the internet. A CLI is its own
+interface.
+
+**Remaining: deliverables 4–6** — JWT issuance and refresh rotation, API keys, and the
+RBAC dependency. Specified in [TRACKER §5](../TRACKER.md#5-next-task) (next up: **F0**,
+then **M3.4**). One design question is still open and M3.4 must settle it:
+**`ThreatModel.md` §5 and `core/config.py` disagree on the token algorithm** (EdDSA vs
+HS256). Whichever is chosen, both documents must be reconciled in the same commit.
 
 ### Carried over from v0.1 (needs porting from SQLite → Postgres)
 
