@@ -135,6 +135,17 @@ not, because the next redesign changes which grey it should be.
   --warning:             #9A5B00;   /* superseded, degraded, stale */
   --danger:              #C2352E;   /* denied, failed, revoked */
   --info:                #5B4BE1;   /* system / compiler annotation */
+
+  /* Accent at 12% — the `tinted` button rank (§4), as a token rather than a
+     colour-mix at each call site, so the one number that defines the rank lives
+     in one place. The hover partner deepens the tint instead of shifting hue,
+     so the rank stays recognisable while pressed. */
+  --accent-tint:         rgb(74 63 209 / 0.12);
+  --accent-tint-hover:   rgb(74 63 209 / 0.20);
+
+  /* The chrome material's own translucency. Always paired with --material-*
+     and the opaque @supports fallback in §2.4. */
+  --chrome:              rgb(255 255 255 / 0.72);
 }
 
 @media (prefers-color-scheme: dark) {
@@ -165,9 +176,22 @@ not, because the next redesign changes which grey it should be.
     --warning:           #F0A02E;
     --danger:            #FF6B6E;
     --info:              #9B8CFF;
+
+    --accent-tint:       rgb(155 140 255 / 0.16);
+    --accent-tint-hover: rgb(155 140 255 / 0.26);
+    --chrome:            rgb(22 22 28 / 0.72);
   }
 }
 ```
+
+**The dark block is declared twice in `globals.css`, and that is deliberate.** The
+`@media` copy is scoped `:root:not([data-theme="light"])` and is the default and the
+no-JavaScript path; a second `:root[data-theme="dark"]` copy carries an explicit user
+choice. `:not([data-theme="light"])` is the whole of what makes an explicit choice win in
+*both* directions — without it, a user on a dark OS who picks light still gets dark, which
+is the easy half of this to ship broken. The two copies must stay identical, and
+`theme.test.ts` asserts that they are, so drift is a test failure rather than one subtly
+wrong shade in one mode.
 
 **These ratios are measured, not asserted.** Against `--bg` in each theme:
 
@@ -182,6 +206,19 @@ not, because the next redesign changes which grey it should be.
 All clear the 4.5:1 body-text floor (§3), which is why the state colours are darker in
 light mode than a status colour usually is — they have to survive being used as *text*,
 not only as a dot. If you add a token, measure it and add the row; do not eyeball it.
+
+The three tokens that are *surfaces* rather than text are measured against the text they
+carry, composited over `--bg`, because that is the pair a reader actually sees:
+
+| Pair | Light | Dark |
+|---|---|---|
+| `--on-accent` on `--accent` — the `filled` button | **7.18** | **6.68** |
+| `--accent` on `--accent-tint` — the `tinted` button | **5.95** | **5.74** |
+| `--accent` on `--accent-tint-hover` — tinted, hovered | **5.21** | **4.73** |
+| `--label` on `--chrome` over `--bg` — sidebar and toolbar text | **18.77** | **18.52** |
+
+The tinted-hover row is the tightest at 4.73 and it is the one to watch: deepening the
+tint any further to make the hover more obvious would push it under the floor.
 
 **Dark mode is not an inversion.** Dark surfaces get *lighter* as they stack
 (`#000` → `#1C1C1E` → `#2C2C2E`) while light surfaces get subtly darker. Inverting a light
@@ -216,6 +253,9 @@ the media query in **both** directions so an explicit user choice wins.
   /* Tracking tightens as size grows — large text set at default tracking reads loose. */
   --tracking-title: -0.022em;
   --tracking-body:  -0.011em;
+
+  /* The measure, as a token rather than a number repeated at each call site. */
+  --measure: 46rem;
 }
 ```
 
@@ -298,7 +338,17 @@ contexts, and a translucent bar over unblurred content is illegible. Always pair
 :root {
   --ease-standard: cubic-bezier(0.25, 0.1, 0.25, 1);
   --ease-out:      cubic-bezier(0.16, 1, 0.3, 1);   /* things arriving */
-  --ease-spring:   linear(/* or a spring via Framer Motion */);
+
+  /* A spring as a linear() easing, so a plain CSS transition can have one
+     without an animation library. The overshoot peaks at 1.017 and settles —
+     enough to read as physical, not enough to read as playful. Framer Motion's
+     spring is the answer when a gesture must be interruptible; this is the
+     answer when a transition need not be. */
+  --ease-spring: linear(
+    0, 0.006, 0.025 2.8%, 0.101 6.1%, 0.539 18.9%, 0.721 25.3%, 0.849 31.5%,
+    0.937 38.1%, 0.968 41.8%, 0.991 45.7%, 1.006 50.1%, 1.015 55%, 1.017 63.9%,
+    1.001
+  );
 
   --duration-fast:   150ms;  /* hover, focus, small state changes */
   --duration-normal: 250ms;  /* panels, sheets, disclosure */
@@ -323,6 +373,23 @@ vestibular trigger. Honour it globally, once:
   }
 }
 ```
+
+### 2.6 Layout and accessibility constants
+
+The three numbers §1 and §3 state in prose, as tokens — so a component and the test that
+checks it are reading the same value rather than two copies of it that agree today.
+
+```css
+:root {
+  --hit-target:      44px;    /* §3, the minimum interactive target */
+  --sidebar-width:   260px;   /* §1 */
+  --inspector-width: 320px;   /* §1 */
+}
+```
+
+`--hit-target` is applied through a single `.hit-target` class rather than repeated on
+each control, which is what lets `layout.test.tsx` walk every rendered interactive element
+and resolve one number.
 
 ---
 

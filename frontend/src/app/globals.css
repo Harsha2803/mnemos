@@ -1,1 +1,424 @@
 @import "tailwindcss";
+
+/* =============================================================================
+   Mnemos design tokens — docs/DesignSystem.md §2.
+
+   THIS FILE IS THE ONLY PLACE IN THE FRONTEND THAT MAY CONTAIN A COLOUR
+   LITERAL (TRACKER C13). `src/app/tokens.test.ts` greps every component source
+   for a hex literal and for `rgb(` / `hsl(` and fails on a hit, because a single
+   hard-coded colour is the crack the system starts leaking through.
+
+   There is deliberately no `tailwind.config.js`. Tailwind v4 reads CSS custom
+   properties natively, so the tokens below *are* the configuration; the
+   `@theme inline` block further down is a mapping, not a second palette.
+   ========================================================================== */
+
+/* ------------------------------------------------- 2.1 colour — light */
+:root {
+  /* Accent — Mnemos indigo. One accent, for interactive affordances only, never
+     for decoration. 7.18:1 against white, so it is legible as link text and
+     takes white text when used as a fill. */
+  --accent:              #4A3FD1;
+  --accent-hover:        #3E34B8;
+  --on-accent:           #FFFFFF;
+
+  /* Label hierarchy as opacity over the background, which is why these stay
+     correct on any surface — including a translucent one. */
+  --label:               rgb(17 17 26 / 1.00);
+  --label-secondary:     rgb(17 17 26 / 0.62);
+  --label-tertiary:      rgb(17 17 26 / 0.32);
+  --label-quaternary:    rgb(17 17 26 / 0.18);
+
+  /* Backgrounds, in stacking order. Faintly cool neutrals — a pure grey reads
+     clinical next to long-form text. */
+  --bg:                  #FFFFFF;
+  --bg-secondary:        #F4F5F7;
+  --bg-tertiary:         #FFFFFF;
+  --bg-grouped:          #F4F5F7;
+
+  /* Fills — for controls and non-text surfaces that sit *on* a background. */
+  --fill:                rgb(17 17 26 / 0.08);
+  --fill-secondary:      rgb(17 17 26 / 0.06);
+  --fill-tertiary:       rgb(17 17 26 / 0.04);
+
+  /* Hairlines. Translucent, so a separator works over any material. */
+  --separator:           rgb(17 17 26 / 0.12);
+  --separator-opaque:    #E2E3E8;
+
+  /* State. Each has exactly one meaning in this app, and each is dark enough to
+     be used as text on --bg (measured — DesignSystem §2.1). */
+  --success:             #15703C;   /* a claim is current / a job succeeded */
+  --warning:             #9A5B00;   /* superseded, degraded, stale */
+  --danger:              #C2352E;   /* denied, failed, revoked */
+  --info:                #5B4BE1;   /* system / compiler annotation */
+
+  /* Accent at 12% — the `tinted` button rank (DesignSystem §4). A token rather
+     than a colour-mix at each call site, so the one number that defines the
+     rank lives in one place. Its hover partner deepens the tint rather than
+     shifting the hue, so the rank stays recognisable while pressed. */
+  --accent-tint:         rgb(74 63 209 / 0.12);
+  --accent-tint-hover:   rgb(74 63 209 / 0.20);
+
+  /* The chrome material's translucency, paired with --material-* below and
+     always with an opaque @supports fallback (DesignSystem §2.4). */
+  --chrome:              rgb(255 255 255 / 0.72);
+}
+
+/* ------------------------------------------------- 2.1 colour — dark
+
+   Dark mode is not an inversion: dark surfaces get *lighter* as they stack
+   while light surfaces get subtly darker.
+
+   The palette below is declared TWICE, deliberately, and the two blocks must
+   stay identical — `theme.test.ts` asserts they do, so drift is a test failure
+   rather than a subtly wrong shade in one mode:
+
+     · the @media block is the default and the no-JavaScript path; it follows
+       the operating system.
+     · the [data-theme="dark"] block is an explicit user choice, stamped on
+       <html> before first paint.
+
+   `:not([data-theme="light"])` on the media block is what makes an explicit
+   choice win in BOTH directions. Without it a user on a dark OS who chooses
+   light still gets dark — the easy half of this to ship broken. */
+@media (prefers-color-scheme: dark) {
+  :root:not([data-theme="light"]) {
+    --accent:            #9B8CFF;
+    --accent-hover:      #B0A4FF;
+    --on-accent:         #14121F;
+
+    --label:             rgb(255 255 255 / 1.00);
+    --label-secondary:   rgb(255 255 255 / 0.62);
+    --label-tertiary:    rgb(255 255 255 / 0.32);
+    --label-quaternary:  rgb(255 255 255 / 0.16);
+
+    --bg:                #0B0B0F;
+    --bg-secondary:      #16161C;
+    --bg-tertiary:       #202029;
+    --bg-grouped:        #0B0B0F;
+
+    --fill:              rgb(255 255 255 / 0.12);
+    --fill-secondary:    rgb(255 255 255 / 0.09);
+    --fill-tertiary:     rgb(255 255 255 / 0.06);
+
+    --separator:         rgb(255 255 255 / 0.14);
+    --separator-opaque:  #2A2A33;
+
+    --success:           #35C77A;
+    --warning:           #F0A02E;
+    --danger:            #FF6B6E;
+    --info:              #9B8CFF;
+
+    --accent-tint:       rgb(155 140 255 / 0.16);
+    --accent-tint-hover: rgb(155 140 255 / 0.26);
+    --chrome:            rgb(22 22 28 / 0.72);
+  }
+}
+
+:root[data-theme="dark"] {
+  --accent:            #9B8CFF;
+  --accent-hover:      #B0A4FF;
+  --on-accent:         #14121F;
+
+  --label:             rgb(255 255 255 / 1.00);
+  --label-secondary:   rgb(255 255 255 / 0.62);
+  --label-tertiary:    rgb(255 255 255 / 0.32);
+  --label-quaternary:  rgb(255 255 255 / 0.16);
+
+  --bg:                #0B0B0F;
+  --bg-secondary:      #16161C;
+  --bg-tertiary:       #202029;
+  --bg-grouped:        #0B0B0F;
+
+  --fill:              rgb(255 255 255 / 0.12);
+  --fill-secondary:    rgb(255 255 255 / 0.09);
+  --fill-tertiary:     rgb(255 255 255 / 0.06);
+
+  --separator:         rgb(255 255 255 / 0.14);
+  --separator-opaque:  #2A2A33;
+
+  --success:           #35C77A;
+  --warning:           #F0A02E;
+  --danger:            #FF6B6E;
+  --info:              #9B8CFF;
+
+  --accent-tint:       rgb(155 140 255 / 0.16);
+  --accent-tint-hover: rgb(155 140 255 / 0.26);
+  --chrome:            rgb(22 22 28 / 0.72);
+}
+
+/* ------------------------------------------------------------ 2.2 type */
+:root {
+  --font-sans: -apple-system, BlinkMacSystemFont, "Inter", "Segoe UI", Roboto,
+               "Helvetica Neue", Arial, sans-serif;
+  --font-mono: ui-monospace, "SF Mono", "JetBrains Mono", Menlo, Consolas, monospace;
+
+  /* Scale adapted for the desktop: a touch UI sets body at ~17pt for arm's
+     length, while a desktop web body sits at 15-16px. The ratios between steps
+     are preserved. Sizes are in rem, never px, which is what lets browser zoom
+     and OS text-size settings work. */
+  --text-large-title: 2.125rem;  /* 34px */
+  --text-title-1:     1.75rem;   /* 28px */
+  --text-title-2:     1.375rem;  /* 22px */
+  --text-title-3:     1.25rem;   /* 20px */
+  --text-headline:    1rem;      /* 16px, 600 weight */
+  --text-body:        1rem;      /* 16px, 400 */
+  --text-callout:     0.9375rem; /* 15px */
+  --text-subheadline: 0.875rem;  /* 14px */
+  --text-footnote:    0.8125rem; /* 13px */
+  --text-caption:     0.75rem;   /* 12px */
+
+  --leading-tight: 1.2;   /* titles */
+  --leading-normal: 1.5;  /* UI text */
+  --leading-relaxed: 1.6; /* message bodies and document text */
+
+  /* Tracking tightens as size grows — large text at default tracking reads loose. */
+  --tracking-title: -0.022em;
+  --tracking-body:  -0.011em;
+
+  /* The measure. Past ~75 characters the eye loses its place on the return
+     sweep, so this is a legibility control, not a layout preference. */
+  --measure: 46rem;
+}
+
+/* ------------------------------------------- 2.3 spacing — 8pt rhythm */
+:root {
+  --space-1: 0.25rem;  /*  4px */
+  --space-2: 0.5rem;   /*  8px */
+  --space-3: 0.75rem;  /* 12px */
+  --space-4: 1rem;     /* 16px */
+  --space-5: 1.25rem;  /* 20px */
+  --space-6: 1.5rem;   /* 24px */
+  --space-8: 2rem;     /* 32px */
+  --space-10: 2.5rem;  /* 40px */
+  --space-12: 3rem;    /* 48px */
+  --space-16: 4rem;    /* 64px */
+}
+
+/* ------------------------------------- 2.4 radius, materials, elevation */
+:root {
+  --radius-sm: 6px;    /* tags, small badges */
+  --radius-md: 10px;   /* buttons, inputs */
+  --radius-lg: 14px;   /* cards, message bubbles */
+  --radius-xl: 20px;   /* sheets, modals */
+  --radius-full: 9999px;
+
+  /* Materials. Translucency + a saturation boost is what makes chrome read as
+     glass rather than as a grey box: the saturate() does as much work as the
+     blur. */
+  --material-thin:    saturate(180%) blur(20px);
+  --material-regular: saturate(180%) blur(30px);
+  --material-thick:   saturate(180%) blur(40px);
+
+  /* Elevation is deliberately restrained: material and hairlines separate
+     layers first, shadow last. */
+  --shadow-sm: 0 1px 2px rgb(0 0 0 / 0.04), 0 1px 3px rgb(0 0 0 / 0.06);
+  --shadow-md: 0 2px 8px rgb(0 0 0 / 0.06), 0 4px 16px rgb(0 0 0 / 0.08);
+  --shadow-lg: 0 8px 32px rgb(0 0 0 / 0.12);
+}
+
+/* ---------------------------------------------------------- 2.5 motion */
+:root {
+  --ease-standard: cubic-bezier(0.25, 0.1, 0.25, 1);
+  --ease-out:      cubic-bezier(0.16, 1, 0.3, 1);   /* things arriving */
+
+  /* A spring expressed as a linear() easing, so a plain CSS transition can have
+     one without pulling in an animation library. The overshoot peaks at 1.017
+     and settles — enough to read as physical, not enough to read as playful.
+     Framer Motion's spring is the answer when a gesture needs to be
+     interruptible; this is the answer when a transition does not. */
+  --ease-spring: linear(
+    0, 0.006, 0.025 2.8%, 0.101 6.1%, 0.539 18.9%, 0.721 25.3%, 0.849 31.5%,
+    0.937 38.1%, 0.968 41.8%, 0.991 45.7%, 1.006 50.1%, 1.015 55%, 1.017 63.9%,
+    1.001
+  );
+
+  --duration-fast:   150ms;  /* hover, focus, small state changes */
+  --duration-normal: 250ms;  /* panels, sheets, disclosure */
+  --duration-slow:   350ms;  /* full-screen transitions */
+}
+
+/* --------------------------------------------------- 3. accessibility */
+:root {
+  /* The hit-target floor from DesignSystem §3. A token rather than a repeated
+     44px, so the layout test can assert against the same number the CSS uses. */
+  --hit-target: 44px;
+
+  /* The layout constants from DesignSystem §1. */
+  --sidebar-width:   260px;
+  --inspector-width: 320px;
+}
+
+/* =============================================================================
+   Tailwind theme mapping.
+
+   `inline` makes each generated utility reference the semantic token directly
+   (`background-color: var(--bg-secondary)`) rather than adding a hop, so a
+   utility keeps tracking the theme when the token is redefined under
+   [data-theme] or a media query.
+
+   The `--*: initial` resets delete Tailwind's built-in palette and scales. That
+   is the enforcement half of C13: without them `bg-red-500` stays spellable,
+   contains no hex literal, and sails straight past the grep test.
+   ========================================================================== */
+@theme inline {
+  --color-*: initial;
+  --font-*: initial;
+  --text-*: initial;
+  --leading-*: initial;
+  --tracking-*: initial;
+  --radius-*: initial;
+  --shadow-*: initial;
+  --ease-*: initial;
+
+  --color-accent:            var(--accent);
+  --color-accent-hover:      var(--accent-hover);
+  --color-accent-tint:       var(--accent-tint);
+  --color-accent-tint-hover: var(--accent-tint-hover);
+  --color-on-accent:         var(--on-accent);
+
+  --color-label:             var(--label);
+  --color-label-secondary:   var(--label-secondary);
+  --color-label-tertiary:    var(--label-tertiary);
+  --color-label-quaternary:  var(--label-quaternary);
+
+  --color-bg:                var(--bg);
+  --color-bg-secondary:      var(--bg-secondary);
+  --color-bg-tertiary:       var(--bg-tertiary);
+  --color-bg-grouped:        var(--bg-grouped);
+
+  --color-fill:              var(--fill);
+  --color-fill-secondary:    var(--fill-secondary);
+  --color-fill-tertiary:     var(--fill-tertiary);
+
+  --color-separator:         var(--separator);
+  --color-separator-opaque:  var(--separator-opaque);
+
+  --color-success:           var(--success);
+  --color-warning:           var(--warning);
+  --color-danger:            var(--danger);
+  --color-info:              var(--info);
+
+  --font-sans: var(--font-sans);
+  --font-mono: var(--font-mono);
+
+  --text-large-title: var(--text-large-title);
+  --text-title-1:     var(--text-title-1);
+  --text-title-2:     var(--text-title-2);
+  --text-title-3:     var(--text-title-3);
+  --text-headline:    var(--text-headline);
+  --text-body:        var(--text-body);
+  --text-callout:     var(--text-callout);
+  --text-subheadline: var(--text-subheadline);
+  --text-footnote:    var(--text-footnote);
+  --text-caption:     var(--text-caption);
+
+  --leading-tight:   var(--leading-tight);
+  --leading-normal:  var(--leading-normal);
+  --leading-relaxed: var(--leading-relaxed);
+
+  --tracking-title: var(--tracking-title);
+  --tracking-body:  var(--tracking-body);
+
+  /* The 8pt rhythm. Tailwind multiplies this by the numeric suffix, so `p-4` is
+     exactly --space-4 (1rem) and `gap-2` is exactly --space-2. §2.3 and the
+     Tailwind spacing utilities are therefore the same numbers, not two scales
+     that happen to agree today. */
+  --spacing: 0.25rem;
+
+  --radius-sm:   var(--radius-sm);
+  --radius-md:   var(--radius-md);
+  --radius-lg:   var(--radius-lg);
+  --radius-xl:   var(--radius-xl);
+  --radius-full: var(--radius-full);
+
+  --shadow-sm: var(--shadow-sm);
+  --shadow-md: var(--shadow-md);
+  --shadow-lg: var(--shadow-lg);
+
+  --ease-standard: var(--ease-standard);
+  --ease-out:      var(--ease-out);
+  --ease-spring:   var(--ease-spring);
+}
+
+/* ============================================================ base layer */
+@layer base {
+  html {
+    /* Tells the UA to render form controls, scrollbars and the canvas in the
+       matching scheme. Without it a dark page keeps a white scrollbar. */
+    color-scheme: light dark;
+  }
+
+  html[data-theme="light"] { color-scheme: light; }
+  html[data-theme="dark"]  { color-scheme: dark; }
+
+  body {
+    background-color: var(--bg);
+    color: var(--label);
+    font-family: var(--font-sans);
+    font-size: var(--text-body);
+    line-height: var(--leading-normal);
+    letter-spacing: var(--tracking-body);
+    -webkit-font-smoothing: antialiased;
+  }
+
+  /* DesignSystem §3: focus is always visible. `outline: none` with no
+     replacement makes the app unusable by keyboard, so the replacement is
+     declared once, here, for everything. */
+  :focus-visible {
+    outline: 2px solid var(--accent);
+    outline-offset: 2px;
+    border-radius: var(--radius-sm);
+  }
+
+  ::selection {
+    background-color: var(--accent-tint);
+  }
+}
+
+/* ======================================================= component layer */
+@layer components {
+  /* The 44x44 floor from DesignSystem §3, in one place. A 24px icon button
+     needs padding, not a smaller target. */
+  .hit-target {
+    min-height: var(--hit-target);
+    min-width: var(--hit-target);
+  }
+
+  /* The chrome material (DesignSystem §2.4). Translucent chrome over unblurred
+     content is illegible, so the fallback is not optional — which is why this
+     is one class rather than three utilities repeated at each call site. */
+  .material-chrome {
+    background-color: var(--chrome);
+    backdrop-filter: var(--material-regular);
+    -webkit-backdrop-filter: var(--material-regular);
+  }
+
+  @supports not (backdrop-filter: blur(1px)) {
+    .material-chrome {
+      background-color: var(--bg-secondary);   /* opaque, not translucent */
+    }
+  }
+
+  /* The readable measure for long-form content (DesignSystem §2.2). */
+  .measure {
+    max-width: var(--measure);
+  }
+}
+
+/* =========================================================== 2.5 motion
+
+   `prefers-reduced-motion` is mandatory, not a nicety: for some users motion is
+   a vestibular trigger. Honoured globally, once. Verbatim from DesignSystem
+   §2.5, and `motion.test.ts` asserts the block is present and collapses
+   transition and animation durations. */
+@media (prefers-reduced-motion: reduce) {
+  *,
+  *::before,
+  *::after {
+    animation-duration: 0.01ms !important;
+    animation-iteration-count: 1 !important;
+    transition-duration: 0.01ms !important;
+    scroll-behavior: auto !important;
+  }
+}
