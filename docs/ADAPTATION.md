@@ -80,32 +80,41 @@ supposed to guard against.
 
 ---
 
-## 3. JIVA capability map → Mnemos
+## 3. Capability inventory
 
-Surveyed from directory structure and router registration only.
+What a platform of this kind needs, what Mnemos builds for it, and which milestone owns
+it. Milestone IDs are the ones in §7; nothing here is aspirational, and anything
+deliberately out of scope says so with its reason.
 
-| JIVA module | Mnemos equivalent | Notes |
+| Capability a platform of this kind needs | What Mnemos builds | Milestone |
 |---|---|---|
-| `auth_modules/providers/` (OIDC/SAML/APIKey/internal, Strategy+Factory) | `features/identity/providers/` | Internal + OIDC (Keycloak) only. Same Strategy+Factory recipe, 2 protocols not 4 |
-| `user_management/{user,role,tag}` | `features/identity/` | Users, roles, RBAC, **tag-scoped document ACLs** |
-| `commons/object_stores/{s3,gcs,azure}` | `platform/objectstore/` | Port + **S3 adapter on MinIO (free)**. GCS/Azure adapters code-complete, explicitly untested |
-| `commons/client_ingestion/{s3,gcs,smb,sharepoint,db}_interface` + `init_client_storage` | `features/connectors/` | `SourceConnector` port + factory. Adapters: MinIO/S3, local FS, HTTP URL |
-| `commons/messaging/{pubsub,sns,servicebus}` | `platform/events/` | `EventBus` port + **Redis Streams** adapter. No cloud pub/sub (costs money) |
-| `ingestion/unstructured/{chunking,intelligent_processing,kg_schema}` | `features/knowledge/` | Extract → chunk → embed. Char offsets retained for PDF highlight |
-| `ingestion/structured/connector/{6 warehouses}` | `features/datasources/` | **Postgres only** (free). `SqlDialect` port keeps others a config exercise |
-| `retrieval_v2/src/nl2sql/` (11 numbered steps) | `flows/nl2sql/` | Compressed to 6 steps. **AST read-only guard + read-only DB role** (defence in depth) |
-| `agentic/{agents,tools,workflows,intents}` | `flows/agent/` | Bounded state machine, checkpoints |
-| `mcp_gateway` + `remote_mcp_connect` + `mcp_server_builder` | `features/tools/` | Registry, tool calling, per-user credentials, approval gates |
-| `chat_history/` (bookmarks, feedback, folders) | `features/chat/` | Sessions, messages, bookmarks, feedback, folders |
-| `prompt_store/` + `prompt_service/` | `features/prompts/` | **DB-backed versioned prompts, activatable.** High-signal, cheap |
-| `cost_dashboard/` | `features/observability/` | Token/latency/cost ledger |
-| `bulk_ingestion/` | `features/knowledge/jobs` | **Heartbeat + stuck-job detection + status history** |
-| `deletion/` | `features/knowledge/` | Cascade delete + memory erase |
-| `glossary_kpi/` | `features/datasources/glossary` | Business vocabulary feeding NL2SQL |
-| `websocket/` (separate service) | `entrypoints/realtime/` | Separate container |
-| `celery_worker/` | `entrypoints/worker/` | Separate container |
-| `display_graph/` (Neo4j/Neptune) | **dropped** | Whole extra container + subsystem, marginal payoff here |
-| SAML, Terraform, K8s, 6 warehouses | **dropped** | Cost / scope |
+| **Pluggable authentication** — more than one way to prove who you are, chosen per tenant rather than compiled in | `features/identity/providers/`: a Strategy + Factory over **two** protocols — a credential the caller knows, and a token another system minted. Internal password auth + OIDC on Keycloak. SAML is dropped (§9): it is a third adapter behind the same seam and proves nothing the second one did not | `M3.1`–`M3.3` ✅ |
+| **A session that survives a reload, and a door that is shut by default** | Platform JWT (HS256) with refresh-token rotation and family revocation; a fail-closed route dependency where an undecorated route is authenticated, and public routes are an enumerated allow-list rather than a prefix match | `M3.4` ✅ backend · `A0` |
+| **Users, roles, and per-document access that is not all-or-nothing** | `features/identity/`: users, orgs, system roles seeded at bootstrap, an RBAC permission matrix, **tag-scoped document ACLs**, API keys as a second credential type, and per-tenant row-level security under all of it | `M2a` ✅ RLS · `M3.7` ✅ roles · `C1` |
+| **Object storage behind a port**, so the deployment target is a config choice | `platform/objectstore/`: port + S3 adapter on **MinIO** rather than S3 itself — same API, no bill, and the constraint that keeps the benchmark reproducible on any machine (C1) | `A2` upload · `B1` |
+| **Source connectors** — content arrives from somewhere that is not an upload form | `features/connectors/`: a `SourceConnector` port + factory, with MinIO/S3, local filesystem and HTTP URL adapters. The abstraction is the deliverable; the adapter count is not | `B1` |
+| **An event bus** decoupling ingestion from the request that triggered it | `platform/events/`: an `EventBus` port with a **Redis Streams** adapter. No cloud pub/sub — it costs money and it is the same port shape, so paying for it would buy nothing the port does not already give | `B1` |
+| **Document ingestion** — extract, chunk, embed | `features/knowledge/`: extraction, structure-aware chunking with **char offsets retained** so a citation can highlight the exact span in the source PDF, and embedding into pgvector | `A2` |
+| **Ingestion that survives failure at scale** | `features/knowledge/jobs`: heartbeat, attempt counting, status history, and a reaper that surfaces a **stuck** job rather than losing it silently. A job that dies quietly is the failure mode that makes an ingestion pipeline untrustworthy | `B2` |
+| **Retrieval that is authorised during the scan, not after it** | `features/retrieval/`: vector, lexical and memory operators, RRF fusion, dedup, conflict resolution, with the authorization predicate pushed into the scan (C4). Ported from the v0.1 kernel onto pgvector HNSW | `A2` |
+| **Answers grounded in documents, with citations that click through** | `flows/rag/` | `A2` |
+| **Natural language over a warehouse** | `flows/nl2sql/`: introspection → glossary → generate → **AST read-only guard** → execute as a read-only DB role → narrate. Two independent defences, because a guard that is the only defence is one parser bug from a write | `A3` |
+| **A SQL surface that is a config exercise to widen** | `features/datasources/`: datasource registry, schema introspection, and a `SqlDialect` port. **Postgres only** — the second warehouse is a paid account, and the port is what makes it a config exercise rather than a rewrite | `A3` |
+| **Business vocabulary** — "revenue" means something specific here | `features/datasources/glossary`: glossary terms feeding the NL2SQL schema context | `A3` |
+| **Routing**, so the user does not have to pick a mode | `flows/router/`: classify a message to chat / RAG / NL2SQL / tools, and show *why* it was routed there | `A4` |
+| **A tool runtime with a trust boundary** | `features/tools/`: MCP registry, per-user credentials, trust tiers, approval gates, invocation records. A denial names the offending source on screen | `B3` |
+| **Multi-step work that can be inspected mid-flight** | `flows/agent/`: a bounded state machine over tools with checkpoints and a step trace | `B4` |
+| **Conversation persistence** — sessions, messages, streaming | `features/chat/`: `chat_session` + `chat_message`, SSE token streaming | `A1` |
+| **Conversation *management*** — the part that makes it usable past the first week | `features/chat/`: folders, bookmarks, feedback, search over history | `C3` |
+| **Prompts as data, not as string literals in a handler** | `features/prompts/`: DB-backed versioned prompts with diff and activation. Cheap to build, and the difference between tuning a prompt and redeploying to tune a prompt | `C2` |
+| **Cost and token accounting** | `features/observability/`: an `inference_call` ledger (monthly partitions) behind a cost dashboard | `C2` |
+| **An audit trail** | `features/observability/`: `audit_log` — who did what, readable in the UI | `C3` |
+| **Governed context** — the deep claim | `features/memory/` (bitemporal claims, supersession, lifecycle) + `features/context/` (the six-phase compiler) + the context inspector + the benchmark re-run on Postgres | `C4` |
+| **Deletion that reaches everything a document touched** | Cascade delete of document → chunks → embeddings → citations; memory erase lands with the memory layer | `A2` documents · `C4` memory |
+| **Realtime push** — a separate service, because a WebSocket gateway and a request/response API have different lifecycles | `entrypoints/realtime/`: WS over Redis pub/sub, its own container since `M1` | `M1` ✅ container · `D1` |
+| **Background execution** — same reason | `entrypoints/worker/`: its own container since `M1`; the job machinery it runs is `B2` | `M1` ✅ container · `B2` |
+| **A knowledge graph** | **Dropped.** A whole extra container and subsystem (Neo4j) for a payoff that is marginal at this scope, against a retrieval path that already fuses three operators | — |
+| **Terraform, Kubernetes, multi-node** | **Dropped.** Mnemos is portfolio-grade and single-node: production *practices*, not production *scale*. `docs/` describes the scaling stages and labels them as design intent | — |
 
 ---
 
