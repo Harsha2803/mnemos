@@ -729,21 +729,30 @@ not a defect.
 
 Recorded so they are not rediscovered as surprises:
 
+> **A note on milestone IDs in this section.** Items written before 2026-08-03 name the
+> milestone that owned a piece of work under the *old* numbering. Forward-looking
+> references have been translated to the new IDs; references to milestones that have
+> already **shipped** (`M1`, `M2`, `M3.1`–`M3.4`, `M3.7`, `F0`, `F0a`) are left as they
+> are, because those are history and renaming history makes the evidence unfindable. If
+> you meet an ID you do not recognise, §3.0 carries the full old → new mapping.
+
 1. **Answer retention is a tie under a good embedder** (100% vs 100%). The corpus is
    5.4k tokens — too small for budget pressure to bite. Growing the corpus 10× is the
-   single highest-value change to the *benchmark*; deferred until after the M4 port so
+   single highest-value change to the *benchmark*; deferred until the kernel finishes its
+   port (retrieval in `A2`, memory and the compiler in `C4`) so
    it is measured once, on Postgres, rather than twice.
 2. **Duplicate waste rises at large budgets** (14% at 3000) because more
    near-threshold content is admitted. Dedup is a threshold, not a guarantee.
 3. **Brute-force cosine over all chunks** on every query in `_v1`. Fine at 56 chunks,
    `O(n)` and wrong at 100k. The HNSW indexes exist in the schema as of M2; wiring the
-   scan to use them is M4.
+   scan to use them is `A2`.
 4. **`all_chunks()` reloads the whole corpus per operator call** — three times per
    compile. Obvious caching win, deliberately not done in `_v1` because it is thrown
-   away at M4.
+   away when retrieval is ported in `A2`.
 5. **No LLM in the loop yet.** The v0.1 benchmark measures *what reaches the model*, not
    answer correctness. Ollama is now running, so an LLM-in-the-loop arm becomes possible
-   from M7 — but it must not replace the deterministic metrics.
+   from `A1`, which brings the Ollama gateway — but it must not replace the deterministic
+   metrics.
 6. **The heuristic tokenizer approximates BPE.** Within a few percent on English prose;
    a `tiktoken` adapter would remove the approximation.
 7. ~~**RLS is untested by an automated test.**~~ **Discharged 2026-07-27**, and it was
@@ -761,12 +770,12 @@ Recorded so they are not rediscovered as surprises:
    (unused unpacked variable, line ~202). Pre-existing, inherited from v0.1, untouched
    because it is not in the M3 diff. One-line fix whenever that file is next edited.
 10. **`context_bundle` and `bundle_item` have no writer yet.** The tables and the budget
-    CHECK exist; the compiler that fills them is M4.
+    CHECK exist; the compiler that fills them is `C4`.
 11. ~~**The frontend is still an empty directory.**~~ **Discharged by `F0`, 2026-08-02.**
     The shell is at `http://localhost:3000`, `web` is un-gated and healthy in
     `docker compose ps`, and the evidence is in §3. What remains missing is *screens*, not
-    scaffolding: there is no sign-in form (M3.4), no chat surface (M8) and no inspector
-    content (M4), and each is named against the milestone that owns it rather than left
+    scaffolding: there is no sign-in form (`A0`), no chat surface (`A1`) and no inspector
+    content (`C4`), and each is named against the milestone that owns it rather than left
     implied.
 12. **Deviation (M3.2), now confirmed correct by M3.3: the OIDC validator trusts *two*
     configured issuers, not `issuer_internal` alone.** The old §5 said to validate `iss`
@@ -799,7 +808,7 @@ Recorded so they are not rediscovered as surprises:
     never the token's `alg`.
     **What reverses it, written down so it is not re-litigated from scratch:** the first
     verifier outside the signing trust domain — a separately-deployed MCP tool service
-    (M11), an external audit consumer, or tokens crossing an organisational boundary. At
+    (`B3`), an external audit consumer, or tokens crossing an organisational boundary. At
     that point verification would require handing out the ability to mint.
     `PlatformTokenConfig` keeps the algorithm as a validated field for exactly that day.
 15. ~~**No end-to-end proof against the live Keycloak yet.**~~ **Discharged by M3.3** —
@@ -835,7 +844,7 @@ Recorded so they are not rediscovered as surprises:
 19. **`mypy --strict` is not clean repo-wide.** Two `type-arg` errors in
     `features/identity/adapters/models.py` (M2, `dict` without parameters) and four files
     in the quarantined `_v1/`. Neither is in any recent diff. The `models.py` pair is a
-    two-line fix whenever that file is next touched; `_v1/` is fixed by the M4 port.
+    two-line fix whenever that file is next touched; `_v1/` is fixed by the port (`A2`, `C4`).
     **Updated 2026-08-02 (M3.7):** it is 19 errors, not 6, because `dict`-without-args
     appears in **seven** `adapters/models.py` files, not one — plus one `no-untyped-call`
     in `realtime/main.py` and one `no-any-return` in `routers/auth.py`. All pre-existing
@@ -846,7 +855,8 @@ Recorded so they are not rediscovered as surprises:
     because the command takes a password and an upsert in a deploy script would reset the
     administrator's credential on every release. The cost lands here: adding a grant to
     `admin`/`analyst`/`user` in `domain/roles.py` reaches only orgs bootstrapped *after*
-    the change. Nothing depends on this yet because M3.6's guard does not exist, but it
+    the change. Nothing depends on this yet because the permission matrix (`C1`) does not
+    exist, but it
     must be solved before it does — either a data migration per grant change or a separate
     `mnemosctl roles sync` that reconciles `is_system` roles only. A "just re-run
     bootstrap" answer is the wrong one and would drag the password rewrite back with it.
@@ -883,7 +893,7 @@ Recorded so they are not rediscovered as surprises:
     the drift C12 exists to prevent. The reason is sequencing and it is not an excuse
     that generalises: `frontend/` was an empty directory, so `F0` (the app shell) had to
     exist before a sign-in screen could be built *in* anything. **`F0` has since landed**
-    (§3), so the blocker is gone and items **7–9 of §5 `M3.4`** are the outstanding work,
+    (§3), so the blocker is gone and **`A0`** is the outstanding work,
     fully specified there. Until they land, the only way to exercise a login end to end is
     by hand or through the test suite.
 
@@ -919,7 +929,7 @@ Recorded so they are not rediscovered as surprises:
     mirror), and it throws on an unrecognised shape rather than coercing one, because a
     green light beside a body nobody understands is worse than an error. **The real fix is
     a response model on `/readyz`**, and it belongs to the next task that touches Python.
-    It is a five-line change and `M3.4`'s remaining frontend half is the natural moment.
+    It is a five-line change and `A0` is the natural moment.
 29. **Deviation (F0): `--ease-spring` was pseudo-code in DesignSystem §2.5 and now has a
     real value.** It was written `linear(/* or a spring via Framer Motion */)`, which no
     browser can parse, so the token could not be defined at all — and F0's own test that
@@ -937,7 +947,7 @@ Recorded so they are not rediscovered as surprises:
     against the compiled stylesheet; and both were then **confirmed in headless Chrome over
     CDP**, along with the 260/320/736px column widths and the absence of a theme flash. A
     control asserted only one layer below where it takes effect is not asserted (§4.7,
-    §3 M3.2a). Playwright, at `M3.4`'s frontend half, is where this stops being a bespoke
+    §3 M3.2a). Playwright, at `A0`, is where this stops being a bespoke
     script.
 31. **The frontend has no `mypy`-equivalent gate on the generated client's *runtime*
     shape.** `schema.ts` guarantees the types the API *documents*; it guarantees nothing
