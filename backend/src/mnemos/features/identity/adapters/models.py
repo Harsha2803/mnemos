@@ -16,6 +16,7 @@ from __future__ import annotations
 
 import uuid
 from datetime import datetime
+from typing import Any
 
 from sqlalchemy import (
     Boolean,
@@ -43,7 +44,7 @@ class Org(Base, TimestampMixin):
     slug: Mapped[str] = mapped_column(CITEXT, nullable=False, unique=True)
     name: Mapped[str] = mapped_column(Text, nullable=False)
     is_active: Mapped[bool] = mapped_column(Boolean, nullable=False, server_default=text("true"))
-    settings: Mapped[dict] = mapped_column(
+    settings: Mapped[dict[str, Any]] = mapped_column(
         JSONB, nullable=False, server_default=text("'{}'::jsonb")
     )
 
@@ -104,7 +105,9 @@ class IdentityProvider(Base, TimestampMixin):
     issuer_internal: Mapped[str | None] = mapped_column(Text, nullable=True)
     client_id: Mapped[str | None] = mapped_column(Text, nullable=True)
     client_secret_enc: Mapped[bytes | None] = mapped_column(LargeBinary, nullable=True)
-    config: Mapped[dict] = mapped_column(JSONB, nullable=False, server_default=text("'{}'::jsonb"))
+    config: Mapped[dict[str, Any]] = mapped_column(
+        JSONB, nullable=False, server_default=text("'{}'::jsonb")
+    )
 
 
 class Role(Base, TimestampMixin):

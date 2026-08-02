@@ -4,7 +4,7 @@
 > self-contained: architecture, capability map, schema, milestones, and current state.
 > [`TRACKER.md`](../TRACKER.md) holds live task status; this holds the design.
 
-**Last updated:** 2026-07-27
+**Last updated:** 2026-08-02
 
 ---
 
@@ -194,13 +194,14 @@ own system — its own accent, neutrals and identity — informed by Apple's des
 for typography, spatial rhythm, materials and motion character. §0 there records which
 Apple assets are off-limits (SF Pro as a webfont, SF Symbols) and what is used instead.
 
-**Current position: M1, M2 and `M3.1`–`M3.3` are merged to `main` (PR #1, PR #2 at
-`98fe47a`), and `F0` — the frontend foundation — is done: `frontend/` holds a running,
-themed, accessible three-column shell, `docker compose up -d` serves it at
-`http://localhost:3000`, and `web` is healthy alongside the other eight services. The next
-task is `M3.4` — platform JWT + refresh rotation **and the sign-in screen**, see
-[TRACKER §5](../TRACKER.md#5-next-task). `M3.5`–`M3.7` follow, each carrying a UI slice
-that lands on F0's shell rather than inventing its own. See §8.**
+**Current position: M1, M2, `M3.1`–`M3.3` and `M3.7` are on `main` (PR #1, PR #2 at
+`98fe47a`, PR #5), and so is `M3.4`'s backend half (PR #6). `F0` — the frontend foundation
+— is done: `frontend/` holds a running, themed, accessible three-column shell,
+`docker compose up -d` serves it at `http://localhost:3000`, and `web` is healthy
+alongside the other eight services. The next task is **`M3.4`'s frontend half** — the
+sign-in screen and session handling, items 7–9 of
+[TRACKER §5](../TRACKER.md#5-next-task) — which is the first slice to land on F0's shell.
+`M3.5` and `M3.6` follow, each carrying a UI slice. See §8.**
 
 M3's exit criterion "RLS blocks cross-org" turned out to be unmet by M2 rather than merely
 untested; that is written up in §8 and in [TRACKER §3](../TRACKER.md#3-current-state--what-is-actually-built).
@@ -429,12 +430,140 @@ therefore correct and the instruction was wrong; both are recorded in TRACKER §
 | `ruff` / `mypy --strict` | clean on all new files |
 | `alembic check` | no new operations — neither M3.2a nor M3.3 touched schema |
 
-**Remaining: deliverables 4–7** — JWT issuance and refresh rotation, API keys, the RBAC
-dependency, and `mnemosctl bootstrap`. Specified in
-[TRACKER §5](../TRACKER.md#5-next-task) (next up: **M3.4**). One design question is still
-open and M3.4 must settle it: **`ThreatModel.md` §5 and `core/config.py` disagree on the
-token algorithm** (EdDSA vs HS256). Whichever is chosen, both documents must be
-reconciled in the same commit.
+**Done: M3.4 backend half — platform JWT + refresh rotation (2026-08-02).** M3.3 could
+prove a login *happened*; this is what makes one last. The OIDC callback returns
+`{access_token, token_type, expires_in, org_slug}` and sets the refresh token as an
+`httpOnly`, `SameSite=Lax`, `Path=/api/v1/auth` cookie; `POST /v1/auth/token` rotates it
+and `POST /v1/auth/token:revoke` signs out. **No migration** — `session` already carried
+`refresh_token_hash`, `rotated_to`, `revoked_at` and `revoked_reason`, and `alembic check`
+still reports no new operations.
+
+**The token-algorithm question is settled: HS256**, and the argument now lives in
+`ThreatModel.md` §5.1 instead of contradicting `core/config.py`. api, worker and realtime
+are one trust domain reading one `MNEMOS_JWT_SECRET`, so there is no verifier that must be
+unable to sign — the only thing asymmetric signing buys. EdDSA would turn one environment
+variable into key generation, distribution and a JWKS endpoint with no KMS to hold any of
+it (C1). §5.1 records what reverses the decision: the first verifier outside the signing
+trust domain, e.g. a separately-deployed MCP tool service at M11. The part that actually
+stops forgeries is the same either way — a fixed one-element `algorithms=` allow-list
+passed to the decoder, never the token's own `alg` header.
+
+| File | What it is |
+|---|---|
+| `domain/token.py` | `AccessTokenClaims` — exactly `sub`/`org`/`sid`/`iat`/`exp`/`iss`/`jti`, refusing authorization claims when minting **and** when verifying. Plus `RefreshCredential` (`<org_slug>.<secret>`) and `TokenPair`, both `repr=False` because a generated repr prints a live bearer secret into every log line that formats it. The layer is now proven to import no SQLAlchemy, no FastAPI and **no PyJWT** |
+| `providers/platform.py` | `PlatformTokenCodec` + `PlatformTokenConfig`, deliberately beside `oidc.py`: that one verifies a token another system minted, this one a token we minted and could have forged. Opposite key material, identical header discipline |
+| `application/tokens.py` | `TokenService`, the `SessionStore`/`AppUserStore` ports, and the JIT-provisioning decision |
+| `adapters/sessions.py` | `SqlSessionStore` — compare-and-set rotation, recursive-CTE family walk — and `SqlAppUserStore` |
+| `entrypoints/api/routers/auth.py` | The two new endpoints, the changed callback, and the cookie |
+
+**Rotation and the family kill.** Every use of a refresh token issues a new one and records
+the successor in `rotated_to`. Presenting a token whose row already names a successor is
+*proof* of theft rather than a suspicion — the legitimate holder and the thief cannot both
+hold the current token, and nothing in the request says which is which — so the whole chain
+is revoked. Losing the compare-and-set is the same evidence arriving through a different
+door, which is why a client must collapse concurrent refreshes into one call.
+
+**Just-in-time provisioning is on, and it grants identity rather than authority.** A first
+OIDC login creates the `app_user` row with `password_hash` NULL, no `role_binding` and no
+`user_tag`, so the user can sign in and do nothing until M3.6 grants something. Matching is
+on `external_subject` and never on email: an IdP email is mutable and often unverified, so
+linking on it would let whoever controls that address inherit a local account.
+
+| Command | Result |
+|---|---|
+| `pytest` | **183 passed** in 13.5s (was 97; +86 — 19 codec, 31 rotation policy, 11 store-vs-Postgres, 25 endpoints) |
+| hermetic subset | 167 passed in 5.5s, no Docker |
+| `ruff check` + `ruff format --check` | clean on all new and touched files |
+| `mypy --strict` | clean on `core`, `features`, `entrypoints/api` (28 files) |
+| `alembic check` | "No new upgrade operations detected" |
+
+Live evidence, with the API run against the compose stack: `alg: HS256`, claims
+`['exp','iat','iss','jti','org','sid','sub']` and no roles; `Set-Cookie` carrying
+`HttpOnly; Max-Age=1209600; Path=/api/v1/auth; SameSite=lax` and no `refresh_token` in the
+body; a replayed token returning 401 and leaving **both** rows with
+`revoked_reason=refresh_token_reuse_detected`; four different failure causes producing one
+byte-identical response body.
+
+Two tests are worth naming because they exist to stop a specific kind of false confidence.
+`tests/test_session_store.py` runs the rotation and the family walk against a real Postgres,
+because "the walk reaches a whole chain from a middle member" and "two concurrent rotations
+cannot both win" are properties of the database and a fake would only prove the fake. And
+the endpoint tests assert on the *response bytes*; they were verified to fail by restoring
+the M3.2a leak, which put `"no active org with slug 'nosuchorg'"` on the wire as a
+distinguishable answer — a tenant-enumeration oracle.
+
+**Remaining in M3: the `M3.4` UI slice, then deliverables 5–7** — the sign-in screen and
+session handling, API keys, the RBAC dependency, and `mnemosctl bootstrap`. Specified in
+[TRACKER §5](../TRACKER.md#5-next-task). Note that M3.4 landed **without its UI slice**,
+which is a C12 exception recorded in [TRACKER §4](../TRACKER.md#4-known-gaps-and-honest-weaknesses)
+item 20 rather than glossed over: `frontend/` is still an empty directory, so `F0` has to
+exist before a sign-in screen can be built in anything.
+**Done: M3.7 — `mnemosctl bootstrap` (2026-08-02).** M3.2 and M3.3 built a provider seam
+and an OIDC round trip that nothing could reach: `ProviderFactory` reads
+`identity_provider` to choose a strategy, and that table was empty on every database in
+existence. `bootstrap` creates the first `org`, the three system roles, **both**
+`identity_provider` rows, the admin `app_user` with an argon2id hash, the admin
+`role_binding`, and `org.settings.default_provider`.
+
+| File | What it is |
+|---|---|
+| `domain/roles.py` | `SYSTEM_ROLES` — `admin` (`*:*`), `analyst`, `user`. In `domain/` because M3.6's guard must require against the roles this seeds. Resources are §5's feature packages so a permission traces to the code that enforces it; slugs are the realm's roles minus the `mnemos-` prefix, since a `role` row is already scoped by `org_id` and a Keycloak realm role is not |
+| `application/bootstrap.py` | The use case, its `BootstrapStore`/`BootstrapWriter` ports, and a `BootstrapRequest` validated at construction. Both transactions are opened here, so how much runs elevated is visible where the work is described |
+| `adapters/bootstrap_store.py` | The SQLAlchemy side, and the system's only `elevated_session()` call site |
+| `entrypoints/cli.py` | The command, in `db doctor`'s argparse shape. Password from an env var or a double `getpass` prompt, **never an argument** — argv is world-readable through `/proc/<pid>/cmdline` and lands in shell history |
+
+**The elevation is one statement wide.** Only the org insert runs elevated; it is the one
+statement in the system that provably cannot carry `app.current_org`, because the value it
+would carry is the value it is generating. The other nine run under the tenant GUC, so a
+bug that computed the wrong `org_id` is rejected by the policy's `WITH CHECK` rather than
+committed by a privileged session left open for convenience. Splitting the work across two
+transactions is also why **idempotency is not optional**: a crash between them would
+otherwise leave an unrecoverable half-bootstrapped database. Every step is
+create-if-absent and **nothing existing is ever updated** — an upsert wired into a deploy
+script would reset the administrator's password on every release.
+
+**The live stack proves the claim the task was justified by.** Against the empty `mnemos`
+database, one run created org `mnemos` + admin `admin@mnemos.local` + 3 roles + 2
+providers + 1 binding; a second run with a different password and a different `--org-name`
+reported "already present" on every line and left the hash and the name untouched. On the
+running API:
+
+| Request | Before bootstrap | After |
+|---|---|---|
+| `GET /api/v1/auth/oidc/authorize?org=mnemos` | 401, constant denial | **307 → `http://localhost:8080/realms/mnemos/protocol/openid-connect/auth?...code_challenge_method=S256`** |
+| `...?org=nope` | 401 | 401 — unchanged, as it must be |
+| `...?org=mnemos&provider=internal` | 401 | 401 — a password provider reached through the OIDC endpoint is a misrouted request |
+
+That redirect is split horizon working off the seeded row: discovery ran over
+`issuer_internal` (`keycloak:8080`, resolvable only inside the compose network) and the
+browser is sent to `issuer_public` (`localhost:8080`). One URL in both columns would have
+produced a redirect no browser could follow.
+
+| Command | Result |
+|---|---|
+| `pytest` | **105 passed** in 13.1s (was 97; +8 in `tests/test_bootstrap.py`, six against a real Postgres as the unprivileged role) |
+| `ruff check` + `ruff format --check`, scoped to the diff | clean; the repo-wide run is not, and why is TRACKER §4 item 22 |
+| `mypy --strict` | clean on everything new |
+| `alembic check` | "No new upgrade operations detected" — **no migration**; every column written was created by `0001` |
+
+`test_bootstrap_admin_can_authenticate_through_the_internal_provider` is the test that
+matters: it goes through `ProviderFactory`, so it proves the seeded rows are the *shape*
+M3.2 expects rather than merely present.
+`test_bootstrap_does_not_leave_an_elevated_session_open` guards the one silent,
+catastrophic mistake available here — a leaked `SET ROLE` disables tenant isolation for
+every later query on that pooled connection — and opens with a control asserting the
+elevated session really does elevate, so it cannot pass vacuously.
+
+**M3.7 has no UI half, deliberately** (TRACKER C12 requires this be written down): the
+command runs before anybody can sign in, so an authenticated screen would be unreachable
+and an unauthenticated one would be org creation open to the internet. A CLI is its own
+interface.
+
+**Remaining: deliverables 4–6** — JWT issuance and refresh rotation, API keys, and the
+RBAC dependency. Specified in [TRACKER §5](../TRACKER.md#5-next-task) (next up: **F0**,
+then **M3.4**). One design question is still open and M3.4 must settle it:
+**`ThreatModel.md` §5 and `core/config.py` disagree on the token algorithm** (EdDSA vs
+HS256). Whichever is chosen, both documents must be reconciled in the same commit.
 
 ### Carried over from v0.1 (needs porting from SQLite → Postgres)
 
