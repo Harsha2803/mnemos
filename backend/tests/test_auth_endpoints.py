@@ -376,20 +376,31 @@ def test_the_token_endpoints_appear_correctly_in_openapi(client: TestClient) -> 
     assert "204" in paths["/api/v1/auth/token:revoke"]["post"]["responses"]
 
 
-def test_the_callback_is_typed_as_returning_a_token_pair(client: TestClient) -> None:
+def test_the_callback_is_typed_as_a_redirect_and_carries_no_token_schema(
+    client: TestClient,
+) -> None:
     """M3.3's `SubjectResponse` is gone from the document as well as from the
-    code — a stale schema is what a generated client would still believe."""
+    code — a stale schema is what a generated client would still believe.
+
+    A0 replaced M3.4's `TokenResponse` body here with a 303. The only caller this
+    endpoint has is a browser arriving by top-level navigation from Keycloak, and
+    a JSON body is, to a browser, a page of machine-readable text where an
+    application should be. The generated frontend client must therefore *not*
+    believe there is a token to read out of this response.
+    """
     spec = client.get("/openapi.json").json()
 
     assert "SubjectResponse" not in spec["components"]["schemas"]
-    callback = spec["paths"]["/api/v1/auth/oidc/callback"]["get"]["responses"]["200"]
-    assert callback["content"]["application/json"]["schema"]["$ref"].endswith("/TokenResponse")
+    callback = spec["paths"]["/api/v1/auth/oidc/callback"]["get"]["responses"]
+    assert "303" in callback
+    assert "200" not in callback
+    assert "TokenResponse" not in str(callback)
 
 
 # -------------------------------------------------------- the callback, end to end
 
 
-async def test_the_callback_issues_the_pair_and_sets_the_cookie(
+async def test_the_callback_sets_the_cookie_and_returns_the_browser_to_the_app(
     client: TestClient, service: TokenService, monkeypatch: pytest.MonkeyPatch
 ) -> None:
     """M3.3 ended at a verified subject; this is the change that makes a login
@@ -397,7 +408,13 @@ async def test_the_callback_issues_the_pair_and_sets_the_cookie(
 
     The OIDC flow itself is pinned in `test_oidc_login_flow.py` against a fake
     IdP; what is under test here is only the last step — that the callback turns
-    a completed login into a token pair and a cookie.
+    a completed login into a refresh cookie and a redirect the browser can
+    follow back to the application.
+
+    **No credential in the URL.** The access token is not there and must never
+    be: a query string ends up in browser history, in the `Referer` of the next
+    request, and in every proxy log along the way. The page at the redirect
+    target exchanges the cookie for one, which is asserted at the end.
     """
     from mnemos.features.identity.application.oidc_login import CompletedLogin
 
@@ -410,36 +427,115 @@ async def test_the_callback_issues_the_pair_and_sets_the_cookie(
     response = client.get(
         "/api/v1/auth/oidc/callback",
         params={"state": "a-stored-state", "code": "an-authorization-code"},
+        follow_redirects=False,
     )
 
-    assert response.status_code == 200
-    assert response.json()["org_slug"] == "acme"
-    assert "refresh_token" not in response.json()
+    assert response.status_code == 303
+    assert response.headers["location"] == "http://localhost:3000/signin/complete"
+    assert "access_token" not in response.headers["location"]
+    assert response.text == ""
 
     header = response.headers["set-cookie"]
     assert "HttpOnly" in header
     assert "SameSite=lax" in header
 
-    # The cookie holds a usable credential for this tenant, and the access token
-    # names the session it opened.
+    # The cookie holds a usable credential for this tenant, and exchanging it is
+    # how the page at that URL gets an access token naming the session it opened.
     credential = RefreshCredential.parse(client.cookies[COOKIE])
     assert credential.org_slug == "acme"
-    assert _claims(response.json()["access_token"]).session_id is not None
-    assert client.post(TOKEN_PATH, json={"grant_type": "refresh_token"}).status_code == 200
+
+    exchanged = client.post(TOKEN_PATH, json={"grant_type": "refresh_token"})
+    assert exchanged.status_code == 200
+    assert _claims(exchanged.json()["access_token"]).session_id is not None
 
 
-async def test_the_callback_denies_an_idp_error_without_echoing_it(
+async def test_the_callback_returns_a_failed_login_to_the_signin_screen(
     client: TestClient,
 ) -> None:
     """The IdP's error strings are diagnostic and can name internal
-    configuration, so they never reach the caller."""
+    configuration, so they never reach the caller — not in a body, and not in
+    the redirect either.
+
+    What the browser gets is one constant flag with nothing to branch on, which
+    is the same guarantee the JSON denial made, expressed in the medium the
+    caller is actually using.
+    """
     response = client.get(
         "/api/v1/auth/oidc/callback",
         params={"state": "s", "error": "invalid_client: mnemos-web is misconfigured"},
+        follow_redirects=False,
     )
 
-    assert response.status_code == 401
-    assert response.json() == {
-        "error": {"code": "unauthenticated", "message": AUTHENTICATION_FAILED}
-    }
+    assert response.status_code == 303
+    assert response.headers["location"] == "http://localhost:3000/signin?error=auth_failed"
     assert "misconfigured" not in response.text
+    assert "misconfigured" not in response.headers["location"]
+    assert COOKIE not in response.headers.get("set-cookie", "")
+
+
+async def test_every_login_failure_produces_the_same_url(
+    client: TestClient, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    """The M3.2a lesson, applied to the medium a browser reads.
+
+    `test_every_token_failure_is_byte_identical` asserts it for the JSON
+    endpoints. These two routes answer with a `Location` header instead, so the
+    header is what has to be identical — an `error=no_such_org` next to an
+    `error=access_denied` would be exactly the tenant-enumeration oracle the
+    constant message exists to close, moved into a URL where it is *more*
+    visible, not less.
+    """
+    from mnemos.features.identity.providers import denied
+
+    async def refuse(**_: object) -> None:
+        raise denied("no org with slug 'nosuchorg'")
+
+    monkeypatch.setattr(client.app.state.oidc_login, "begin", refuse)  # type: ignore[attr-defined]
+    monkeypatch.setattr(client.app.state.oidc_login, "complete", refuse)  # type: ignore[attr-defined]
+
+    locations = {
+        client.get(
+            "/api/v1/auth/oidc/authorize", params={"org": "nosuchorg"}, follow_redirects=False
+        ).headers["location"],
+        client.get(
+            "/api/v1/auth/oidc/authorize",
+            params={"org": "acme", "provider": "internal"},
+            follow_redirects=False,
+        ).headers["location"],
+        client.get(
+            "/api/v1/auth/oidc/callback",
+            params={"state": "replayed"},
+            follow_redirects=False,
+        ).headers["location"],
+        client.get(
+            "/api/v1/auth/oidc/callback",
+            params={"state": "s", "error": "access_denied"},
+            follow_redirects=False,
+        ).headers["location"],
+    }
+
+    assert locations == {"http://localhost:3000/signin?error=auth_failed"}
+
+
+async def test_the_authorize_route_still_redirects_a_good_request_to_the_idp(
+    client: TestClient, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    """The control for the two tests above: a guard that redirected *everything*
+    to the sign-in screen would satisfy both of them and would be a login nobody
+    can complete."""
+    from mnemos.features.identity.application.oidc_login import AuthorizationRedirect
+
+    async def begin(**_: object) -> AuthorizationRedirect:
+        return AuthorizationRedirect(
+            url="http://localhost:8080/realms/mnemos/protocol/openid-connect/auth?state=x",
+            state="x",
+        )
+
+    monkeypatch.setattr(client.app.state.oidc_login, "begin", begin)  # type: ignore[attr-defined]
+
+    response = client.get(
+        "/api/v1/auth/oidc/authorize", params={"org": "acme"}, follow_redirects=False
+    )
+
+    assert response.status_code == 307
+    assert response.headers["location"].startswith("http://localhost:8080/realms/mnemos/")

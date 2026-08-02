@@ -125,6 +125,13 @@ class Settings(BaseSettings):
     # MFA, short enough that an abandoned attempt is not a standing credential.
     oidc_login_state_ttl_s: int = 600
 
+    # Where the browser is sent when a login ends, successfully or not. A
+    # setting rather than anything derived from the request: a redirect target
+    # taken from a `Host` header, a `Referer` or a query parameter is an open
+    # redirect, and an open redirect on the *login* route is the one that
+    # matters most — it is where a credential has just been minted.
+    web_base_url: str = "http://localhost:3000"
+
     # -- context compiler defaults ---------------------------------------
     default_token_budget: int = 3000
     default_operator_deadline_ms: int = 2000
@@ -195,6 +202,23 @@ class Settings(BaseSettings):
         hole in some unrelated endpoint — for a credential only two routes ever
         need."""
         return f"{self.api_prefix}/auth"
+
+    @property
+    def web_signin_url(self) -> str:
+        """The sign-in screen. Every login failure lands here, with one constant
+        flag and no reason (`entrypoints/api/routers/auth.py`)."""
+        return f"{self.web_base_url.rstrip('/')}/signin"
+
+    @property
+    def web_signin_complete_url(self) -> str:
+        """Where a *successful* callback sends the browser.
+
+        The access token is deliberately not carried here. The callback has
+        already set the refresh cookie, and the page at this URL exchanges that
+        cookie for an access token over `POST /auth/token` — so no credential
+        ever appears in a URL, in browser history, or in a `Referer` header.
+        """
+        return f"{self.web_base_url.rstrip('/')}/signin/complete"
 
 
 @lru_cache(maxsize=1)
