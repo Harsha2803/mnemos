@@ -92,6 +92,18 @@ class Settings(BaseSettings):
     access_token_ttl_s: int = 900
     refresh_token_ttl_s: int = 60 * 60 * 24 * 14
 
+    # The refresh token reaches the browser as an httpOnly cookie and never in a
+    # response body, so no script can read it — `localStorage` is readable by any
+    # XSS, and a refresh token is the credential worth stealing. `SameSite=Lax` is
+    # what makes the cookie safe to *accept* on the token endpoints: Lax withholds
+    # the cookie from cross-site POSTs, and both endpoints are POST-only, so a
+    # forged form on another origin sends nothing.
+    refresh_cookie_name: str = "mnemos_refresh"
+    # `None` means "derive it": never `Secure` over local http, always otherwise.
+    # Hard-coding False would ship a cookie that travels in clear text; hard-coding
+    # True would silently drop it in development, which looks like a broken login.
+    refresh_cookie_secure: bool | None = None
+
     # Split-horizon OIDC. The browser is redirected to the public issuer; the API
     # fetches JWKS over the internal one. Collapsing these into a single URL is
     # the standard containerised-OIDC failure: the token's `iss` never matches
@@ -165,6 +177,24 @@ class Settings(BaseSettings):
     @property
     def is_local(self) -> bool:
         return self.env is Environment.LOCAL
+
+    @property
+    def refresh_cookie_is_secure(self) -> bool:
+        """`Secure` unless this is local development over plain http."""
+        if self.refresh_cookie_secure is not None:
+            return self.refresh_cookie_secure
+        return self.env is not Environment.LOCAL
+
+    @property
+    def refresh_cookie_path(self) -> str:
+        """Scoped to the auth routes, so the browser attaches the refresh token
+        to the two endpoints that consume it and to nothing else.
+
+        A cookie on `/` rides along on every API call, which widens the blast
+        radius of a logging middleware, a proxy that records headers, or a CSRF
+        hole in some unrelated endpoint — for a credential only two routes ever
+        need."""
+        return f"{self.api_prefix}/auth"
 
 
 @lru_cache(maxsize=1)
