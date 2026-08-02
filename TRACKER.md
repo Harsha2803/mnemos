@@ -7,9 +7,17 @@
 > tracker is worse than none.
 
 **Last updated:** 2026-08-02
-**Phase:** M3 — identity. RLS prerequisite + `M3.1` + `M3.2` (+ error-boundary fix) + `M3.3` (OIDC round trip) done; deliverables 4–7 remain
-**Next task:** `M3.4`, fully specified in §5. Take them one at a time, in order
-**Branch:** `feat/m3-identity` (PR #2, draft). M1+M2 merged to `main` as PR #1
+**Phase:** **F0 — frontend foundation.** M3 backend is at `M3.3`; `M3.4`–`M3.7` remain and
+now each carry a UI slice (§5)
+**Next task:** `F0`, fully specified in §5. Take them one at a time, in order
+**Branch:** `feat/f0-frontend-foundation`. **M1+M2 merged as PR #1; M3.1–M3.3 merged as
+PR #2 (`98fe47a`)** — `main` now contains everything through the OIDC round trip
+
+> **2026-08-02 — the project is now built in vertical slices.** Every milestone ships its
+> backend *and* the UI for that backend. The old plan deferred the entire frontend to a
+> single milestone `M13`; that milestone is **dissolved** and its contents redistributed
+> (§3.0). The reason is in §2 C12: a feature with no UI is a feature nobody has used, and
+> a year of backend with no screens is a portfolio piece that cannot be demonstrated.
 
 ---
 
@@ -17,9 +25,12 @@
 
 1. **Read in this order:** this file → [`docs/ADAPTATION.md`](docs/ADAPTATION.md) →
    `README.md` → the module you are changing →
-   [`docs/CodingStandards.md`](docs/CodingStandards.md).
+   [`docs/CodingStandards.md`](docs/CodingStandards.md) for backend work, or
+   [`docs/DesignSystem.md`](docs/DesignSystem.md) for **any** frontend work.
    This file tells you *what to do next*. ADAPTATION tells you *what the thing is* —
    architecture, the JIVA capability map, the schema plan, and the M1–M14 ledger.
+   DesignSystem tells you *what it looks like* and is not optional reading before you
+   write a component.
 2. **Do not re-litigate decisions in §2 or in ADAPTATION §9.** They are settled and
    several are load-bearing for numbers published in the README. If you believe one is
    wrong, write an ADR superseding it — do not silently deviate.
@@ -34,7 +45,11 @@
    files.
 7. **Every branch gets a PR the moment it has a commit** — draft if the work is
    unfinished. A branch without a PR is a branch that gets lost.
-8. **One task per session.** Finish whatever the previous session left unfinished; if
+8. **A backend task is not done until its UI slice is done.** See §2 C12 and §3.0. If
+   you land an endpoint, the screen that calls it is part of the same milestone — either
+   in the same commit or in the next one, never in a later milestone. If the UI genuinely
+   cannot be built yet, say why in §4 rather than leaving it implied.
+9. **One task per session.** Finish whatever the previous session left unfinished; if
    nothing is pending, implement exactly one task from §5 and stop. Do not continue to
    the next task and do not start it while asking whether to. The next task gets a new
    session — that is deliberate, to spend usage limits on fresh context rather than on a
@@ -92,6 +107,8 @@ token waste: 6.9% → 1.1%. Answer retention: 100% both. Latency: 69 ms → 81 m
 | C9 | **Never use the work email/account** (`@jktech.com`, `harshaJKT`). Personal only. | Two GitHub accounts are authenticated in `gh`; confirm `Harsha2803` is active before any push |
 | C10 | **The baseline must stay a fair representative**, not a strawman. `test_naive_arm_does_include_superseded_revisions` guards this. | A rigged baseline invalidates everything |
 | C11 | **Never copy from `jiva/`.** Patterns are portable; artifacts are not. | See ADAPTATION §2. Employer IP in a public repo is a real legal problem |
+| C12 | **Every feature ships its UI in the same milestone.** Backend and frontend advance together; no milestone is complete with an untouched `frontend/`. | A capability with no screen is one nobody has exercised end to end. It also hides integration defects — M3.2a was a leak invisible to every unit test because nothing looked at the wire |
+| C13 | **The UI follows [`docs/DesignSystem.md`](docs/DesignSystem.md).** Tokens are the only source of colour, type, spacing and radius. | Consistency is the whole value of a design system; one component with a hard-coded hex is the crack it starts leaking through. The system draws its *ideas* from Apple's design resources — type scale, spatial rhythm, materials, motion character — but the palette, accent and identity are Mnemos's own; §0 there records which Apple assets are off-limits and why |
 
 ---
 
@@ -100,13 +117,37 @@ token waste: 6.9% → 1.1%. Answer retention: 100% both. Latency: 69 ms → 81 m
 Milestone ledger and exit criteria live in [ADAPTATION §7](docs/ADAPTATION.md#7-milestones).
 Detailed evidence for each ✅ is in [ADAPTATION §8](docs/ADAPTATION.md#8-current-state).
 
-| Milestone | Status |
-|---|---|
-| M1 container stack + backend skeleton | ✅ nine services healthy |
-| M2 Alembic + full schema | ✅ 41 tables, 4 revisions, `alembic check` clean |
-| M3 identity | 🟡 **in progress** — prerequisite + `M3.1` + `M3.2` + `M3.3` done, `M3.4`–`M3.7` remain |
-| M4 port memory/retrieval/context kernel to PG | ⬜ |
-| M5–M14 | ⬜ |
+### 3.0 The slice plan — every milestone has two halves
+
+`M13` ("Next.js frontend, all pages") **no longer exists.** Building every screen at the
+end meant the screens would be designed against APIs shaped without them, and would land
+as one unreviewable drop. Its contents are now distributed: a foundation task (`F0`) plus
+a UI slice attached to each milestone that produces something a user can see.
+
+**Read the frontend column as part of the milestone, not as a follow-up.** A milestone is
+complete when both halves are (C12).
+
+| ID | Backend half | Frontend half | Status |
+|---|---|---|---|
+| **M1** | Container stack, backend skeleton | — (no UI to build yet) | ✅ |
+| **M2** | Alembic + 41-table schema | — | ✅ |
+| **F0** | — | **App shell**: Next.js, design tokens, three-column layout, theming, base primitives, generated API client | ⬜ **next** |
+| **M3** | identity: `3.4` JWT · `3.5` API keys · `3.6` RBAC · `3.7` bootstrap | **Sign-in screen**, session handling, protected shell, API-key management, org switcher | 🟡 `3.1`–`3.3` ✅ backend; UI not started |
+| **M4** | port memory/retrieval/context kernel to PG | **Context inspector** — the bundle viewer. The signature screen of the product | ⬜ |
+| **M5** | objectstore (MinIO) + connectors + Redis Streams | **Sources**: connect a source, browse it, watch events arrive | ⬜ |
+| **M6** | knowledge: extract, chunk, embed, ingest jobs | **Knowledge library** + upload + live job progress | ⬜ |
+| **M7** | LLM gateway (Ollama) + prompt store + cost ledger | **Prompt manager** (versions, activate) + **cost dashboard** | ⬜ |
+| **M8** | chat: sessions, messages, SSE streaming | **The chat surface.** Streaming, folders, bookmarks, feedback | ⬜ |
+| **M9** | RAG flow + citations | **Citations** in the message, click-through into the inspector | ⬜ |
+| **M10** | NL2SQL: introspection, AST guard, narration | **SQL panel**: generated SQL, result grid, narration | ⬜ |
+| **M11** | MCP tool runtime | **Tool console** + approval dialogs for gated calls | ⬜ |
+| **M12** | router: classify → flow | **Flow indicator** on each message, and why it was chosen | ⬜ |
+| **M13** | ~~Next.js frontend~~ | **dissolved** into `F0` + the slices above | — |
+| **M14** | realtime WS, nginx, e2e, docs | **Live streaming/presence** polish; Playwright e2e over the whole stack | ⬜ |
+
+**Why `F0` before `M3.4`.** `frontend/` is an empty directory: there is nothing for a
+sign-in screen to be built *in*. `F0` is the one task with no backend half, because it is
+the scaffolding every later UI slice lands on. After it, the pattern is uniform.
 
 ### 🟡 M3 prerequisite — RLS made real, verified 2026-07-27
 
@@ -395,9 +436,11 @@ Recorded so they are not rediscovered as surprises:
    because it is not in the M3 diff. One-line fix whenever that file is next edited.
 10. **`context_bundle` and `bundle_item` have no writer yet.** The tables and the budget
     CHECK exist; the compiler that fills them is M4.
-11. **The frontend is an empty directory.** `web` is behind a compose profile so it does
-    not break `up`. M13. Until then the only UI is Swagger at `http://localhost:8000/docs`,
-    the Keycloak console at `:8080` (`admin`/`admin`) and the MinIO console at `:9001`.
+11. **The frontend is still an empty directory** and `web` is still behind a compose
+    profile — but this is now the **next task**, not a deferred milestone. `F0` builds the
+    shell and un-gates the service; see §3.0 for why `M13` was dissolved. Until `F0` lands
+    the only UI is Swagger at `http://localhost:8000/docs`, the Keycloak console at `:8080`
+    (`admin`/`admin`) and the MinIO console at `:9001`.
 12. **Deviation (M3.2), now confirmed correct by M3.3: the OIDC validator trusts *two*
     configured issuers, not `issuer_internal` alone.** The old §5 said to validate `iss`
     against `issuer_internal`. **A real token from the live realm carries
@@ -419,8 +462,8 @@ Recorded so they are not rediscovered as surprises:
     *this token was issued to us*. PyJWT's own `aud` verification is switched off and
     replaced rather than left on and worked around.
 14. **`ThreatModel.md` §5 (EdDSA) still contradicts `core/config.py` (HS256).** Untouched
-    by M3.2, which issues no tokens. **M3.4 must pick one and reconcile both documents** —
-    see §5.
+    by M3.2 and M3.3, neither of which issues a token. **`M3.4` must pick one and reconcile
+    both documents in the same commit** — see §5.
 15. ~~**No end-to-end proof against the live Keycloak yet.**~~ **Discharged by M3.3** —
     `test_a_real_keycloak_token_is_accepted_by_the_validator` and
     `test_the_realm_allows_the_api_callback_as_a_redirect_uri` run against the live stack,
@@ -431,128 +474,239 @@ Recorded so they are not rediscovered as surprises:
     logic is covered hermetically and the live tests cover "a genuine Keycloak token
     validates". Running them from inside the `api` container would exercise both at once
     and is the obvious improvement whenever the test suite gains a container-side runner.
-17. **The OIDC callback returns a subject, not a token.** Deliberate — M3.4 replaces the
+17. **The OIDC callback returns a subject, not a token.** Deliberate — `M3.4` replaces the
     response with an access/refresh pair. Until then there is no way to *stay* logged in,
     only to prove a login happened.
+18. **There is no CI. `.github/workflows/` does not exist**, so `gh pr checks` reports
+    nothing and "the PR is green" has, so far, meant *someone ran the gate locally and said
+    so in the merge commit*. That is how PR #2 was merged (2026-08-02): `pytest` 97 passed,
+    `ruff` clean, `mypy --strict` clean on new code, `alembic check` clean, pasted into the
+    merge message. It is honest but it is not a control — it depends on the person
+    remembering, and it cannot fail a merge. **A GitHub Actions workflow running the same
+    four commands is a small task and should be picked up as `F0a` or alongside `M3.4`.**
+    Note the wrinkle that makes it non-trivial: `pytest` needs Docker (testcontainers) and
+    the 2 live-Keycloak tests need a Keycloak service — so the workflow wants
+    `services:` containers, or it must run the 92-test hermetic subset and accept that the
+    Postgres and Keycloak tests only run locally.
+19. **`mypy --strict` is not clean repo-wide.** Two `type-arg` errors in
+    `features/identity/adapters/models.py` (M2, `dict` without parameters) and four files
+    in the quarantined `_v1/`. Neither is in any recent diff. The `models.py` pair is a
+    two-line fix whenever that file is next touched; `_v1/` is fixed by the M4 port.
 
 ---
 
 ## 5. NEXT TASK
 
-### `M3.4` — platform JWT issuance + refresh-token rotation
+### `F0` — frontend foundation: the shell every later UI slice lands on
 
-**Do this one only.** M3.3 is done — see §3. A login now proves who someone is and then
-forgets it: the callback returns a subject and there is no way to *stay* logged in. M3.4
-mints the platform's own tokens and makes a session survive.
+**Do this one only.** It is the single task with no backend half, because `frontend/` is
+an empty directory and there is nothing for a sign-in screen to be built *in*. After F0
+the pattern is uniform: each milestone ships its endpoints and its screens together (C12).
 
-**Why now.** Every route from M3.6 onward is guarded by a `Principal`, and a `Principal`
-comes from a platform token. Until this exists there is nothing to guard with, and the
-OIDC round trip lands nowhere.
+**Why now, before `M3.4`.** The old plan built every screen at the end. That guarantees
+the APIs get shaped without a consumer, and that the entire UI lands as one drop nobody
+can review. It also means the system cannot be *shown* to anyone until the last milestone.
+Frontloading the shell costs one task and changes the shape of everything after it.
 
-**Read first:** `features/identity/application/oidc_login.py` (what hands you a subject),
-`features/identity/adapters/models.py` — the `Session` model, especially `rotated_to`,
-`refresh_token_hash` and `uq_session_refresh_token_hash` — `core/security.py`
-(`digest_token` already exists for exactly this), `docs/APIContract.md` §2,
-`docs/ThreatModel.md` §5, and `entrypoints/api/routers/auth.py`.
+**Read first:** [`docs/DesignSystem.md`](docs/DesignSystem.md) **in full** — it is
+normative. §0 lists what the system takes from Apple's design resources (type scale,
+spatial rhythm, semantic colour, materials, motion character, accessibility floors) and
+what it deliberately does not (SF Pro as a webfont, SF Symbols, anything resembling Apple's
+visual identity — the accent and neutrals are Mnemos's own). Then the `web` service in
+`docker-compose.yml`, which is already written and waiting, and `entrypoints/api/main.py`
+for the CORS origins and `/openapi.json`.
 
-**Settle the algorithm conflict first — it is a prerequisite, not a footnote.**
-`ThreatModel.md` §5 specifies **EdDSA (Ed25519)**; the committed `core/config.py`
-specifies **HS256** with a shared secret. Pick one, and:
+**Scope.** A running, themed, accessible shell with **no feature screens** — resist
+building the sign-in form here; that is `M3.4`'s UI slice and it needs JWT issuance to
+exist first.
 
-- **HS256 is defensible** while api, worker and realtime share one trust domain and one
-  secret, and it is what is configured today. The security-critical half is not the
-  algorithm but the **allow-list**: never read `alg` from the token.
-  `providers/oidc.py` already shows the shape (`ALLOWED_ALGORITHMS`, passed to the
-  decoder) — reuse that discipline rather than reinventing it.
-- **EdDSA** buys asymmetric verification, so a future service can verify without holding
-  a signing key. That is real, and it is also not needed by anything that exists.
-- Whichever way it goes: **update `ThreatModel.md` and `core/config.py` so they agree**,
-  and record the decision in §4. Do not implement one and leave both documents standing —
-  that is the state today and it is why this paragraph exists.
-
-**Scope.**
-
-1. **Access tokens.** 15 minutes (`settings.access_token_ttl_s`). **Identity only — no
-   roles, no permissions, no tags in the claims.** `APIContract.md` §2 is explicit and the
-   reason is worth restating: a token carrying `roles` keeps working after the role is
-   revoked, and that window is exactly what an attacker looks for. Roles resolve per
-   request from the database (M3.6). Claims: `sub` (the `app_user.id`), `org` (the org
-   id), `sid` (the session id), `iat`, `exp`, `iss`, `jti`. Verification must pin the
-   algorithm, `iss`, and expiry with no leeway.
-2. **Refresh tokens.** High-entropy random from `secrets`, stored **SHA-256-hashed** via
-   the existing `core.security.digest_token` — *not* argon2id, and the docstring there
-   already carries the reason a reviewer will ask for (`uq_session_refresh_token_hash` is
-   a unique index, and argon2's per-row salt would make the column unsearchable; the input
-   has no dictionary to slow down). Compare with `tokens_equal`.
-3. **Rotation, and the family kill.** Every use of a refresh token issues a new one and
-   sets the old row's `rotated_to` to the new row's id. Presenting a token whose row
-   already has `rotated_to` set **proves theft** — the legitimate holder and the thief
-   cannot both have the current token — so revoke **the entire chain**, not just that row.
-   Walk `rotated_to` to the head and revoke forward, and set `revoked_reason`.
-4. **The org travels in the credential.** Settled in M3.2 and it applies here: the refresh
-   token must name its tenant, because `session` is org-scoped and unreadable until the
-   org is known. Format it as `<org_slug>.<secret>`, and note that `APIContract.md` §1
-   specifies `X-API-Key: <key_id>.<secret>` — the same refinement lands there in M3.5.
-   **`APIContract.md` must be updated in this commit** either way.
-5. **Wire it into the OIDC callback**, replacing `SubjectResponse` with the token pair
-   from `APIContract.md` §2. The subject must be mapped to a local `app_user` — this is
-   where just-in-time provisioning from an external IdP is decided. If you provision,
-   `app_user.provider_id` and `external_subject` are the columns, and `password_hash`
-   stays `NULL` (M3.2 already refuses to password-authenticate such a user).
-6. **`POST /v1/auth/token` with `grant_type=refresh_token`**, and
-   `POST /v1/auth/token:revoke`.
+1. **The app.** Next.js 15 App Router, TypeScript `strict`. `frontend/Dockerfile`,
+   multi-stage and non-root, matching `backend/Dockerfile`'s shape — compose already
+   references it by that exact path.
+2. **Tokens as the single source of truth.** Every custom property from DesignSystem §2
+   in one `app/globals.css`, wired into Tailwind v4 via `@theme`. **v4 reads CSS custom
+   properties natively, so the tokens *are* the config** — do not maintain a parallel
+   `tailwind.config.js` palette, which is exactly the second source of truth C13 exists to
+   prevent.
+3. **Theming.** Light/dark following `prefers-color-scheme`, plus an explicit user choice
+   stored and applied as `data-theme` on `<html>`. The explicit choice must win **in both
+   directions** — a user on a dark OS choosing light must get light. Set it before first
+   paint (a blocking inline script in `<head>`) or the page flashes the wrong theme.
+4. **The three-column shell** from DesignSystem §1: sidebar 260px, fluid content with a
+   `46rem` measure, collapsible 320px inspector. Sidebar and toolbar use the translucent
+   material — **with the `@supports not (backdrop-filter:...)` opaque fallback**, because
+   translucent chrome over unblurred content is illegible. Below `1024px` the inspector
+   becomes an overlay sheet; below `768px` the sidebar does too.
+5. **Base primitives only**, on Radix where a behaviour exists: `Button` (the three ranks
+   — filled, tinted, plain, and no fourth), grouped-inset `List` with separators inset to
+   the text origin, `EmptyState`, `Skeleton`, `ThemeToggle`. Each with a Vitest test that
+   queries **by role and accessible name**, which is an accessibility assertion as much as
+   a behavioural one.
+6. **The generated API client.** `openapi-typescript` (or equivalent) against
+   `http://localhost:8000/openapi.json`, output committed, with the generate command in
+   `package.json`. **No hand-written interface mirroring a Pydantic model** — that is a
+   second source of truth that drifts silently and surfaces as a runtime error in front of
+   a user.
+7. **One real call, end to end:** a health indicator in the shell reading `/readyz` through
+   the generated client and TanStack Query. It is small, and it is what proves the
+   container, the CORS config, the generated types and the query layer all actually work
+   together rather than each working alone.
+8. **Un-gate the service.** Delete `profiles: ["web"]` from `docker-compose.yml` and its
+   now-wrong comment, so `docker compose up -d` brings the frontend up with everything
+   else. Update the "Stack up" and "UI" rows in §3 Environment.
 
 **Acceptance**
-- `test_rotated_refresh_token_revokes_family` — **the M3-level criterion.** Use a token,
-  use the *old* one again, assert the whole chain is revoked and that the newest token
-  stops working too.
+- `docker compose up -d` → `http://localhost:3000` serves the shell, and `docker compose
+  ps` shows `web` healthy alongside the other eight.
+- `test_theme_toggle_overrides_the_system_preference_in_both_directions` — the failure
+  mode is one-directional and easy to ship.
+- **No flash of the wrong theme** on hard reload with a dark OS. Assert the pre-paint
+  script exists; verify the absence of flash by eye and say so in the tracker.
+- `axe` clean on the shell (`vitest-axe` or Playwright's `@axe-core/playwright`).
+- `test_every_interactive_target_is_at_least_44px` over the rendered primitives.
+- `test_no_component_hardcodes_a_colour` — grep the component sources for `#` hex literals
+  and `rgb(`/`hsl(` outside `globals.css` and fail on a hit. Crude, and it is the check
+  that keeps C13 true after the twentieth component.
+- Reduced motion: the global `prefers-reduced-motion` block from DesignSystem §2.5 is
+  present and a test asserts transitions collapse under it.
+- `npm run build` clean, `tsc --noEmit` clean, ESLint clean.
+- **Backend untouched**: `pytest` still 97 passed, `alembic check` still clean. F0 changes
+  no Python.
+
+**Explicitly not in F0:** any sign-in form, any chat UI, any inspector *content*. The
+inspector renders an `EmptyState` until M4 fills it.
+
+### `M3.4` — platform JWT + refresh rotation, **and the sign-in screen**
+
+The first slice under the new rule: backend and UI in the same milestone.
+
+**Backend half.** Unchanged from the previous specification and still fully valid:
+
+1. **Settle the algorithm conflict first.** `ThreatModel.md` §5 says **EdDSA (Ed25519)**;
+   `core/config.py` says **HS256**. Pick one, implement it, and **reconcile both
+   documents in the same commit** — do not leave both standing, which is the state today.
+   HS256 is defensible while api/worker/realtime share one trust domain and one secret;
+   the security-critical half is the **allow-list**, never reading `alg` from the token.
+   `providers/oidc.py` already shows that shape. Record the decision in §4.
+2. **Access tokens**, 15 min, **identity only — no roles, no permissions, no tags**
+   (`APIContract.md` §2). A token carrying `roles` keeps working after the role is
+   revoked. Claims: `sub`, `org`, `sid`, `iat`, `exp`, `iss`, `jti`.
+3. **Refresh tokens**: high-entropy from `secrets`, stored SHA-256-hashed via the existing
+   `core.security.digest_token` — not argon2id, and that docstring already carries the
+   reason. Compare with `tokens_equal`.
+4. **Rotation and the family kill.** Every use issues a new token and sets the old row's
+   `rotated_to`. Presenting a token whose row *already* has `rotated_to` set proves theft —
+   the legitimate holder and the thief cannot both hold the current token — so revoke the
+   **entire chain**, and set `revoked_reason`.
+5. **The org travels in the credential** (settled in M3.2): `<org_slug>.<secret>`.
+   `APIContract.md` §1 currently specifies `X-API-Key: <key_id>.<secret>`; update it in
+   this commit either way.
+6. Replace the OIDC callback's `SubjectResponse` with the token pair, mapping the subject
+   to a local `app_user` — this is where just-in-time provisioning is decided.
+   `POST /v1/auth/token` (`grant_type=refresh_token`) and `POST /v1/auth/token:revoke`.
+
+**Frontend half — the sign-in screen and session handling.**
+
+7. **Sign-in route.** Org slug field, then "Continue with Keycloak" driving
+   `GET /api/v1/auth/oidc/authorize?org=…`. Design per DesignSystem §4: one `filled`
+   button, real `<form>` semantics, `aria-live` for the error.
+   **Every failure renders the same message** — the backend already guarantees one constant
+   denial string, and the UI must not undo that by branching on anything to say "no such
+   org" (this is exactly the M3.2a mistake, one layer further out).
+8. **Session handling.** Access token in memory, refresh in an `httpOnly` cookie set by
+   the API — *not* `localStorage`, which is readable by any XSS. A TanStack Query
+   interceptor refreshes on 401 once, and on a second 401 clears state and returns to
+   sign-in. Concurrent 401s must trigger **one** refresh, not one per in-flight request:
+   the rotation chain treats the second use as theft and would kill the family.
+9. **The protected shell.** F0's layout behind an auth boundary; unauthenticated visits
+   redirect to sign-in preserving the intended destination. Sign-out calls
+   `token:revoke`. The signed-in user appears in the sidebar footer.
+
+**Acceptance (both halves)**
+- `test_rotated_refresh_token_revokes_family` — the M3-level criterion.
 - `test_access_token_carries_no_roles_or_permissions` — inspect the claims directly.
-- `test_a_token_signed_with_another_algorithm_is_rejected` — including `alg: none` and,
-  if you land HS256, an asymmetric-signed token. Mirror
+- `test_a_token_signed_with_another_algorithm_is_rejected`, including `alg: none`. Mirror
   `test_oidc_provider_rejects_an_unsigned_token`, which hand-forges rather than relying on
   PyJWT to mint the forgery.
-- `test_expired_access_token_is_rejected` with zero leeway.
+- `test_expired_access_token_is_rejected`, zero leeway.
 - `test_refresh_token_for_one_org_is_useless_against_another`.
-- A live-stack test end-to-end: real Keycloak token → platform token pair → refresh →
-  rotation. Mark it skippable like M3.3's, and **verify it actually skips** with the stack
-  down rather than assuming it does.
-- `pytest` green, `ruff` + `mypy --strict` clean on new files, `alembic check` clean —
-  M3.4 should need **no migration**; `session` already has every column.
+- `test_concurrent_401s_trigger_exactly_one_refresh` — frontend, and it is the one that
+  prevents a self-inflicted family revocation.
+- `test_signin_error_is_identical_for_unknown_org_and_denied_login` — frontend.
+- A **Playwright** run: sign in against the live Keycloak, land on the shell, reload and
+  stay signed in, sign out. Skippable like M3.3's live tests, and **verify it actually
+  skips** with the stack down rather than assuming it does.
+- `pytest` green, `ruff` + `mypy --strict` clean, `alembic check` clean (no migration —
+  `session` already has every column). Frontend: `tsc`, ESLint, `axe` clean.
 
-### Then, still in M3, one commit each
+### Then, still in M3 — each with its UI slice, one commit each
 
-5. API-key auth: argon2id hash (`core/security.PasswordHasher` — the same hasher; an
-   API-key secret is low-entropy enough to deserve it), `prefix` for identification,
-   plaintext shown once, org folded into the id half per M3.2's decision.
-6. RBAC dependency for FastAPI: deny by default, permission checked as set membership
-   against `PermissionSet` from M3.1. `test_unauthenticated_request_is_denied_by_default`
-   on a route with **no** explicit guard is the one that matters — it must fail closed.
-7. `mnemosctl bootstrap` — create the first org, admin user and system roles through
-   `Database.elevated_session()` (`SET LOCAL ROLE mnemos_admin`), because the very first
-   insert has no org to scope to. Also seed `org.settings.default_provider`, which is what
-   `ProviderFactory` reads when a login names no provider, and seed the org's
-   `identity_provider` rows — without them nothing in M3.2/M3.3 can be exercised by hand.
+- **`M3.5` API keys** — argon2id (same `PasswordHasher`; an API-key secret is low-entropy
+  enough to deserve it), `prefix` for identification, plaintext shown once, org folded into
+  the id half.
+  **UI:** a keys list, a create dialog that shows the secret **exactly once** with a copy
+  button and an unmissable "this will not be shown again", and revoke with a confirmation
+  that names the key (DesignSystem §4, destructive actions).
+- **`M3.6` RBAC dependency** — deny by default, permission as set membership against
+  `PermissionSet`. `test_unauthenticated_request_is_denied_by_default` on a route with
+  **no** explicit guard is the one that matters: it must fail closed.
+  **UI:** the shell hides what the principal cannot reach and renders a real 403 state for
+  what it reaches anyway. Hiding a control is a courtesy, never the control itself.
+- **`M3.7` `mnemosctl bootstrap`** — first org, admin user, system roles, through
+  `Database.elevated_session()` because the first insert has no org to scope to. Seed
+  `org.settings.default_provider` and the `identity_provider` rows; without them nothing
+  in M3.2/M3.3 can be exercised by hand.
+  **UI:** none. A CLI is its own interface — say so rather than inventing a screen.
 
 **Acceptance for M3 overall**
 
 - ~~Keycloak login round-trips~~ ✅ to a verified subject (M3.3); to a **platform JWT** is
-  M3.4.
+  `M3.4`.
 - ~~`test_cross_org_read_returns_zero_rows`~~ ✅ done in the prerequisite; see §3.
 - `test_rotated_refresh_token_revokes_family`.
 - `test_unauthenticated_request_is_denied_by_default` on a route with no explicit guard.
+- **A person can sign in through the browser and stay signed in.** New, and it is the
+  criterion that makes M3 real rather than merely tested.
 - `alembic check` still clean; `pytest` green.
 
-**Commit shape:** one commit per numbered deliverable, not one for the milestone.
+**Commit shape:** one commit per numbered deliverable, not one for the milestone. A
+backend deliverable and its UI slice may share a commit or be adjacent commits — but not
+adjacent *milestones* (C12).
 
-### Then, in order
+### Then, in order — each milestone is both halves (§3.0, C12)
 
-- `M4` — port the `_v1` kernel to asyncpg + pgvector; re-run the benchmark on Postgres
+- **`M4`** — port the `_v1` kernel to asyncpg + pgvector; re-run the benchmark on Postgres
   and update the README numbers. Rolls in old tasks `N2` (cache `all_chunks()`) and
-  `N3` (`tiktoken` adapter), which are cheap once the code has moved.
-- `M5` — objectstore (MinIO) + connectors port/factory + Redis Streams events.
-- `M6` — knowledge: extract, chunk, embed, ingest jobs. The worker's reaper already
-  exists; give it real jobs to reap.
-- `M7`–`M14` — see [ADAPTATION §7](docs/ADAPTATION.md#7-milestones).
+  `N3` (`tiktoken` adapter), cheap once the code has moved.
+  **UI: the context inspector** — the signature screen. For a selected message: what was
+  admitted, what was excluded and *why* (superseded revision, failed ACL, deduped,
+  over budget), token spend against the budget, and the ranked candidates that lost.
+  This is the screen that makes the headline numbers legible instead of a README claim,
+  so it is worth more design attention than anything else in the app.
+- **`M5`** — objectstore (MinIO) + connectors port/factory + Redis Streams events.
+  **UI:** connect a source, browse it, watch events arrive live.
+- **`M6`** — knowledge: extract, chunk, embed, ingest jobs. The worker's reaper exists;
+  give it real jobs to reap.
+  **UI:** knowledge library, drag-and-drop upload, per-job progress with the heartbeat and
+  stuck-job states surfaced — a job that silently dies is the failure this milestone's
+  backend is specifically built to detect, so the UI must show it.
+- **`M7`** — LLM gateway (Ollama), versioned prompt store, cost ledger.
+  **UI:** prompt manager with version diff and activate; cost dashboard.
+- **`M8`** — chat: sessions, messages, SSE, bookmarks, feedback, folders.
+  **UI: the chat surface** — the main product screen. Token-by-token streaming (never a
+  spinner over a blank region, DesignSystem §4), folders, bookmarks, feedback.
+- **`M9`** — RAG flow with citations. **UI:** citations inline, click-through into the M4
+  inspector.
+- **`M10`** — NL2SQL. **UI:** generated SQL, result grid, narration, and a visible refusal
+  when the AST guard rejects a statement.
+- **`M11`** — MCP tool runtime. **UI:** tool console and approval dialogs; a call denied by
+  trust tier must name the offending source on screen, not only in a log.
+- **`M12`** — router. **UI:** which flow handled each message, and why.
+- **`M14`** — realtime WS, nginx, e2e, docs. **UI:** live streaming/presence polish and
+  Playwright coverage over the whole stack.
+
+`M13` is dissolved; see §3.0. [ADAPTATION §7](docs/ADAPTATION.md#7-milestones) carries the
+same table.
 
 ---
 
@@ -576,4 +730,12 @@ When you finish a task, in the **same commit**:
 6. If you deviated from a documented design, say so explicitly in §4. An undocumented
    deviation is the most expensive thing to discover later, because the docs will be
    trusted and will be wrong.
-7. Push the branch and make sure its PR exists.
+7. **State what the UI slice was** (C12). If a milestone shipped without one, §4 must say
+   which screen is missing and why — "the backend landed and the UI is next milestone" is
+   the drift this rule exists to prevent, so it needs to be written down rather than
+   assumed.
+8. **If you added a design token or a component, update
+   [`docs/DesignSystem.md`](docs/DesignSystem.md) in the same commit** — including the
+   measured contrast row for any new colour (§2.1). A token that exists only in code is a
+   token the next agent will duplicate under a different name.
+9. Push the branch and make sure its PR exists.
