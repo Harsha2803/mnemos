@@ -65,16 +65,26 @@ export function AuthProvider({ children }: { children: ReactNode }) {
 
     let cancelled = false;
     void (async () => {
-      const token = await refreshAccessToken();
-      if (cancelled) return;
-      if (token === null) {
-        clearSession();
-        return;
+      try {
+        const token = await refreshAccessToken();
+        if (cancelled) return;
+        if (token === null) {
+          clearSession();
+          return;
+        }
+        const identity = await fetchIdentity();
+        if (cancelled) return;
+        if (identity === null) clearSession();
+        else setIdentity(identity);
+      } catch {
+        // `fetchIdentity` throws on a 5xx — an API that answered but could not
+        // say who this is. Anonymous is the honest reading and the recoverable
+        // one: the sign-in screen is reachable and a retry costs a click.
+        // Without the catch this is an unhandled rejection in a chain nobody is
+        // awaiting, which is a browser console error and, in the test runner, a
+        // failed run after every test has passed.
+        if (!cancelled) clearSession();
       }
-      const identity = await fetchIdentity();
-      if (cancelled) return;
-      if (identity === null) clearSession();
-      else setIdentity(identity);
     })();
 
     return () => {

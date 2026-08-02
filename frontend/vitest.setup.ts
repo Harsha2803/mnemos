@@ -33,6 +33,29 @@ document.head.appendChild(style);
 
 installMatchMedia();
 
+/**
+ * The suite is offline, and it is made offline here rather than trusted to be.
+ *
+ * A test that stubs `fetch` and unstubs it in `afterEach` can still leave an
+ * async chain running — the session bootstrap is exactly that shape — and the
+ * next thing that chain does is reach the real network. On a developer's
+ * machine that request lands on the API container they happen to have running
+ * and nothing looks wrong; on a CI runner it is `ECONNREFUSED ::1:8000`, and it
+ * failed the job *after* all 74 tests had passed. CI found this, which is the
+ * argument for CI.
+ *
+ * Assigned directly rather than through `vi.stubGlobal`, and before any test
+ * runs, so that `vi.unstubAllGlobals()` restores *this* rather than the real
+ * `fetch`. It answers 401 rather than throwing: a stray request is an
+ * unauthenticated one, which every caller already handles, where a rejection
+ * would surface as an unhandled promise in whichever chain outlived its test.
+ */
+globalThis.fetch = (async () =>
+  new Response(
+    JSON.stringify({ error: { code: "unauthenticated", message: "authentication failed" } }),
+    { status: 401, headers: { "content-type": "application/json" } },
+  )) as typeof globalThis.fetch;
+
 beforeEach(() => {
   resetMediaQueries();
   resetNavigation();
