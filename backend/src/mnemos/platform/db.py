@@ -8,10 +8,17 @@ Two things here are load-bearing beyond boilerplate:
 
 2. **Tenant isolation is a database guarantee, not an application one.** Every
    org-scoped table has `FORCE ROW LEVEL SECURITY` and a policy that reads the
-   `app.current_org` GUC. `session_scope` sets that GUC inside the transaction;
-   if it is never set, `current_setting(..., true)` yields NULL and the policy
-   matches nothing. Forgetting to scope a query returns zero rows rather than
-   another tenant's rows — the failure mode is an empty page, not a breach.
+   `app.current_org` GUC. `session()` sets that GUC inside the transaction; when
+   it is absent the policy compares `org_id` against NULL, which is never true,
+   so forgetting to scope a query returns zero rows rather than another tenant's
+   rows — the failure mode is an empty page, not a breach.
+
+   Two things make that true rather than aspirational, and both were originally
+   missing. The connection must be an *unprivileged* role: RLS does not apply to a
+   superuser or to anything holding `BYPASSRLS` (migration `0005`). And the policy
+   must read `NULLIF(current_setting(...), '')`, because a reverted `SET LOCAL`
+   leaves a placeholder GUC defined as the empty string rather than undefined, and
+   `''::uuid` raises instead of yielding NULL (migration `0006`).
 """
 
 from __future__ import annotations
@@ -33,6 +40,7 @@ from sqlalchemy.ext.asyncio import (
 from sqlalchemy.orm import DeclarativeBase, Mapped, mapped_column
 
 from mnemos.core.config import Settings
+from mnemos.core.errors import ConfigurationError
 
 # Explicit, deterministic constraint names. Without this, Alembic autogenerate
 # emits `op.drop_constraint(None, ...)` for anything the database named itself,
@@ -95,6 +103,7 @@ class Database:
     """Owns the engine. One instance per process, created at startup."""
 
     def __init__(self, settings: Settings) -> None:
+        self._settings = settings
         self._engine: AsyncEngine = create_async_engine(
             settings.database_url,
             pool_size=settings.database_pool_size,
@@ -126,6 +135,32 @@ class Database:
                     text("SELECT set_config('app.current_org', :org, true)"),
                     {"org": str(org_id)},
                 )
+            yield session
+
+    @asynccontextmanager
+    async def elevated_session(self) -> AsyncIterator[AsyncSession]:
+        """A transaction that escapes tenant isolation. Two callers, ever.
+
+        `SET LOCAL ROLE` to a role holding `BYPASSRLS`. This exists because
+        bootstrap has a genuine chicken-and-egg problem — the first insert creates
+        the org that every subsequent row would be scoped to — and because RLS
+        makes the alternative silently wrong rather than loudly broken.
+
+        It is a `SET ROLE` rather than a privilege on the application role because
+        **role attributes are not inherited through membership**: `mnemos_app` is a
+        member of `mnemos_admin` and inherits its table privileges, but not its
+        `BYPASSRLS`. Escaping isolation therefore takes a deliberate statement that
+        shows up in `pg_stat_activity` and in this method's call sites, instead of
+        being the ambient condition of every query.
+
+        `LOCAL` scopes the switch to the transaction, so a pooled connection cannot
+        carry the elevation into the next request that borrows it.
+        """
+        role = self._settings.admin_database_role
+        if not role.replace("_", "").isalnum():
+            raise ConfigurationError("admin_database_role must be a bare SQL identifier", role=role)
+        async with self._sessionmaker() as session, session.begin():
+            await session.execute(text(f"SET LOCAL ROLE {role}"))
             yield session
 
     async def ping(self) -> None:

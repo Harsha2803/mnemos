@@ -31,6 +31,10 @@ dependencies = [
   # auth
   "pyjwt[crypto]>=2.9",
   "argon2-cffi>=23.1",
+  # Already present transitively via Starlette, but `core.security` imports it
+  # directly to push argon2 onto a worker thread, and a direct import deserves a
+  # direct declaration — otherwise the hasher breaks the day Starlette drops it.
+  "anyio>=4.4",
   # clients
   "httpx>=0.27",
   "boto3>=1.35",          # S3-compatible object storage (MinIO locally)
@@ -50,6 +54,10 @@ dev = [
   "pytest-asyncio>=0.24",
   "ruff>=0.7",
   "mypy>=1.13",
+  # Tenant isolation is a property of Postgres, not of the service layer, so the
+  # test that proves it has to run against a real Postgres with the real
+  # migrations applied. A fake would only prove the fake isolates.
+  "testcontainers[postgres]>=4.15",
 ]
 
 [project.scripts]

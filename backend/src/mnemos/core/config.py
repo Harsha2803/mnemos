@@ -33,10 +33,22 @@ class Settings(BaseSettings):
     api_prefix: str = "/api/v1"
 
     # -- data -------------------------------------------------------------
-    database_url: str = "postgresql+asyncpg://mnemos:mnemos@localhost:5432/mnemos"
+    database_url: str = "postgresql+asyncpg://mnemos_app:mnemos-app-dev@localhost:5432/mnemos"
     database_pool_size: int = 10
     database_max_overflow: int = 5
     redis_url: str = "redis://localhost:6379/0"
+
+    # The application connects as an unprivileged role so that row-level security
+    # applies to it. The role the *migrations* connect as owns the tables and is a
+    # superuser, and RLS never applies to a superuser — pointing the API at that
+    # role makes every policy in migration 0004 inert. Migration 0005 creates this
+    # role and needs the same credentials the API will later connect with, which is
+    # why they are settings rather than literals in either place.
+    app_database_role: str = "mnemos_app"
+    app_database_password: SecretStr = SecretStr("mnemos-app-dev")
+    # NOLOGIN, BYPASSRLS. `mnemosctl bootstrap` assumes it for the one transaction
+    # that has no org to scope to yet.
+    admin_database_role: str = "mnemos_admin"
 
     # -- object storage (S3-compatible: MinIO locally, S3 in a real deployment) --
     object_endpoint: str = "http://localhost:9000"
@@ -67,6 +79,17 @@ class Settings(BaseSettings):
     oidc_issuer_internal: str = "http://localhost:8080/realms/mnemos"
     oidc_client_id: str = "mnemos-web"
     oidc_jwks_cache_s: int = 900
+
+    # Where Keycloak sends the browser back with the authorization code. Must be
+    # registered in the realm's `redirectUris` *and* match byte-for-byte at both
+    # the authorize and the token-exchange step, which is why it is one setting
+    # rather than something reconstructed from the incoming request — a callback
+    # that derives its own redirect URI from a `Host` header is a callback an
+    # attacker can point elsewhere.
+    oidc_redirect_uri: str = "http://localhost:8000/api/v1/auth/oidc/callback"
+    # How long a half-finished login may sit in Redis: enough for a password and
+    # MFA, short enough that an abandoned attempt is not a standing credential.
+    oidc_login_state_ttl_s: int = 600
 
     # -- context compiler defaults ---------------------------------------
     default_token_budget: int = 3000

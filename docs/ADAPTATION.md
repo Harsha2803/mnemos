@@ -183,7 +183,12 @@ Every tenant-scoped table: `org_id` + RLS `FORCE` on `app.current_org` GUC.
 | **M13** | Next.js frontend: chat, memory, knowledge, data, tools, inspector, cost | All pages functional against the API |
 | **M14** | Realtime WS, nginx, e2e verification, docs, push | Full stack from clean clone |
 
-**Current position: M1 and M2 complete and verified. M3 is next.**
+**Current position: M1 and M2 complete and verified. M3 is in progress — its RLS
+prerequisite, `M3.1` (domain types), `M3.2` (the provider seam) and `M3.3` (the OIDC
+round trip, proved against the live realm) are done; deliverables 4–7 remain. See §8.**
+
+M3's exit criterion "RLS blocks cross-org" turned out to be unmet by M2 rather than merely
+untested; that is written up in §8 and in [TRACKER §3](../TRACKER.md#3-current-state--what-is-actually-built).
 
 ---
 
@@ -207,7 +212,8 @@ Every tenant-scoped table: `org_id` + RLS `FORCE` on `app.current_org` GUC.
 
 ### M2 — Alembic + full schema ✅
 
-41 tables across the nine groups in §6. Four revisions, each independently reversible:
+41 tables across the nine groups in §6. Four revisions at M2, each independently
+reversible (`0005` and `0006` were added by M3 — see below):
 
 | Revision | Contents |
 |---|---|
@@ -218,6 +224,137 @@ Every tenant-scoped table: `org_id` + RLS `FORCE` on `app.current_org` GUC.
 
 `alembic check` is wired as the models-vs-migrations drift guard and currently reports
 no diff. Downgrade to base was tested and leaves only `alembic_version`.
+
+### M3 — identity 🟡 in progress
+
+**Done: the RLS prerequisite.** Verified 2026-07-27 on branch `feat/m3-identity`
+(PR #2, draft).
+
+M2 reported "40 tables with FORCE row-level security" as evidence of tenant isolation.
+That report was accurate about the catalogue and wrong about the system. Writing M3's
+acceptance test found two defects:
+
+| Revision | Defect | Fix |
+|---|---|---|
+| `0005` | The application connected as `POSTGRES_USER`, created by the Postgres image as a **superuser**. RLS applies to neither a superuser nor a `BYPASSRLS` role, so every policy from `0004` was inert | Role split: `mnemos` owns the tables and runs Alembic; `mnemos_app` is `LOGIN NOSUPERUSER NOBYPASSRLS` with DML only and is what api/worker/realtime connect as. `mnemos_admin` is granted *to* `mnemos_app` for bootstrap |
+| `0006` | An unscoped query **raised `22P02`** rather than returning zero rows: a reverted `SET LOCAL` leaves a dot-qualified placeholder GUC defined as `''`, not undefined, and `''::uuid` raises. Reproduces only on a connection that has already served a scoped request — i.e. every pooled one | Policy expression becomes `NULLIF(current_setting('app.current_org', true), '')::uuid`, restoring the failure mode `0004` documented |
+
+Neither defect was reachable through a correctly filtered query — the explicit `org_id`
+filter in §"Data access" of the coding standards held. What was absent is the *second*
+layer that makes the defence-in-depth claim in `ThreatModel.md` true rather than
+aspirational: an application bug was supposed to be caught by RLS, and RLS was off.
+
+Evidence, as `mnemos_app` against the live stack, two orgs each owning one `tag` row:
+
+| Check | Before | After |
+|---|---|---|
+| `SELECT count(*) FROM tag`, GUC = org A | 2 | **1** |
+| Cross-org `INSERT` under GUC = org A | accepted | **rejected by the policy's `WITH CHECK`** |
+| Same query on the same connection after `COMMIT` | `ERROR: invalid input syntax for type uuid: ""` | **0 rows** |
+
+| Command | Result |
+|---|---|
+| `pytest` | **28 passed** — 23 `_v1` kernel + 5 new tenant-isolation tests |
+| `alembic check` | no drift between models and migrations |
+| `alembic downgrade 0004` then `upgrade head` | clean in both directions |
+
+`tests/test_tenant_isolation.py` runs against a **testcontainers Postgres** with the real
+extensions and the real revisions applied, not a fake — tenant isolation is a property of
+Postgres, and a substitute would only prove the substitute isolates. Its
+`test_application_role_holds_no_rls_exemption` asserts `rolsuper` and `rolbypassrls` are
+both false on the live connection, because the regression it guards is a change to a DSN,
+and no amount of correct SQL protects against that.
+
+Also added: `Database.elevated_session()` — `SET LOCAL ROLE mnemos_admin` for the single
+bootstrap transaction that has no org to scope to yet. A `SET ROLE` rather than a standing
+privilege, because **role attributes are not inherited through membership**: `mnemos_app`
+inherits `mnemos_admin`'s table privileges but not its `BYPASSRLS`, so escaping isolation
+takes a deliberate statement visible in `pg_stat_activity` and at the call site.
+
+**Done: M3.1 — the domain types (2026-08-02).** `features/identity/domain/` holds
+`Principal`, `Permission`/`PermissionSet`, `TagSet`, `PrincipalKind`, and the id newtypes,
+all pure and frozen, with **no SQLAlchemy in the layer** (proven by a subprocess import
+test — an in-process check passes vacuously once pytest has loaded SQLAlchemy elsewhere).
+Grants may be wildcards; requirements may not (`allows()` raises on a wildcard
+requirement). Tag authorization is a set-overlap, kept that way so it pushes into the SQL
+`WHERE` (C4). `pytest` 39 passed (+11), `ruff`/`mypy --strict` clean, `alembic check` clean.
+
+**Done: M3.2 — the provider seam (2026-08-02).** `features/identity/providers/` turns a
+presented credential into a verified `AuthenticatedSubject`. **Two protocols, not one**
+(§3's "2 protocols not 4"): `CredentialAuthProvider` for a secret the caller knows,
+`TokenAuthProvider` for a token another system minted. `ProviderFactory` reads the
+`identity_provider` row and builds the strategy, so the login endpoint (M3.3) never
+learns which one it got and SAML later is a row plus an adapter.
+
+| File | What it is |
+|---|---|
+| `core/security.py` | `PasswordHasher` — argon2id at OWASP parameters (m=64 MiB, t=3, p=4), run on a worker thread because 64 MiB of mixing inline would freeze the event loop for every concurrent request. `verify(None, ...)` still performs a real verification, so "no such user" and "wrong password" cost the same. Plus `digest_token` (SHA-256, for high-entropy refresh tokens) and `tokens_equal` |
+| `providers/base.py` | The two protocols, `AuthenticatedSubject`, and `denied()` — one constant message to the caller, the diagnostic reason to the log |
+| `providers/ports.py` | `OrgDirectory` / `UserDirectory` + flat records. Persistence arrives through these, so `providers/` imports no ORM |
+| `providers/internal.py` | `InternalProvider`. A user with `password_hash IS NULL` (external-IdP-only) cannot password-authenticate |
+| `providers/oidc.py` | `OidcProvider` + `HttpJwksCache`. Signature, asymmetric-only algorithm allow-list, configured issuer, `aud`-or-`azp`, `exp` with no leeway |
+| `providers/factory.py` | Strategy selection. Unknown org, disabled provider, unrecognised `kind`, incomplete OIDC config and an ambiguous default all deny identically |
+| `adapters/directory.py` | The SQLAlchemy side of the ports |
+
+**The authentication path needs no `BYPASSRLS`.** `org` is the one table without a policy —
+it is what the policies compare against — so resolving an org slug runs unprivileged, and
+every read after it runs with `app.current_org` bound to the org just resolved.
+`Database.elevated_session()` therefore keeps its single bootstrap call site. That settles
+the first of the two design questions the RLS work forced open, in favour of **carrying the
+tenant in the credential**.
+
+| Command | Result |
+|---|---|
+| `pytest` | **72 passed** in 6.5s (was 39; +33) |
+| `ruff check` + `ruff format` | clean on all new files |
+| `mypy --strict` | clean, 8 new source files (the 4 remaining project-wide errors are all in the quarantined `_v1/`) |
+| `alembic check` | "No new upgrade operations detected" — M3.2 touched no schema |
+
+Two deviations from the task as written, both deliberate and recorded in
+[TRACKER §4](../TRACKER.md#4-known-gaps-and-honest-weaknesses): the OIDC validator trusts
+**two** configured issuers rather than `issuer_internal` alone (Keycloak runs
+`KC_HOSTNAME_STRICT=false`, so it stamps whichever host minted the token — accepting only
+the internal URL would reject every token a browser can actually obtain), and the audience
+check accepts the client id in `aud` **or** `azp`, which is the shape Keycloak access
+tokens actually have.
+
+**Done: M3.2a — the API error boundary (2026-08-02).** Found while reading
+`entrypoints/api/main.py` to plan M3.3: the single `MnemosError` handler spread
+`**exc.details` into the response body, so M3.2's deliberately-constant denial message was
+being undone on the wire — a caller could read "no such user" versus "password mismatch"
+straight out of a 401. `MnemosError.expose_details` now defaults to `False` and the handler
+renders only `public_details`; `ValidationError` is the sole opt-in. Proved by restoring the
+old handler and re-running `tests/test_error_boundary.py`, which returned the reason *and* a
+DSN containing a password. The lesson generalises: every provider test passed before and
+after, because they assert on the raised exception and never on the wire.
+
+**Done: M3.3 — the OIDC round trip (2026-08-02).** `GET /api/v1/auth/oidc/authorize` →
+Keycloak → `/callback` → verified subject. PKCE S256, `state` verified and single-use
+(Redis `GETDEL`, so read-and-delete cannot interleave), the org read from stored state and
+never from the callback's query string. `HttpOidcMetadata` caches discovery and is shared
+with the JWKS cache; every discovered endpoint is constrained to the issuer's own prefix,
+not just `jwks_uri`. `public_authorization_endpoint()` re-hosts the discovered path on
+`issuer_public` — that function is split horizon in one place.
+
+**The live realm settled the issuer question.** A genuine ID token from the seeded user
+carries `iss = http://localhost:8080/realms/mnemos` — the *public* issuer — and
+`aud = azp = mnemos-web`. Validating `iss` against `issuer_internal` alone, as the original
+M3.2 instruction said, would reject every token a browser can obtain. The M3.2 deviation was
+therefore correct and the instruction was wrong; both are recorded in TRACKER §4.
+
+| Command | Result |
+|---|---|
+| `pytest` | **97 passed** in 5.5s (92 hermetic in 2.6s) |
+| live Keycloak tests | 2, verified to *skip* with the stack down (`14 passed, 2 skipped`) |
+| `ruff` / `mypy --strict` | clean on all new files |
+| `alembic check` | no new operations — neither M3.2a nor M3.3 touched schema |
+
+**Remaining: deliverables 4–7** — JWT issuance and refresh rotation, API keys, the RBAC
+dependency, and `mnemosctl bootstrap`. Specified in
+[TRACKER §5](../TRACKER.md#5-next-task) (next up: **M3.4**). One design question is still
+open and M3.4 must settle it: **`ThreatModel.md` §5 and `core/config.py` disagree on the
+token algorithm** (EdDSA vs HS256). Whichever is chosen, both documents must be
+reconciled in the same commit.
 
 ### Carried over from v0.1 (needs porting from SQLite → Postgres)
 
@@ -240,17 +377,26 @@ evidence for the memory/context differentiator. Re-point it at Postgres.
 | Analytics seed | 900 sales_order, 6 customer, 6 product, 4 region |
 | `mnemos_ro` SELECT | allowed (900) |
 | `mnemos_ro` INSERT | **`ERROR: permission denied for table region`** |
-| `alembic upgrade head` | revision `0004` |
+| `alembic upgrade head` | revision `0006` |
 | `alembic downgrade base` | clean; only `alembic_version` survives |
 | `alembic check` | no drift between models and migrations |
 | `mnemosctl db doctor` | 41 tables, **40 with FORCE row-level security** |
 | Exclusion constraint | `ex_memory_one_live_fact_per_scope` present and armed |
 | `GET /readyz` | `{"status":"ready","checks":{"postgres":"ok","redis":"ok"}}` |
 | `ollama list` | `qwen2.5:3b-instruct` 1.9 GB |
-| `pytest` | 23 passed |
+| `pytest` | 28 passed (needs Docker — one suite uses testcontainers) |
 
 `org` is the one table without RLS, deliberately: a user must resolve their own org row
-before the GUC can be set from it.
+before the GUC can be set from it. That decision has a consequence which only became
+visible once RLS was in force — **every credential must carry its own tenant**, because
+`app_user`, `session` and `api_key` are all org-scoped and therefore unreadable until an
+org is known. See [TRACKER §5](../TRACKER.md#5-next-task).
+
+**The `db doctor` row above is exactly the trap M3 walked into.** It reports
+`relforcerowsecurity` from `pg_class`, which was true and told us nothing: the policies
+were present and applied to nobody, because the connecting role was a superuser. A
+schema-level report is not evidence that a control is in force. Anything asserted on the
+strength of `db doctor` alone deserves the same scepticism.
 
 The `mnemos_ro` lines are the defence-in-depth claim proven at the database level: even a
 prompt injection that defeats the AST parser cannot write, because the role cannot write.
@@ -265,9 +411,14 @@ stack; `docker compose --profile web up` opts in once M13 lands.
 
 ### Not started
 
-M3 onward. The identity feature — internal auth, JWT, RBAC, tags, OIDC via
-Strategy/Factory, API keys — is the immediate next task. Keycloak is running with the
-realm imported, so the OIDC half has a real provider to talk to on day one.
+M3 deliverables 2–7, then M4 onward. The identity feature — internal auth, JWT, RBAC,
+tags, OIDC via Strategy/Factory, API keys — is in progress: its RLS prerequisite and the
+pure domain types (`M3.1`) are done, and the next unit of work is `M3.2`, the provider
+Strategy/Factory. Keycloak is running with the
+realm imported, so the OIDC half has a real provider to talk to on day one — though the
+imported realm currently permits only `http://localhost:3000/*` as a redirect URI, so a
+backend-driven code+PKCE flow needs the API callback added to
+`deploy/keycloak/mnemos-realm.json` first.
 
 ---
 
