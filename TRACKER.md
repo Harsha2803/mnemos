@@ -6,13 +6,16 @@
 > **and [`docs/ADAPTATION.md`](docs/ADAPTATION.md)** *in the same commit* — a stale
 > tracker is worse than none.
 
-**Last updated:** 2026-08-02
-**Phase:** **A — make it a chatbot.** The foundation (stack, schema, tenant isolation,
-identity, app shell, CI) is built; the product surface is not
-**Next task:** `A0`, fully specified in §5. Take them one at a time, in order
-**Branch:** `feat/a0-auth-surface`. **`main` contains M1+M2 (PR #1), M3.1–M3.3 (PR #2),
-the slice plan (PR #3), CI (PR #4), M3.7 bootstrap (PR #5), F0 the app shell, and M3.4's
-backend half**
+**Last updated:** 2026-08-03
+**Phase:** **A — make it a chatbot.** `A0` ✅ — **you can sign in at
+`http://localhost:3000`, stay signed in, and sign out**, and every route is authenticated
+by default. There is still nothing to say to it
+**Next task:** `A1` — **talk to it**, fully specified in §5. Take them one at a time, in
+order
+**Branch:** `feat/a1-chat` off `main`. **`main` contains M1+M2 (PR #1), M3.1–M3.3 (PR #2),
+the slice plan (PR #3), CI (PR #4), M3.7 bootstrap (PR #5), F0 the app shell, M3.4's
+backend half, the re-plan (PR #8), the compose fixes and smoke job (PRs #9, #10), and
+`A0` the auth surface (PR #11)**
 
 > ### 2026-08-02 — the plan was re-cut around the product, and the milestones renumbered
 >
@@ -180,8 +183,8 @@ That right-hand column is not a summary — it is the exit criterion.
 
 | ID | What it builds | You can now… | Status |
 |---|---|---|---|
-| **A0** | Sign-in screen + browser session handling (M3.4's UI half) + the fail-closed route guard (deny by default, from old `M3.6`) | **sign in through Keycloak, stay signed in across a reload, and sign out** — and no route added after this is reachable unauthenticated | ⬜ **next** |
-| **A1** | LLM gateway (Ollama) · chat sessions + messages · SSE streaming · the chat surface | **talk to it** — ask a question and watch the answer stream in token by token | ⬜ |
+| **A0** | Sign-in screen + browser session handling (M3.4's UI half) + the fail-closed route guard (deny by default, from old `M3.6`) | **sign in through Keycloak, stay signed in across a reload, and sign out** — and no route added after this is reachable unauthenticated | ✅ |
+| **A1** | LLM gateway (Ollama) · chat sessions + messages · SSE streaming · the chat surface | **talk to it** — ask a question and watch the answer stream in token by token | ⬜ **next** |
 | **A2** | Upload → extract → chunk → embed (pgvector HNSW) · retrieval ported from `_v1` · RAG flow · citations · knowledge library | **upload a document and ask questions about it**, with citations you click into | ⬜ |
 | **A3** | NL2SQL: introspection · glossary · generate · AST read-only guard · `mnemos_ro` execution · narration · SQL panel | **ask a question about your data in English** and see the SQL, the rows and the narration — and see the guard visibly refuse a write | ⬜ |
 | **A4** | Router: classify a message → chat / RAG / NL2SQL · flow indicator | **ask anything without choosing a mode**, and see which flow answered and why | ⬜ |
@@ -243,6 +246,137 @@ discarded. If you find a reference to an old ID anywhere, this is the translatio
 | `M12` router | `A4` | Moved **earlier**: without it the user has to pick a mode, which is not what a chatbot is |
 | `M13` frontend | dissolved into `F0` + a UI slice per milestone | Unchanged by this re-plan |
 | `M14` realtime + e2e + docs | `D1` | |
+
+### ✅ A0 — the auth surface, verified 2026-08-03
+
+**You can now sign in through Keycloak at `http://localhost:3000`, stay signed in across a
+reload, and sign out — and no route added after this is reachable unauthenticated.** That
+is the sentence C14 asks for, and it is the first one this project has been able to write.
+Before it, `M3.4` issued tokens nothing presented and `F0` was a shell with no way in.
+
+| File | What it is |
+|---|---|
+| `entrypoints/api/security.py` | The guard. `enforce_authentication` is installed as an **application-level dependency**, which FastAPI merges into every route it registers — routers included later, routes added after startup, all of them. A route that decorates itself with nothing is authenticated. `public_route_paths()` is an **exact set of literal strings**; every near-miss (`/healthz/`, `//healthz`, `/api/v1/auth/token/steal`) is simply not in it and is denied |
+| `features/identity/application/principals.py` | `PrincipalResolver` — token in, `Principal` out. Roles and tags come from the repository **on every request**; the token is asked exactly two questions, *is this signature ours* and *whom does it name*. Also the session-liveness check, which is what makes sign-out real |
+| `features/identity/adapters/principals.py` | `SqlPrincipalRepository`. Four statements in **one** transaction under `app.current_org`, because roles read before a revocation and tags read after it produce a principal that never existed — and that principal is the input to an authorization decision |
+| `entrypoints/api/routers/auth.py` | `GET /auth/me`, the first route in the system that is not in the allow-list. `authorize` and `callback` now answer a browser with redirects |
+| `frontend/src/lib/auth/session.ts` | The access token, in a module variable and nowhere else |
+| `frontend/src/lib/auth/refresh.ts` | The single-flight refresh: one shared promise within a tab, `navigator.locks` across tabs |
+| `frontend/src/lib/api/client.ts` | `authenticatedFetch` — bearer attached, **one** retry after a refresh, `/auth/token` excluded from the retry by name |
+| `frontend/src/components/auth/` | `SignInForm` (one constant error message), `SignInComplete`, `AuthBoundary` |
+| `frontend/src/components/shell/AccountFooter.tsx` | The sidebar footer F0 reserved, now carrying a real email and org from `GET /auth/me` |
+| `frontend/e2e/auth.spec.ts` + `playwright.config.ts` | Seven cases in a real browser against the real Keycloak |
+
+**The acceptance test was written first and watched to fail.** `_probe/unguarded` is a
+route registered exactly the way a feature router's endpoint is, with no dependency, no
+decorator and no mention of authentication. With the application-level dependency removed:
+
+```
+$ pytest tests/test_route_guard.py           # dependencies=[...] deleted from create_app
+FAILED test_unauthenticated_request_is_denied_by_default
+    assert 200 == 401
+19 of 24 failed
+$ pytest tests/test_route_guard.py           # restored
+24 passed
+```
+
+**Hydration proved against a real Postgres, with one token minted once and reused
+verbatim.** If any of the three answers came out of the credential, all three would be
+identical:
+
+```
+no role_binding                    ->  GET /auth/me  permissions []
+INSERT role_binding (analyst)      ->  GET /auth/me  permissions ['knowledge:read','memory:read']
+DELETE role_binding                ->  GET /auth/me  permissions []
+```
+
+The third line is not decoration. An additive implementation — a cache that unions
+whatever it has seen — passes the first two and is exactly the thing that keeps a demoted
+user's authority alive.
+
+**Evidence in a real browser, against the live Keycloak** (headless Chromium; the API run
+locally on `:8010` and the frontend on `:3100`, because the shared containers still carry
+the pre-`A0` image and rebuilding them would have disrupted work in flight):
+
+```
+7 passed (4.8s)
+  test_a_seeded_admin_signs_in_through_keycloak_and_lands_on_the_shell
+  test_no_credential_ever_appears_in_a_url_or_in_web_storage
+  test_a_reload_keeps_the_user_signed_in
+  test_signing_out_returns_to_signin_and_a_protected_route_bounces_back
+  test_an_unknown_workspace_returns_to_signin_with_the_same_message
+  test_an_unauthenticated_visit_to_a_protected_route_redirects_to_signin
+  test_the_api_refuses_a_protected_route_without_a_token
+
+with the API stopped:                 7 skipped
+  "the stack is not up: api unreachable"
+```
+
+**That closes `M3.4`'s one "could not verify".** Its live evidence drove `authorize` and
+everything after the callback with `httpx`; what it could not do was fill in Keycloak's own
+login form, because Keycloak 26 binds that form to a browser session it establishes with
+cookies on the auth page. A browser driver does it in one line.
+
+The bundle was grepped the way `F0` greps for hex literals. The **only** writes to web
+storage in the shipped JavaScript are the theme preference and the validated return path:
+
+```
+localStorage.setItem(m,e     sessionStorage.setItem(n,e     sessionStorage.setItem(r,t
+keys present:  mnemos.theme   mnemos.auth.returnTo   mnemos.auth.refresh (a lock name)
+```
+
+| Check | Result |
+|---|---|
+| `pytest` | **230 passed** in 32s (was 191; +39 — 24 route guard, 10 principal repository, 5 net in the auth endpoints) |
+| hermetic subset | 204 passed, no Docker |
+| `ruff check` + `ruff format --check` | clean, 151 files |
+| `mypy --strict` on `core`/`features`/`entrypoints` | **Success: no issues found in 106 source files** |
+| `alembic check` | "No new upgrade operations detected" — **no migration**; `session`, `role_binding` and `user_tag` already had every column |
+| `npm run test` | **76 passed**, 11 files (was 41) |
+| `npm run lint` · `npx tsc --noEmit` · `npm run build` | clean |
+| `npm audit` | 0 vulnerabilities |
+| axe | 0 violations on the sign-in screen, the waiting boundary, and the signed-in shell |
+| CI | all three jobs green, including `compose` — the images build and the stack starts with these changes |
+| `gh auth status` | `Harsha2803` active, `harshaJKT` inactive (C9) |
+
+**Two deviations from the written spec, both deliberate.** `authorize` and `callback`
+answer a browser with redirects rather than a JSON 401, and `GET /auth/me` is pulled
+forward from `C1`. Both are argued in §4 items 34 and 35.
+
+Five things worth keeping deliberately, because a later reader might take them for padding:
+
+- **`test_a_route_in_the_public_allowlist_is_reachable_without_a_token` is not optional.**
+  A guard that refuses everything passes the acceptance test above it. Without this
+  control, the file would be satisfied by an application that 401s its own liveness probe
+  — a working guard and a service no orchestrator will keep running.
+- **`test_the_public_allowlist_is_exact_paths_and_never_a_prefix`** asserts that
+  `/api/v1/auth` and `/api/v1/auth/token/steal` are *absent*. It exists to stop somebody
+  "simplifying" the set into a `startswith`, which is one careless route name away from
+  publishing everything beneath it.
+- **`test_every_route_the_guard_cannot_reach_is_named_in_the_allowlist`.** `/docs`,
+  `/redoc`, `/openapi.json` and `/docs/oauth2-redirect` are plain Starlette routes carrying
+  no dependencies, so the guard never runs for them however it is installed. They are
+  public by construction rather than by decision — which is fine right up until a future
+  FastAPI adds a fifth. Naming them turns "public because of how the framework works" into
+  "public because we said so", and this fails the day the framework disagrees.
+- **`test_the_guard_reads_authority_on_every_request_and_not_once_per_token`** counts
+  repository reads. Caching the hydration per token would quietly restore the property the
+  token was built to avoid, and nothing else in the suite would notice; if a cache is ever
+  added it must be keyed on something a revocation invalidates, and this is where that
+  conversation starts.
+- **`test_the_refresh_endpoint_is_never_itself_retried_after_a_401`** covers the door the
+  single-flight guard does not. If the generic retry applied to `/auth/token`, a 401 from a
+  refresh would trigger a refresh whose result is replayed against a chain that has already
+  rotated — which the API reads as theft and answers by killing the family.
+
+**The frontend suite was made offline, and CI is what found the need.** 74 tests passed and
+the job still failed on `connect ECONNREFUSED ::1:8000`: a component test stubs `fetch`,
+unstubs it in `afterEach`, and the session bootstrap's async chain is still running. On a
+development machine that stray request lands on whichever API container is up and nothing
+looks wrong. `vitest.setup.ts` now installs `globalThis.fetch` **before any test runs**,
+which is therefore also what `vi.unstubAllGlobals()` restores, and `src/test/offline.test.ts`
+pins both halves. Same lesson as §4.7 and §3's M3.2a entry, in a fourth place: the machine
+you develop on is not the machine that proves anything.
 
 ### 🟡 M3 prerequisite — RLS made real, verified 2026-07-27
 
@@ -423,7 +557,8 @@ chain is a whole test surface of its own and splitting it keeps both landable.
 
 M3.3 could prove a login *happened*. This is what makes one **last**: a 15-minute
 access token, a rotating refresh token in an `httpOnly` cookie, and a family kill on
-reuse. The UI slice (items 7–9 in §5) is still open — see §4 item 20.
+reuse. **Its UI slice landed in `A0`** — see the `A0` entry above; §4 item 24 is
+discharged.
 
 **The algorithm conflict is settled: HS256.** `ThreatModel.md` §5 said EdDSA and
 `core/config.py` said HS256; both stood because nothing had issued a token. The argument
@@ -710,15 +845,17 @@ not a defect.
 | Stack up | `docker compose up -d` — nine services including `web`; no profile flag since F0 |
 | Schema report | `docker compose exec api mnemosctl db doctor` |
 | Migrations | `cd backend && MNEMOS_DATABASE_URL=postgresql+asyncpg://mnemos:mnemos@localhost:15432/mnemos ../.venv/bin/alembic upgrade head \| downgrade base \| check`. The DSN is explicit because the default in `core/config.py` names `mnemos_app` on `:5432`, which from the host is the machine's own Postgres and not the compose one |
-| Tests | `cd backend && ../.venv/bin/python -m pytest` → **183 passed** (needs Docker + Keycloak; see §4.8) |
-| Fast tests | everything except `test_tenant_isolation.py` and `test_session_store.py` → **167 passed in 5.5s**, no Docker. The 2 live-Keycloak tests skip cleanly when the stack is down |
+| Tests | `make test` (or `cd backend && ../.venv/bin/python -m pytest`) → **230 passed** (needs Docker + Keycloak; see §4.8) |
+| Fast tests | `make test-fast` — everything except the containerised suites → **204 passed**, no Docker. The 2 live-Keycloak tests skip cleanly when the stack is down |
 | First-run setup | `mnemosctl bootstrap --org-slug <slug> --org-name <name> --admin-email <addr>`, password from `MNEMOS_BOOTSTRAP_ADMIN_PASSWORD` or the prompt. Idempotent; re-running is safe |
 | Bootstrapped locally | org `mnemos` / admin `admin@mnemos.local` / password `mnemos-dev-admin-password` — a **dev-stack credential**, in the same class as Keycloak's `admin`/`admin` and MinIO's `mnemos-dev-secret`, and never to be reused anywhere real |
+| Signing in through the browser | org slug `mnemos`, then Keycloak wants the **realm** credential `admin@mnemos.local` / **`admin`** — *not* the password above, which belongs to the internal provider. Two different admins; see §4 item 37 |
 | Type check | `../.venv/bin/mypy --strict src/mnemos/core src/mnemos/features src/mnemos/entrypoints` — clean on everything M3 has touched; what still fails project-wide is listed in §4 item 19 |
 | DB roles | `migrate` connects as `mnemos` (owner). api/worker/realtime connect as `mnemos_app` |
 | Host ports | postgres `15432`, redis `6380`, api `8000`, realtime `8001`, keycloak `8080`, minio `9000/9001`, ollama `11434` |
 | UI | **The app shell at `http://localhost:3000`** (F0). Also Swagger `http://localhost:8000/docs` · Keycloak `:8080` (`admin`/`admin`) · MinIO `:9001` (`mnemos`/`mnemos-dev-secret`) |
-| Frontend gate | `cd frontend && npm ci && npm run lint && npx tsc --noEmit && npm run test && npm run build` → **41 tests pass**, all four clean |
+| Frontend gate | `cd frontend && npm ci && npm run lint && npx tsc --noEmit && npm run test && npm run build` → **76 tests pass**, all four clean |
+| Browser end-to-end | `cd frontend && npm run test:e2e` — Playwright over the live stack, **7 passed**. Needs `npx playwright install chromium` once. Skips loudly, naming the unreachable service, when the stack is down. Not in CI (§4 item 39) |
 | Regenerate API types | `cd frontend && npm run generate:api` against a running api. `src/lib/api/schema.ts` is committed and never hand-edited |
 | Git identity | `Cheella Sree Harsha <cheellasreeharsha2803@gmail.com>` (repo-local) |
 | GitHub | `Harsha2803/mnemos`, private. **Two accounts in `gh`; keep `Harsha2803` active** |
@@ -888,14 +1025,14 @@ Recorded so they are not rediscovered as surprises:
     the seeded admin signs in with the **internal** provider by naming it, while the org
     default sends the browser to Keycloak.
 
-24. **C12 is not satisfied for `M3.4`: the backend landed without its UI slice.** Written
-    down rather than implied, because "the backend landed and the UI is next" is exactly
-    the drift C12 exists to prevent. The reason is sequencing and it is not an excuse
-    that generalises: `frontend/` was an empty directory, so `F0` (the app shell) had to
-    exist before a sign-in screen could be built *in* anything. **`F0` has since landed**
-    (§3), so the blocker is gone and **`A0`** is the outstanding work,
-    fully specified there. Until they land, the only way to exercise a login end to end is
-    by hand or through the test suite.
+24. ~~**C12 is not satisfied for `M3.4`: the backend landed without its UI slice.**~~
+    **Discharged by `A0`, 2026-08-03.** The sign-in screen, session handling and the
+    protected shell are in `frontend/`, and a person signs in through a browser rather than
+    by hand or through the test suite. Kept because the *reason* it was ever open is worth
+    remembering: `frontend/` was an empty directory, so `F0` had to exist before a sign-in
+    screen could be built *in* anything. That is a sequencing argument and it does not
+    generalise — it was written down precisely so "the backend landed and the UI is next"
+    could not become a habit.
 
 25. **The refresh window slides; there is no absolute session lifetime.** Every rotation
     sets `expires_at = now + refresh_token_ttl_s`, so an actively used session never
@@ -905,8 +1042,11 @@ Recorded so they are not rediscovered as surprises:
     it. Pinned by `test_the_refresh_window_slides_on_every_rotation` so it stays a decision
     somebody made rather than one nobody noticed.
 
-26. **A user who deliberately opens two tabs mid-refresh revokes their own session.** This
-    is the cost of treating a lost compare-and-set as reuse, and it is the right trade —
+26. **A user who deliberately opens two tabs mid-refresh revokes their own session.**
+    **Largely closed by `A0`** — the browser client serializes refreshes across tabs with
+    the Web Locks API, so tab B waits and then refreshes against the cookie tab A already
+    rotated. The residue, and what is still unverified, is §4 item 36. The backend
+    behaviour below is unchanged and is still the right trade —
     the alternative is two live chains from one credential, which is the state the family
     kill exists to prevent. It does mean the frontend interceptor in §5 item 8 is a
     *correctness* requirement and not an optimisation, and that a future non-browser client
@@ -991,100 +1131,247 @@ Recorded so they are not rediscovered as surprises:
     unverified unless the DSN was overridden; the drift itself is confirmed absent, by
     `make check` against the real database on 2026-08-03.
 
+34. **Deviation (`A0`): `GET /auth/oidc/authorize` and `/callback` answer a browser with
+    redirects, not with JSON.** The written spec had `authorize` 401 on an unknown org and
+    `callback` return a `TokenResponse` body; three tests asserted exactly that and were
+    rewritten. The reason is that both endpoints have exactly one caller and it is a
+    **top-level browser navigation** — one from the sign-in form, one from Keycloak — so a
+    JSON body is a page of machine-readable text rendered at a person who expected an
+    application. There was no way to satisfy `test_signin_error_is_identical_for_unknown
+    _org_and_denied_login` on *rendered text* while the failure never reached a rendered
+    page, and the callback-denied half (a cancelled Keycloak login) cannot be preflighted
+    from the browser at all.
+    **Nothing about the disclosure changed.** Every failure produces one identical URL with
+    one constant flag — `?error=auth_failed`, not an error code, with deliberately nothing
+    to branch on — and `test_every_login_failure_produces_the_same_url` asserts that four
+    different causes yield one `Location`. The success path carries **no token in the URL**:
+    the callback sets the cookie and the page it lands on exchanges it, because a token in
+    a query string is a token in browser history, in the next request's `Referer`, and in
+    every proxy log along the way. The redirect target comes from `Settings.web_base_url`
+    and never from the request, so it cannot be turned into an open redirect on the one
+    route where a credential has just been minted.
+    **What this costs:** a non-browser client can no longer read the pair out of the
+    callback. Nothing has one — the callback is unreachable without a `state` that only a
+    browser round trip produces — and `POST /auth/token` remains JSON for machine callers.
+
+35. **Deviation (`A0`): `GET /auth/me` is pulled forward from `C1`.** `APIContract.md`
+    listed it under RBAC. The shell has to name the signed-in user in the sidebar footer
+    (`A0` scope item 4) and the access token cannot supply it: it carries `sub`, `org`,
+    `sid` and nothing else, by design. Only two other options existed and both are worse —
+    put an email in the token, which is exactly the claim discipline `domain/token.py`
+    exists to enforce, or ship a placeholder, which C12 forbids.
+    It **reports** effective grants and enforces none. The permission matrix is still `C1`,
+    and `require_permission(...)` was deliberately **not** written: there is no route to
+    apply it to yet, and an unapplied, untested check is the stub §0 rule 5 forbids. The
+    reporting is not idle either — it is how
+    `test_the_guard_hydrates_roles_from_the_repository_not_the_token` observes hydration at
+    the boundary rather than one layer below it, which is the M3.2a lesson.
+
+36. **The cross-tab refresh lock is real but was not exercised with two real tabs.**
+    §4 item 26 records that two tabs refreshing at once revoke their own session. `A0`
+    solves it with the **Web Locks API**: `navigator.locks.request` serializes the refresh
+    across every tab on the origin, and serializing is what makes it safe — tab B waits,
+    then refreshes against the cookie tab A has already rotated, so both succeed and no
+    token is written anywhere both tabs can read. That last clause is the point; sharing
+    the token would mean `localStorage`, which is the thing the whole design avoids.
+    **What is unverified:** jsdom has no `navigator.locks`, so the unit tests cover the
+    in-tab collapse and the fallback path, and the cross-tab claim rests on the
+    specification rather than on an observation. Driving two Playwright pages through a
+    simultaneous refresh is the test that would close it, and it needs a way to hold the
+    API's `/auth/token` response open on demand. **The fallback is the honest residue:** on
+    a browser without Web Locks (Safari before 15.4) the behaviour is exactly what it was
+    before — bounded by the in-tab promise, and item 26's hazard intact.
+
+37. **The dev stack has two different "admin" credentials and they are not
+    interchangeable.** `mnemos-dev-admin-password` (§3 Environment) is the *internal*
+    provider's password for the local `app_user` row `mnemosctl bootstrap` wrote. Keycloak's
+    login form wants the **realm** credential from `deploy/keycloak/mnemos-realm.json`,
+    which is `admin`. The Playwright run failed for a full minute against the wrong one
+    before this was noticed, and the failure looked like a broken login rather than a wrong
+    password. Both are dev-stack credentials in the class of Keycloak's own `admin`/`admin`;
+    neither is ever to be reused anywhere real. Recorded because the next person to write a
+    browser test will reach for the one in the tracker.
+
+38. **The `A0` end-to-end run used a locally-run API and frontend, not the compose
+    containers.** `:8010` and `:3100`, against the shared Postgres, Redis and Keycloak. The
+    shared `api` and `web` containers still carry the pre-`A0` image and rebuilding them
+    would have disrupted work in flight on other branches (the same constraint `M3.4`
+    worked under). Two consequences, both temporary: the seeded `identity_provider` row
+    names `issuer_internal = keycloak:8080`, which does not resolve from the host, so the
+    run used a throwaway org bootstrapped with `localhost` issuers and **deleted
+    afterwards** (`SELECT slug FROM org` → `mnemos` only, verified); and the realm client
+    needed `http://localhost:8010/...` in `redirectUris` for the duration, **restored and
+    verified afterwards**. Nothing about the flow is specific to those ports — CI's
+    `compose` job proves the images build and the stack starts — but "it works in the
+    shipped containers" is asserted by the compose smoke job and not by the browser run.
+
+39. **`test:e2e` is not in CI, and that is a choice rather than an oversight.** It needs
+    Postgres, Redis, a Keycloak with the realm imported, a bootstrapped org and a running
+    frontend; CI's `compose` job stands up four of those five and could plausibly host it.
+    It is left out because the Playwright browser download plus a real IdP round trip is
+    several minutes on every PR, for a suite whose value is highest when a human runs it
+    against the stack they are about to demonstrate. The cost is that a regression in the
+    login flow is caught by nobody until somebody runs `make` and clicks. **`D1` owns
+    moving it into CI**, where an e2e job over the whole stack is already scoped.
+
 ---
 
 ## 5. NEXT TASK
 
-### `A0` — the auth surface: sign in, stay signed in, and close every door behind you
+### `A1` — talk to it: the LLM gateway, chat persistence, streaming, and the chat surface
 
-**Do this one only.** It is the last piece of identity that Phase A actually needs, and it
-is what makes every milestone after it safe to build. It has three parts and they belong
-together: without the screen nobody can sign in, without session handling nobody stays
-signed in, and without the guard every route `A1` adds is open to the world.
+**Do this one only.** `A0` made a person able to sign in and see a shell with nothing in
+it. This is the milestone that makes the shell worth signing in to, and it is the first
+one whose "you can now ___" a stranger would call a product:
 
-**Why this and not straight to chat.** `M3.4`'s backend half issues tokens that nothing
-presents; `frontend/` has a shell with no way in. Building the chat surface first would
-mean building it unauthenticated and retrofitting a principal through every handler — the
-retrofit that fails closed in tests and fails open in production. One session now removes
-that risk permanently.
+> **You can now ask Mnemos a question and watch the answer stream in, token by token, in a
+> conversation that is still there tomorrow.**
 
-**Read first:** [`docs/DesignSystem.md`](docs/DesignSystem.md) §4 (forms, destructive
-actions, empty states) and §3 (accessibility floors); the M3.4 entry in §3 of this file for
-the token shape, the cookie, and the rotation semantics; `docs/APIContract.md` §1–§2;
-`backend/src/mnemos/entrypoints/api/routers/auth.py` and
-`backend/src/mnemos/features/identity/application/tokens.py`.
+**No retrieval. It answers from the model alone**, and that is a complete milestone rather
+than half of `A2`, because you can talk to it. Adding documents to the prompt is `A2` and
+adding a database is `A3`; both land *behind* the same gateway and the same streaming
+endpoint this builds, which is why building them properly once is worth a session.
 
-**Scope.**
+**Read first, in this order:**
 
-1. **The fail-closed route guard.** A FastAPI dependency that resolves the bearer access
-   token to a `Principal` (hydrating roles and tags from the repository — *not* from the
-   token, see M3.4's `test_access_token_carries_no_roles_or_permissions`), installed so that
-   **a route with no explicit decoration is authenticated by default**. Deny by default is
-   the whole point: the acceptance test is
-   `test_unauthenticated_request_is_denied_by_default` **on a route that declares no guard
-   at all**, added specifically for the test. Public routes (`/healthz`, `/readyz`, `/`,
-   the auth endpoints, `/docs`, `/openapi.json`) are an explicit, enumerated allow-list —
-   never a prefix match, because a prefix match is one careless route name away from
-   exposing everything under it.
-   *Not in scope:* the permission matrix. `require_permission(...)` may exist and be
-   applied where obvious, but the full RBAC role/permission surface is `C1`.
-2. **The sign-in route.** Org slug field, then "Continue with Keycloak" driving
-   `GET /api/v1/auth/oidc/authorize?org=…`. Real `<form>` semantics, one `filled` button,
-   `aria-live` on the error. **Every failure renders the same message.** The backend
-   already guarantees one constant denial string and M3.4 proved the wire carries no
-   distinguishing detail; the UI must not undo that by branching on a status code to say
-   "no such org". That is the M3.2a mistake one layer further out.
-3. **Session handling.** Access token in memory only — never `localStorage`, which any XSS
-   can read. Refresh token in the `httpOnly` cookie the API already sets. A TanStack Query
-   interceptor refreshes once on a 401 and, on a second 401, clears state and returns to
-   sign-in. **Concurrent 401s must trigger exactly one refresh**, not one per in-flight
-   request: rotation treats a second use of the same refresh token as theft and kills the
-   family, so a naive interceptor logs the user out every time two requests race. Note §4
-   item 23 — two open tabs are the same hazard, and this is where it is solved or shipped.
-4. **The protected shell.** `F0`'s layout behind an auth boundary. An unauthenticated visit
-   redirects to sign-in **preserving the intended destination**. Sign-out calls
-   `POST /v1/auth/token:revoke` and clears the cookie. The signed-in user's email and org
-   appear in the sidebar footer — the shell currently renders a placeholder identity, and
-   this is where it becomes real.
+1. §0 through §4 of this file. §2 C12 (every feature ships its UI), C13 (tokens are the
+   only source of colour), C14 (the "you can now" sentence).
+2. [`docs/DesignSystem.md`](docs/DesignSystem.md) — §3 accessibility floors and §4
+   component conventions **in full**. Two lines there govern this milestone more than
+   anything else: *"For streamed text, render tokens as they arrive"* and *"never a centred
+   spinner over a blank region"*. A chat surface that shows a spinner and then a paragraph
+   is the exact failure §4 names.
+3. [`docs/CodingStandards.md`](docs/CodingStandards.md) — §4 (errors have two audiences),
+   §5 (clock and id generators are injected, never reached for), §6 (every query carries
+   an explicit `org_id` on top of RLS), §7 (validate configuration at startup).
+4. [`docs/APIContract.md`](docs/APIContract.md) §1–§2, and its §3 conventions for
+   colon-actions.
+5. [`docs/ADAPTATION.md`](docs/ADAPTATION.md) §5 (layering) and the `chat` rows of the
+   schema section.
+6. **The code you extend:**
+   - `backend/src/mnemos/features/chat/adapters/models.py` — `chat_session`,
+     `chat_message` and friends **already exist** from `M2`. Read them before designing
+     anything; `alembic check` must stay clean and no migration should be needed.
+   - `backend/src/mnemos/entrypoints/api/security.py` — the guard. Your new routes get it
+     for free by doing nothing, and **must not** be added to `public_route_paths`.
+   - `backend/src/mnemos/features/identity/application/principals.py` —
+     `AuthenticatedCaller` / `require_caller`, which is how a handler learns who is asking.
+   - `backend/src/mnemos/features/identity/adapters/sessions.py` — the shape an adapter
+     takes in this codebase.
+   - `frontend/src/lib/api/client.ts` — `authenticatedFetch` attaches the bearer and
+     refreshes once on a 401. **SSE does not go through it** — see deliverable 5.
+   - `frontend/src/components/shell/` — the shell and its sidebar; the chat session list
+     lands in it beside `DESTINATIONS`.
+
+**Scope — five deliverables, one commit each.**
+
+1. **The LLM gateway, behind a port.** `features/llm/` with a `domain/` (pure), an
+   `application/` and an `adapters/`. Define the port first — something like
+   `ChatModel.stream(messages, *, options) -> AsyncIterator[Token]` plus a non-streaming
+   `complete()` — and implement it over **Ollama** (`MNEMOS_OLLAMA_BASE_URL`,
+   `qwen2.5:3b-instruct`, both already in `core/config.py` and in `docker-compose.yml`).
+   **The port is not decoration.** C1 (zero paid dependencies in the default path) means
+   Ollama is the default forever, and `C2`'s cost ledger, `A4`'s router and `C4`'s
+   benchmark all need to swap the model without touching a call site. A fake implementing
+   the same port is also the only way the tests below stay hermetic.
+   Config validated at startup (CodingStandards §7): a missing model or an unreachable
+   base URL should fail `/readyz`, not somebody's first message. Ollama errors are
+   `UpstreamError` (502) — a dependency we do not control — and their text does not reach
+   the client.
+2. **Persistence.** `chat_session` and `chat_message` rows, org-scoped, through an adapter
+   behind a port in `features/chat/`. Every query carries an explicit `org_id` **and**
+   runs under `Database.session(org_id=…)`, so RLS is the second layer underneath
+   (CodingStandards §6). A message belongs to a session; a session belongs to a user and an
+   org. Persist the user's message **before** the model is called, so a crashed generation
+   leaves a conversation with a question in it rather than nothing.
+3. **The REST surface**, all of it authenticated by default — declare no guard and add
+   nothing to the allow-list:
+   - `POST /v1/chat/sessions` — create, returns the session
+   - `GET /v1/chat/sessions` — the caller's sessions, newest first, paginated
+   - `GET /v1/chat/sessions/{id}` — one session with its messages
+   - `PATCH /v1/chat/sessions/{id}` — rename
+   - `DELETE /v1/chat/sessions/{id}` — delete
+   Cross-tenant and cross-user access must be a **404, not a 403** — "not yours" and "does
+   not exist" have to read identically, for the reason `AuthorizationError`'s docstring
+   gives.
+4. **The streaming endpoint.** `POST /v1/chat/sessions/{id}/messages` returning
+   **`text/event-stream`**. Named SSE events, not bare data lines — at minimum `token`,
+   `done`, and `error` — because a client that has to guess whether a stream ended or
+   broke will guess wrong. The assistant message is persisted when the stream completes,
+   and a stream the client abandons must not leave a half-written row claiming to be an
+   answer. `X-Accel-Buffering: no` and `Cache-Control: no-cache`, or nginx (`D1`) will
+   buffer the whole response and deliver it as one lump.
+   **Authentication over SSE is the sharp edge.** `EventSource` cannot set an
+   `Authorization` header. Do **not** solve it by putting the token in a query string —
+   that is a credential in browser history and in every proxy log, the exact thing `A0`'s
+   callback redirect was built to avoid (§4 item 34). Use `fetch` with a `ReadableStream`
+   reader on the client, which can set headers; say so in the code, because the next person
+   will reach for `EventSource`.
+5. **The chat surface.** A `/chat` destination in the shell, and `/chat/[sessionId]`.
+   - **Composer**: a textarea that grows, Enter to send and Shift+Enter for a newline,
+     disabled while a response streams, with a visible stop control.
+   - **Message list**: user and assistant turns visually distinct without colour alone
+     (DesignSystem §3), `--leading-relaxed` and the `46rem` measure for message bodies.
+   - **Token-by-token rendering.** Never a spinner over a blank region (§4). The assistant
+     bubble appears immediately and fills as tokens arrive; `aria-live="polite"` on it, or
+     a screen-reader user never learns the answer arrived (§3, live regions).
+   - **Session list in the sidebar**, above the account footer, with an `EmptyState` for a
+     new user and a "New chat" action.
+   - Every colour, radius and spacing value from a token (C13 — `test_no_component
+     _hardcodes_a_colour` will fail otherwise), every interactive target ≥44px, `axe`
+     clean.
 
 **Acceptance**
 
-- `test_unauthenticated_request_is_denied_by_default` — on a route with **no** explicit
-  guard. This is the one that matters; write it first and watch it fail.
-- `test_a_route_in_the_public_allowlist_is_reachable_without_a_token` — the control, so the
-  guard is not passing by refusing everything.
-- `test_concurrent_401s_trigger_exactly_one_refresh` — frontend. Fire N requests, stub two
-  401s, assert exactly one call to the refresh endpoint.
-- `test_signin_error_is_identical_for_unknown_org_and_denied_login` — frontend, asserting
-  the rendered text, not the network layer.
-- `test_signout_revokes_the_refresh_family_and_clears_the_cookie`.
-- **A Playwright run against the live Keycloak**: sign in as the seeded admin, land on the
-  shell, reload and stay signed in, sign out, confirm the protected route bounces back to
-  sign-in. This closes M3.4's "could not verify" — the Keycloak login *form* was never
-  driven, because `httpx` cannot satisfy Keycloak 26's browser-session requirements and a
-  browser can. Make it skip cleanly when the stack is down, and **verify it skips** by
-  stopping the stack rather than assuming.
-- `pytest` green, `ruff` + `mypy --strict` clean, `alembic check` clean (no migration).
-  Frontend: `tsc`, ESLint, `axe`, `npm run build` clean. **CI green on the PR** — this is
-  now a real check, not a pasted local gate.
+- `test_a_message_streams_token_by_token_and_the_answer_is_persisted` — over the fake
+  model, asserting the **SSE frames on the wire**, not the generator. A test one layer
+  below the boundary is not a test (§3, M3.2a).
+- `test_an_abandoned_stream_leaves_no_half_written_assistant_message`.
+- `test_a_chat_session_from_another_org_is_not_readable` — against a real Postgres, like
+  `test_principal_repository.py`, because it is a claim about RLS and a fake would only
+  prove the fake.
+- `test_another_users_session_is_a_404_and_not_a_403`.
+- `test_the_chat_routes_are_authenticated_by_default` — extend
+  `tests/test_route_guard.py`; the new paths must be absent from `public_route_paths`.
+- `test_an_ollama_failure_becomes_a_502_and_leaks_no_upstream_text`.
+- **Frontend:** `test_tokens_render_as_they_arrive_and_never_behind_a_spinner` — feed a
+  stubbed stream in two chunks and assert the first chunk is on screen before the second
+  arrives. This is the one that fails if somebody awaits the whole response.
+- **Frontend:** `test_the_composer_sends_on_enter_and_newlines_on_shift_enter`.
+- **Frontend:** `test_the_chat_surface_has_no_axe_violations`.
+- **Playwright**, extending `frontend/e2e/`: sign in, send a message, watch it stream,
+  reload and find the conversation still there. Skips with the stack down, like
+  `auth.spec.ts`. **It needs the model pulled** — `docker compose exec ollama ollama pull
+  qwen2.5:3b-instruct` — so make that a named, loud skip rather than a timeout.
+- **Gates:** `make test` above 230 · `make lint` · `make types` clean · `make check`
+  clean (**no migration is expected** — `M2` created these tables; if you believe you need
+  one, say why in §4 before writing it) · frontend `lint`, `tsc --noEmit`, `test`, `build`
+  · **CI green on the PR, all three jobs** including `compose`.
 
-**Prerequisite, already satisfied:** `M3.7` seeded org `mnemos` with `admin@mnemos.local`
-and both provider rows, so there is something to sign in *as*. See §3.
+**Watch out for these, each of which has already bitten this project once:**
 
-**Explicitly not in `A0`:** the permission matrix, API keys, an org switcher, user
-management screens. All `C1`.
+- **The suite must stay offline.** `vitest.setup.ts` installs an offline `fetch` before any
+  test runs; a streaming test that reaches for the real network will pass on your machine
+  and fail on a runner (§3, `A0`).
+- **Do not put the access token in a URL.** See deliverable 4.
+- **`alembic check` from a host venv talks to the wrong Postgres** (§4 item 33). Use
+  `make check`.
+- **`ruff format` is version-sensitive** (§4 item 22). Run `make lint`, which carries the
+  right exclusions.
+- **The guard is on by default**, so a new route that forgets to declare `require_caller`
+  is still authenticated — but a handler that *needs* the principal and forgets to ask for
+  it will `RuntimeError`. That is deliberate; do not "fix" it by making the caller optional.
+
+**Explicitly not in `A1`:** retrieval or citations (`A2`), NL2SQL (`A3`), routing between
+flows (`A4`), folders, bookmarks and feedback (`C3`), prompt versioning and the cost ledger
+(`C2`), the context inspector (`C4`). The inspector panel keeps rendering its `EmptyState`.
 
 ### Then, in order — the phase tables in §3.0 are the plan
 
 Each row there is one session, and each carries its own "you can now ___" (C14). The next
 few, so the shape is visible without scrolling back:
 
-- **`A1` — talk to it.** LLM gateway over Ollama behind a port (the model is swappable and
-  the benchmark depends on it staying so), `chat_session` + `chat_message` persistence, an
-  SSE streaming endpoint, and the chat surface: composer, message list, **token-by-token
-  rendering — never a spinner over a blank region** (DesignSystem §4), session list in the
-  sidebar. No retrieval yet; it answers from the model alone, and that is a complete
-  milestone because you can talk to it.
+- **`A1` — talk to it.** Specified in full above; this is the task.
 - **`A2` — ask about your documents.** Upload to MinIO, extract, chunk with char offsets
   retained, embed, and **port `_v1`'s retrieval onto pgvector HNSW** — the port lands here
   rather than in its own milestone precisely so retrieval is not written twice (§3.0's
