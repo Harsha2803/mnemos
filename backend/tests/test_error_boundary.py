@@ -32,6 +32,7 @@ from mnemos.core.errors import (
     ValidationError,
 )
 from mnemos.entrypoints.api.main import create_app
+from mnemos.entrypoints.api.security import enforce_authentication
 from mnemos.features.identity.providers import AUTHENTICATION_FAILED, denied
 
 
@@ -59,6 +60,16 @@ def client() -> TestClient:
         ("/_probe/validation", raise_validation),
     ):
         app.add_api_route(path, endpoint, methods=["GET"])
+
+    # A0's route guard is an *application-level* dependency, so these probes are
+    # authenticated like everything else and would otherwise answer 401 before
+    # reaching the line that raises. That is the guard working — it is asserted
+    # directly in `test_route_guard.py`, including on a probe route added exactly
+    # this way — and here it is in the way: what this file tests is what the
+    # error handler does with an exception, which requires the exception to
+    # happen. Overriding is narrower than making the probes public, because the
+    # override is scoped to this fixture and cannot leak into the application.
+    app.dependency_overrides[enforce_authentication] = lambda: None
 
     with TestClient(app) as test_client:
         return test_client
