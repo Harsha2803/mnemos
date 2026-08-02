@@ -4,7 +4,8 @@
 > self-contained: architecture, the capability inventory, schema, milestones, and current
 > state. [`TRACKER.md`](../TRACKER.md) holds live task status; this holds the design.
 
-**Last updated:** 2026-08-02
+**Last updated:** 2026-08-03 — aligned to the 2026-08-02 re-plan in
+[TRACKER §3.0](../TRACKER.md#30-the-plan--four-phases-and-the-sentence-each-one-earns)
 
 ---
 
@@ -209,45 +210,108 @@ Every tenant-scoped table: `org_id` + RLS `FORCE` on `app.current_org` GUC.
 
 ## 7. Milestones
 
-| ID | Backend half | Frontend half (same milestone — see TRACKER §3.0) |
-|---|---|---|
-| **M1** | Container stack + backend skeleton | — |
-| **M2** | Alembic + full schema | — |
-| **F0** ✅ | — | App shell: Next.js, design tokens, three-column layout, theming, primitives, generated client |
-| **M3** | Identity: internal auth, JWT, RBAC, tags, OIDC, API keys | Sign-in, session handling, protected shell, API-key management |
-| **M4** | Port memory/retrieval/context kernel to PG + pgvector | **Context inspector** — admitted vs excluded and why, budget spend, losing candidates |
-| **M5** | objectstore (MinIO) + connectors + Redis Streams events | Sources: connect, browse, watch events |
-| **M6** | Knowledge: extract, chunk, embed, jobs w/ heartbeat | Knowledge library, upload, live job progress incl. stuck-job state |
-| **M7** | LLM gateway (Ollama) + versioned prompts + cost ledger | Prompt manager (version diff, activate) + cost dashboard |
-| **M8** | Chat: sessions, messages, SSE, bookmarks, feedback, folders | **The chat surface** — token streaming, folders, bookmarks |
-| **M9** | RAG flow + citations | Citations inline, click-through into the M4 inspector |
-| **M10** | NL2SQL: introspection, AST guard, read-only role, narration | SQL panel: generated SQL, result grid, narration, visible guard refusals |
-| **M11** | MCP tool runtime: registry, calling, creds, approval gates | Tool console + approval dialogs; denials name the offending source on screen |
-| **M12** | Router: classify → RAG / NL2SQL / tools / memory / chat | Flow indicator per message, and why it was chosen |
-| **M13** | ~~Next.js frontend~~ — **dissolved** into F0 + the slices above | — |
-| **M14** | Realtime WS, nginx, e2e verification, docs | Live streaming/presence polish; Playwright over the whole stack |
+Re-cut on 2026-08-02 into four phases. The old `M1`–`M14` numbering is superseded; it is
+mapped onto these IDs at the end of this section, so a reference to an old ID found
+anywhere translates rather than needing to be guessed at. The authoritative copy of these
+tables is [TRACKER §3.0](../TRACKER.md#30-the-plan--four-phases-and-the-sentence-each-one-earns).
 
-**Exit criterion for every milestone from F0 onward: both halves land.** A milestone with
-an untouched `frontend/` is not complete (TRACKER C12). `M13` used to be "build every
-screen at the end"; that guaranteed the APIs would be shaped without a consumer and that
-the whole UI would land as one unreviewable drop, so it was dissolved on 2026-08-02.
+Two rules govern every row.
+
+- **Both halves land** (TRACKER C12). A milestone with an untouched `frontend/` is not
+  complete. Backend and UI advance together or the milestone does not close.
+- **It ends with something a person can do** (TRACKER C14) — a sentence of the form *"you
+  can now ___"* that a stranger could perform at `http://localhost:3000`. The right-hand
+  column below is not a summary; it is the exit criterion. A milestone that cannot produce
+  that sentence is infrastructure, and infrastructure folds into the milestone it serves
+  rather than standing alone in the plan.
+
+**Phase A — make it a chatbot.** The product surface, in the order that makes it usable.
+
+| ID | What it builds | You can now… | Status |
+|---|---|---|---|
+| **A0** | Sign-in screen + browser session handling (`M3.4`'s UI half) + the fail-closed route guard (deny by default) | **sign in through Keycloak, stay signed in across a reload, and sign out** — and no route added after this is reachable unauthenticated | ⬜ **next** |
+| **A1** | LLM gateway (Ollama) · chat sessions + messages · SSE streaming · the chat surface | **talk to it** — ask a question and watch the answer stream in token by token | ⬜ |
+| **A2** | Upload → extract → chunk → embed (pgvector HNSW) · retrieval ported from `_v1` · RAG flow · citations · knowledge library | **upload a document and ask questions about it**, with citations you click into | ⬜ |
+| **A3** | NL2SQL: introspection · glossary · generate · AST read-only guard · `mnemos_ro` execution · narration · SQL panel | **ask a question about your data in English** and see the SQL, the rows and the narration — and see the guard visibly refuse a write | ⬜ |
+| **A4** | Router: classify a message → chat / RAG / NL2SQL · flow indicator | **ask anything without choosing a mode**, and see which flow answered and why | ⬜ |
+
+**At the end of Phase A the thing this project is for exists.** Everything after deepens it.
+
+**Phase B — make it a platform.**
+
+| ID | What it builds | You can now… | Status |
+|---|---|---|---|
+| **B1** | Object storage · source connectors (MinIO/S3, local FS, HTTP) · Redis Streams event bus · sources UI | **connect a source, browse it, and watch ingestion events arrive live** | ⬜ |
+| **B2** | Ingestion jobs at scale: heartbeat, retries, status history, stuck-job reaper · per-job progress UI | **ingest a folder and watch every job's progress — including one that dies, surfaced as stuck rather than silently lost** | ⬜ |
+| **B3** | MCP tool runtime: registry, per-user credentials, trust tiers, approval gates · tool console | **register a tool, have the assistant call it, and approve a gated call** — with a denial that names the offending source on screen | ⬜ |
+| **B4** | Agent flow: bounded state machine over tools, checkpoints, step trace | **give it a multi-step task and watch it plan, call tools and finish — with every step inspectable** | ⬜ |
+
+**Phase C — make it enterprise, and land the deep claim.**
+
+| ID | What it builds | You can now… | Status |
+|---|---|---|---|
+| **C1** | API keys · full RBAC permission matrix + tag-scoped document ACLs · keys UI + real 403 states | **issue an API key, call the API with it, and watch a user without the permission be refused** — in the UI and at the wire | ⬜ |
+| **C2** | Versioned prompt store (diff, activate) · cost + token ledger · prompt manager + cost dashboard | **change the prompt behind a flow, activate the new version, and see what every answer cost** | ⬜ |
+| **C3** | Chat history depth: folders, bookmarks, feedback · audit log · search over history | **organise, bookmark, rate and search your conversations, and read the audit trail of who did what** | ⬜ |
+| **C4** | **The context layer.** Bitemporal memory + supersession · the budgeted context compiler · the context inspector · re-run the benchmark on Postgres | **open any answer and see its compiled context** — what was admitted, what was excluded and why, and the token spend against budget | ⬜ |
+
+**Phase D — ship it.**
+
+| ID | What it builds | You can now… | Status |
+|---|---|---|---|
+| **D1** | Realtime WebSocket presence + streaming polish · nginx · Playwright e2e over the whole stack · README rewritten on measured numbers | **run one command, get the whole system, and read a README whose every number was produced by a command in the repo** | ⬜ |
+
+**Already built — the foundation the above stands on.**
+
+| ID | What it built | Status |
+|---|---|---|
+| **M1** | Container stack, backend skeleton | ✅ |
+| **M2** | Alembic + 41-table schema | ✅ |
+| **M2a** | Tenant isolation made real — the unprivileged app role and the RLS policy fix | ✅ |
+| **M3.1**–**M3.3** | Identity domain types · the provider seam (internal + OIDC) · the split-horizon OIDC round trip | ✅ |
+| **M3.4** (backend) | Platform JWT on HS256 · refresh rotation with family revocation · token endpoints | ✅ |
+| **M3.7** | `mnemosctl bootstrap` — first org, admin, system roles, provider rows | ✅ |
+| **F0** | The app shell: Next.js, design tokens, three-column layout, theming, primitives, generated API client | ✅ |
+| **F0a** | CI — pytest, ruff, mypy `--strict`, `alembic check`, and the frontend gate on every PR | ✅ |
+
+### Old milestone numbers, mapped
+
+Nothing was dropped. `M4`–`M14` were re-cut, not discarded, and this is the translation:
+
+| Old | New | Note |
+|---|---|---|
+| `M3.5` API keys | `C1` | Deferred: an API key is a second credential type, and nothing consumes the first one yet |
+| `M3.6` RBAC | split — guard to `A0`, matrix to `C1` | The **fail-closed guard** moves early because every route added in Phase A must be covered by it; the permission *matrix* can wait for something to permission |
+| `M4` kernel port | split — retrieval to `A2`, memory + compiler + inspector to `C4` | Retrieval lands where RAG needs it so it is never built twice; the governance layer is a deep slice of its own |
+| `M5` objectstore/connectors/events | `B1` | Minimal upload lands in `A2`; the connector *abstraction* is `B1` |
+| `M6` knowledge + jobs | split — extract/chunk/embed to `A2`, job machinery to `B2` | |
+| `M7` LLM gateway + prompts + cost | split — gateway to `A1`, prompts + cost to `C2` | The gateway is a prerequisite for talking at all; prompt versioning is not |
+| `M8` chat | split — sessions/messages/streaming to `A1`, folders/bookmarks/feedback to `C3` | |
+| `M9` RAG | `A2` | |
+| `M10` NL2SQL | `A3` | |
+| `M11` MCP tools | `B3` | |
+| `M12` router | `A4` | Moved **earlier**: without it the user has to pick a mode, which is not what a chatbot is |
+| `M13` frontend | dissolved into `F0` + a UI slice per milestone | Dissolved 2026-08-02 and unchanged by the re-plan. "Build every screen at the end" guaranteed the APIs would be shaped without a consumer and that the whole UI would land as one unreviewable drop |
+| `M14` realtime + e2e + docs | `D1` | |
 
 The UI follows [`DesignSystem.md`](DesignSystem.md), which is normative. It is Mnemos's
 own system — its own accent, neutrals and identity — informed by Apple's design resources
 for typography, spatial rhythm, materials and motion character. §0 there records which
 Apple assets are off-limits (SF Pro as a webfont, SF Symbols) and what is used instead.
 
-**Current position: M1, M2, `M3.1`–`M3.3` and `M3.7` are on `main` (PR #1, PR #2 at
-`98fe47a`, PR #5), and so is `M3.4`'s backend half (PR #6). `F0` — the frontend foundation
-— is done: `frontend/` holds a running, themed, accessible three-column shell,
-`docker compose up -d` serves it at `http://localhost:3000`, and `web` is healthy
-alongside the other eight services. The next task is **`M3.4`'s frontend half** — the
-sign-in screen and session handling, items 7–9 of
-[TRACKER §5](../TRACKER.md#5-next-task) — which is the first slice to land on F0's shell.
-`M3.5` and `M3.6` follow, each carrying a UI slice. See §8.**
+**Current position.** Everything in the "Already built" table above is on `main`: `M1`,
+`M2`, `M2a`, `M3.1`–`M3.3`, `M3.4`'s backend half, `M3.7`, `F0` and `F0a` (PR #1, PR #2 at
+`98fe47a`, PR #3, PR #4, PR #5, PR #6, PR #7). `docker compose up -d` brings up nine
+services and serves the app shell at `http://localhost:3000`. **The next task is `A0`** —
+the sign-in screen, browser session handling and the fail-closed route guard, fully
+specified in [TRACKER §5](../TRACKER.md#5-next-task). It is the last piece of identity
+Phase A needs, and it is what makes every milestone after it safe to build: a route added
+under a deny-by-default guard is covered before it exists, and a chat surface built
+unauthenticated would have to be retrofitted with a principal through every handler. See §8.
 
-M3's exit criterion "RLS blocks cross-org" turned out to be unmet by M2 rather than merely
-untested; that is written up in §8 and in [TRACKER §3](../TRACKER.md#3-current-state--what-is-actually-built).
+`M3`'s exit criterion "RLS blocks cross-org" turned out to be unmet by `M2` rather than
+merely untested; that is written up in §8 and in
+[TRACKER §3](../TRACKER.md#3-current-state--what-is-actually-built).
 
 ---
 
@@ -314,8 +378,8 @@ CDP screencast over a hard reload, dark OS + stored light choice:
 | axe on the shell | 0 violations |
 | `pytest` · `alembic check` | **97 passed** · no drift — F0 changes no Python |
 
-Deliberately absent: any sign-in form (M3.4), any chat UI (M8), any inspector *content*
-(M4). The inspector renders an `EmptyState` saying so, because an empty pane with no
+Deliberately absent: any sign-in form (`A0`), any chat UI (`A1`), any inspector *content*
+(`C4`). The inspector renders an `EmptyState` saying so, because an empty pane with no
 explanation reads as a bug and the user cannot tell "not built yet" from "broken".
 
 ### M1 — container stack + backend skeleton ✅
@@ -487,7 +551,7 @@ are one trust domain reading one `MNEMOS_JWT_SECRET`, so there is no verifier th
 unable to sign — the only thing asymmetric signing buys. EdDSA would turn one environment
 variable into key generation, distribution and a JWKS endpoint with no KMS to hold any of
 it (C1). §5.1 records what reverses the decision: the first verifier outside the signing
-trust domain, e.g. a separately-deployed MCP tool service at M11. The part that actually
+trust domain, e.g. a separately-deployed MCP tool service at `B3`. The part that actually
 stops forgeries is the same either way — a fixed one-element `algorithms=` allow-list
 passed to the decoder, never the token's own `alg` header.
 
@@ -508,7 +572,7 @@ door, which is why a client must collapse concurrent refreshes into one call.
 
 **Just-in-time provisioning is on, and it grants identity rather than authority.** A first
 OIDC login creates the `app_user` row with `password_hash` NULL, no `role_binding` and no
-`user_tag`, so the user can sign in and do nothing until M3.6 grants something. Matching is
+`user_tag`, so the user can sign in and do nothing until `C1` grants something. Matching is
 on `external_subject` and never on email: an IdP email is mutable and often unverified, so
 linking on it would let whoever controls that address inherit a local account.
 
@@ -535,12 +599,15 @@ the endpoint tests assert on the *response bytes*; they were verified to fail by
 the M3.2a leak, which put `"no active org with slug 'nosuchorg'"` on the wire as a
 distinguishable answer — a tenant-enumeration oracle.
 
-**Remaining in M3: the `M3.4` UI slice, then deliverables 5–7** — the sign-in screen and
-session handling, API keys, the RBAC dependency, and `mnemosctl bootstrap`. Specified in
-[TRACKER §5](../TRACKER.md#5-next-task). Note that M3.4 landed **without its UI slice**,
-which is a C12 exception recorded in [TRACKER §4](../TRACKER.md#4-known-gaps-and-honest-weaknesses)
-item 20 rather than glossed over: `frontend/` is still an empty directory, so `F0` has to
-exist before a sign-in screen can be built in anything.
+**What identity still owes, under the new IDs.** `M3.4` landed **without its UI slice**,
+which is a C12 exception recorded in
+[TRACKER §4](../TRACKER.md#4-known-gaps-and-honest-weaknesses) rather than glossed over:
+`frontend/` was an empty directory, so `F0` had to exist before a sign-in screen could be
+built in anything. `F0` has since landed, so the blocker is gone and that UI slice is now
+`A0` together with the fail-closed route guard (old `M3.6`'s guard half). API keys and the
+full RBAC permission matrix are `C1`. Both are specified in
+[TRACKER §5](../TRACKER.md#5-next-task) and §3.0's mapping table.
+
 **Done: M3.7 — `mnemosctl bootstrap` (2026-08-02).** M3.2 and M3.3 built a provider seam
 and an OIDC round trip that nothing could reach: `ProviderFactory` reads
 `identity_provider` to choose a strategy, and that table was empty on every database in
@@ -550,7 +617,7 @@ existence. `bootstrap` creates the first `org`, the three system roles, **both**
 
 | File | What it is |
 |---|---|
-| `domain/roles.py` | `SYSTEM_ROLES` — `admin` (`*:*`), `analyst`, `user`. In `domain/` because M3.6's guard must require against the roles this seeds. Resources are §5's feature packages so a permission traces to the code that enforces it; slugs are the realm's roles minus the `mnemos-` prefix, since a `role` row is already scoped by `org_id` and a Keycloak realm role is not |
+| `domain/roles.py` | `SYSTEM_ROLES` — `admin` (`*:*`), `analyst`, `user`. In `domain/` because the fail-closed guard (`A0`) must require against the roles this seeds. Resources are §5's feature packages so a permission traces to the code that enforces it; slugs are the realm's roles minus the `mnemos-` prefix, since a `role` row is already scoped by `org_id` and a Keycloak realm role is not |
 | `application/bootstrap.py` | The use case, its `BootstrapStore`/`BootstrapWriter` ports, and a `BootstrapRequest` validated at construction. Both transactions are opened here, so how much runs elevated is visible where the work is described |
 | `adapters/bootstrap_store.py` | The SQLAlchemy side, and the system's only `elevated_session()` call site |
 | `entrypoints/cli.py` | The command, in `db doctor`'s argparse shape. Password from an env var or a double `getpass` prompt, **never an argument** — argv is world-readable through `/proc/<pid>/cmdline` and lands in shell history |
@@ -602,11 +669,11 @@ command runs before anybody can sign in, so an authenticated screen would be unr
 and an unauthenticated one would be org creation open to the internet. A CLI is its own
 interface.
 
-**Remaining: deliverables 4–6** — JWT issuance and refresh rotation, API keys, and the
-RBAC dependency. Specified in [TRACKER §5](../TRACKER.md#5-next-task) (next up: **F0**,
-then **M3.4**). One design question is still open and M3.4 must settle it:
-**`ThreatModel.md` §5 and `core/config.py` disagree on the token algorithm** (EdDSA vs
-HS256). Whichever is chosen, both documents must be reconciled in the same commit.
+*(Written before the 2026-08-02 re-plan: the "deliverables 4–6" it names are JWT issuance
+and refresh rotation — since landed as `M3.4`'s backend half — plus API keys and the RBAC
+dependency, which are now `A0`'s guard and `C1`'s matrix. The token-algorithm question it
+flags as open was settled by `M3.4` in favour of HS256, with the argument written into
+`ThreatModel.md` §5.1.)*
 
 ### Carried over from v0.1 (needs porting from SQLite → Postgres)
 
@@ -615,8 +682,15 @@ HS256). Whichever is chosen, both documents must be reconciled in the same commi
 `backend/src/mnemos/_v1/`. **The kernel logic is sound and tested (23 tests); it needs
 re-homing into the feature layout and re-targeting at asyncpg + pgvector.**
 
-The v0.1 benchmark (naive prompt vs compiled bundle) should be **kept** — it is the
-evidence for the memory/context differentiator. Re-point it at Postgres.
+**The port is split in two, and the split is deliberate.** Retrieval — the operators, RRF,
+dedup, conflict resolution and the ACL pushdown — lands in `A2`, where the RAG flow needs
+it, so it is never written twice. Memory governance, the context compiler and the
+inspector land in `C4` as a deep slice of their own. Neither half is dropped and neither is
+demoted in quality; see §7's mapping table for old `M4`.
+
+The v0.1 benchmark (naive prompt vs compiled bundle) is **kept** — it is the evidence for
+the one deep claim in §1. Re-point it at Postgres in `C4`, and update the README's numbers
+in the same commit.
 
 ### Verified running (2026-07-27)
 
@@ -665,14 +739,25 @@ remembered extra flag is a stack whose UI does not get looked at.
 
 ### Not started
 
-M3 deliverables 2–7, then M4 onward. The identity feature — internal auth, JWT, RBAC,
-tags, OIDC via Strategy/Factory, API keys — is in progress: its RLS prerequisite and the
-pure domain types (`M3.1`) are done, and the next unit of work is `M3.2`, the provider
-Strategy/Factory. Keycloak is running with the
-realm imported, so the OIDC half has a real provider to talk to on day one — though the
-imported realm currently permits only `http://localhost:3000/*` as a redirect URI, so a
-backend-driven code+PKCE flow needs the API callback added to
-`deploy/keycloak/mnemos-realm.json` first.
+**All of Phase A, B, C and D** — §7. Concretely, and stated plainly because the gap
+between what `docs/` describes and what runs is the thing this file exists to keep honest:
+
+- **There is no conversation surface.** No chat UI, no LLM gateway, no streaming endpoint.
+  `A1` builds them.
+- **There is no RAG in this stack.** Nothing uploads, extracts, chunks or embeds; the
+  `chunk` and `chunk_embedding` tables exist and are empty, and the retrieval code that
+  will fill them is still quarantined in `_v1/` on SQLite. `A2`.
+- **There is no NL2SQL.** The `mnemos_analytics` warehouse is seeded and the `mnemos_ro`
+  role is proven read-only (below), but nothing generates SQL against them. `A3`.
+- **There is no router, no tool runtime, no agent flow, no prompt store, no cost ledger
+  and no context inspector content.** `A4`, `B3`, `B4`, `C2`, `C4`.
+- **There is no sign-in screen.** The backend issues tokens that nothing in the browser
+  presents. `A0`, and it is next.
+
+What *is* built is the foundation those stand on: the container stack, the 41-table schema
+with row-level security that is in force rather than merely declared, identity through a
+full OIDC round trip and platform JWT with refresh rotation, `mnemosctl bootstrap`, CI, and
+the app shell. Evidence for each is above.
 
 ---
 
@@ -700,11 +785,19 @@ backend-driven code+PKCE flow needs the API callback added to
   who trusts neither.
 - **Every branch gets a PR when it is created**, so no branch is lost track of. Push and
   open it as soon as the branch has its first commit, in draft if the work is unfinished.
-- The v0.1 benchmark numbers in the root `README.md` were measured on SQLite. After the
-  Postgres port, **re-run and update them** — do not let published numbers drift.
+- **Milestone IDs are `A0`–`D1` now, not `M4`–`M14`.** If you find an old ID in a document,
+  a docstring or a commit message, §7's mapping table is the translation — do not guess,
+  and do not leave a reader holding a number that no longer names anything.
+- **Read §7's two rules before scoping any work** (C12 and C14). A milestone that cannot
+  end in a sentence a stranger could perform at `http://localhost:3000` is infrastructure,
+  and infrastructure folds into the milestone it serves. That rule exists because the plan
+  it replaced reached its own subject — a chatbot — at `M8`.
+- The v0.1 benchmark numbers in the root `README.md` were measured on SQLite. The kernel
+  finishes its port in `C4`; **re-run and update them there**, in the same commit, and do
+  not let published numbers drift in the meantime.
 - `docs/` (Architecture, SystemDesign, DatabaseDesign, APIContract, ThreatModel, 12 ADRs)
   describes a larger target than what is built. That gap is stated in the README and is
   intentional; keep it stated.
 - Known weakness carried from v0.1: brute-force cosine over all chunks per query. Fine at
-  demo scale, must become a pgvector HNSW index query in M4.
+  demo scale, must become a pgvector HNSW index query in `A2`.
 - Do not re-run `pkill -f mnemos` — it matches the agent's own shell. Kill by port/PID.
