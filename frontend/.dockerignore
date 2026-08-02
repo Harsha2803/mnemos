@@ -1,0 +1,13 @@
+# Everything the image builds for itself. node_modules in particular must not be
+# copied in: the host tree carries linux-x64 binaries built for the host's libc,
+# and an alpine image needs musl builds of the same packages.
+node_modules
+.next
+out
+coverage
+.git
+.env
+.env.*
+!.env.example
+npm-debug.log*
+*.tsbuildinfo
