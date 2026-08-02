@@ -24,12 +24,23 @@ WORKDIR /build
 ENV NEXT_TELEMETRY_DISABLED=1 \
     NODE_ENV=production
 
-# A NEXT_PUBLIC_* value is inlined into the browser bundle at build time, so it
-# has to arrive as a build argument. Passing it only as a container environment
-# variable reaches the server process and never the browser, which is the quiet
-# way this ends up pointing at the wrong API.
+# The browser-facing configuration surface. A NEXT_PUBLIC_* value is inlined
+# into the browser bundle at build time, so it has to arrive as a build
+# argument: passing it only as a container environment variable reaches the
+# server process and never the browser, which is the quiet way an app ends up
+# calling the wrong API.
+#
+# All four are declared because all four are what the frontend is configured
+# with; `next build` inlines whichever the code actually reads, and the defaults
+# match the compose stack so a plain `docker build` produces a working image.
 ARG NEXT_PUBLIC_API_URL=http://localhost:8000
-ENV NEXT_PUBLIC_API_URL=${NEXT_PUBLIC_API_URL}
+ARG NEXT_PUBLIC_WS_URL=ws://localhost:8001
+ARG NEXT_PUBLIC_OIDC_ISSUER=http://localhost:8080/realms/mnemos
+ARG NEXT_PUBLIC_OIDC_CLIENT_ID=mnemos-web
+ENV NEXT_PUBLIC_API_URL=${NEXT_PUBLIC_API_URL} \
+    NEXT_PUBLIC_WS_URL=${NEXT_PUBLIC_WS_URL} \
+    NEXT_PUBLIC_OIDC_ISSUER=${NEXT_PUBLIC_OIDC_ISSUER} \
+    NEXT_PUBLIC_OIDC_CLIENT_ID=${NEXT_PUBLIC_OIDC_CLIENT_ID}
 
 COPY --from=deps /build/node_modules ./node_modules
 COPY . .
