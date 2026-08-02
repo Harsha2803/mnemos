@@ -1,3 +1,4 @@
+import Link from "next/link";
 import type { ReactNode } from "react";
 
 export type ListProps = {
@@ -29,10 +30,42 @@ export type ListItemProps = {
   /** Icon or status dot. Its width shifts the separator inset to match. */
   leading?: ReactNode;
   trailing?: ReactNode;
+  /**
+   * Makes the whole row the link, rather than only the words in it. A row whose
+   * target is the text is a 44px-tall band of which 60px is clickable.
+   */
+  href?: string;
+  /** Marks the row as the current destination — `aria-current`, not a colour. */
+  current?: boolean;
   className?: string;
 };
 
-export function ListItem({ children, leading, trailing, className = "" }: ListItemProps) {
+export function ListItem({
+  children,
+  leading,
+  trailing,
+  href,
+  current = false,
+  className = "",
+}: ListItemProps) {
+  const body = (
+    <>
+      {leading !== undefined && (
+        <span className="flex size-5 shrink-0 items-center justify-center text-label-secondary">
+          {leading}
+        </span>
+      )}
+      <div className="min-w-0 flex-1 text-callout">{children}</div>
+      {trailing !== undefined && (
+        <span className="shrink-0 text-footnote text-label-secondary">{trailing}</span>
+      )}
+    </>
+  );
+
+  // `hit-target` rather than a one-off height, so the 44px floor is the same
+  // token every other control resolves (DesignSystem §3, §2.6).
+  const rowClasses = "hit-target flex w-full items-center gap-3 px-4 py-2";
+
   return (
     <li
       className={[
@@ -45,17 +78,17 @@ export function ListItem({ children, leading, trailing, className = "" }: ListIt
         .filter(Boolean)
         .join(" ")}
     >
-      <div className="flex min-h-11 items-center gap-3 px-4 py-2">
-        {leading !== undefined && (
-          <span className="flex size-5 shrink-0 items-center justify-center text-label-secondary">
-            {leading}
-          </span>
-        )}
-        <div className="min-w-0 flex-1 text-callout">{children}</div>
-        {trailing !== undefined && (
-          <span className="shrink-0 text-footnote text-label-secondary">{trailing}</span>
-        )}
-      </div>
+      {href === undefined ? (
+        <div className={rowClasses}>{body}</div>
+      ) : (
+        <Link
+          href={href}
+          aria-current={current ? "page" : undefined}
+          className={`${rowClasses} transition-colors duration-150 ease-standard hover:bg-fill-tertiary aria-[current=page]:bg-fill-secondary aria-[current=page]:font-semibold`}
+        >
+          {body}
+        </Link>
+      )}
     </li>
   );
 }

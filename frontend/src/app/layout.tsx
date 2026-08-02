@@ -1,5 +1,6 @@
 import type { Metadata, Viewport } from "next";
 
+import { AppShell } from "@/components/shell/AppShell";
 import { THEME_INIT_SCRIPT } from "@/lib/theme";
 
 import "./globals.css";
@@ -34,7 +35,9 @@ export default function RootLayout({
         */}
         <script dangerouslySetInnerHTML={{ __html: THEME_INIT_SCRIPT }} />
       </head>
-      <body>{children}</body>
+      <body>
+        <AppShell>{children}</AppShell>
+      </body>
     </html>
   );
 }
