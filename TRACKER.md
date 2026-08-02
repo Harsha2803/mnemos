@@ -946,6 +946,25 @@ Recorded so they are not rediscovered as surprises:
     endpoint needs the same treatment, that is the signal to add a runtime validator
     generated from the schema rather than to write a third narrowing function.
 
+32. **The whole stack was never rebuilt from source between M3.4 and F0, and `main` could
+    not start.** `M3.4` added a minimum-length check on `jwt_secret` (an HMAC-SHA256 key
+    shorter than its own digest signals a value nobody chose deliberately) but
+    `docker-compose.yml` still shipped the 19-byte `dev-only-change-me`. The first
+    `docker compose up -d --build api` after F0 merged put the API into a crash loop with
+    `ConfigurationError: jwt_secret is shorter than an HMAC-SHA256 key should be`, and
+    `web` never started because it waits on `api` being healthy. Fixed in the same commit
+    as this entry.
+
+    **Every test passed throughout.** M3.4's agent verified its work against an API it ran
+    locally on `:8010` with its own settings, and its 191 tests construct
+    `PlatformTokenConfig` directly — so nothing in the suite ever read
+    `docker-compose.yml`. This is the same lesson as `db doctor` (item 7) and the error
+    boundary (§3, M3.2a), in a third place: **a control verified one layer away from where
+    it takes effect is not verified.** The concrete gap is that CI builds no images and
+    runs no `docker compose up`, so "the stack starts" is asserted by nobody. A compose
+    smoke job — build, `up -d`, poll `/readyz` and `:3000`, tear down — is the check that
+    would have caught this, and it should be added to `.github/workflows/ci.yml`.
+
 ---
 
 ## 5. NEXT TASK
