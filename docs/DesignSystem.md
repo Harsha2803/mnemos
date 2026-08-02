@@ -135,6 +135,17 @@ not, because the next redesign changes which grey it should be.
   --warning:             #9A5B00;   /* superseded, degraded, stale */
   --danger:              #C2352E;   /* denied, failed, revoked */
   --info:                #5B4BE1;   /* system / compiler annotation */
+
+  /* Accent at 12% — the `tinted` button rank (§4), as a token rather than a
+     colour-mix at each call site, so the one number that defines the rank lives
+     in one place. The hover partner deepens the tint instead of shifting hue,
+     so the rank stays recognisable while pressed. */
+  --accent-tint:         rgb(74 63 209 / 0.12);
+  --accent-tint-hover:   rgb(74 63 209 / 0.20);
+
+  /* The chrome material's own translucency. Always paired with --material-*
+     and the opaque @supports fallback in §2.4. */
+  --chrome:              rgb(255 255 255 / 0.72);
 }
 
 @media (prefers-color-scheme: dark) {
@@ -165,9 +176,22 @@ not, because the next redesign changes which grey it should be.
     --warning:           #F0A02E;
     --danger:            #FF6B6E;
     --info:              #9B8CFF;
+
+    --accent-tint:       rgb(155 140 255 / 0.16);
+    --accent-tint-hover: rgb(155 140 255 / 0.26);
+    --chrome:            rgb(22 22 28 / 0.72);
   }
 }
 ```
+
+**The dark block is declared twice in `globals.css`, and that is deliberate.** The
+`@media` copy is scoped `:root:not([data-theme="light"])` and is the default and the
+no-JavaScript path; a second `:root[data-theme="dark"]` copy carries an explicit user
+choice. `:not([data-theme="light"])` is the whole of what makes an explicit choice win in
+*both* directions — without it, a user on a dark OS who picks light still gets dark, which
+is the easy half of this to ship broken. The two copies must stay identical, and
+`theme.test.ts` asserts that they are, so drift is a test failure rather than one subtly
+wrong shade in one mode.
 
 **These ratios are measured, not asserted.** Against `--bg` in each theme:
 
@@ -182,6 +206,19 @@ not, because the next redesign changes which grey it should be.
 All clear the 4.5:1 body-text floor (§3), which is why the state colours are darker in
 light mode than a status colour usually is — they have to survive being used as *text*,
 not only as a dot. If you add a token, measure it and add the row; do not eyeball it.
+
+The three tokens that are *surfaces* rather than text are measured against the text they
+carry, composited over `--bg`, because that is the pair a reader actually sees:
+
+| Pair | Light | Dark |
+|---|---|---|
+| `--on-accent` on `--accent` — the `filled` button | **7.18** | **6.68** |
+| `--accent` on `--accent-tint` — the `tinted` button | **5.95** | **5.74** |
+| `--accent` on `--accent-tint-hover` — tinted, hovered | **5.21** | **4.73** |
+| `--label` on `--chrome` over `--bg` — sidebar and toolbar text | **18.77** | **18.52** |
+
+The tinted-hover row is the tightest at 4.73 and it is the one to watch: deepening the
+tint any further to make the hover more obvious would push it under the floor.
 
 **Dark mode is not an inversion.** Dark surfaces get *lighter* as they stack
 (`#000` → `#1C1C1E` → `#2C2C2E`) while light surfaces get subtly darker. Inverting a light
@@ -216,6 +253,9 @@ the media query in **both** directions so an explicit user choice wins.
   /* Tracking tightens as size grows — large text set at default tracking reads loose. */
   --tracking-title: -0.022em;
   --tracking-body:  -0.011em;
+
+  /* The measure, as a token rather than a number repeated at each call site. */
+  --measure: 46rem;
 }
 ```
 
@@ -298,7 +338,17 @@ contexts, and a translucent bar over unblurred content is illegible. Always pair
 :root {
   --ease-standard: cubic-bezier(0.25, 0.1, 0.25, 1);
   --ease-out:      cubic-bezier(0.16, 1, 0.3, 1);   /* things arriving */
-  --ease-spring:   linear(/* or a spring via Framer Motion */);
+
+  /* A spring as a linear() easing, so a plain CSS transition can have one
+     without an animation library. The overshoot peaks at 1.017 and settles —
+     enough to read as physical, not enough to read as playful. Framer Motion's
+     spring is the answer when a gesture must be interruptible; this is the
+     answer when a transition need not be. */
+  --ease-spring: linear(
+    0, 0.006, 0.025 2.8%, 0.101 6.1%, 0.539 18.9%, 0.721 25.3%, 0.849 31.5%,
+    0.937 38.1%, 0.968 41.8%, 0.991 45.7%, 1.006 50.1%, 1.015 55%, 1.017 63.9%,
+    1.001
+  );
 
   --duration-fast:   150ms;  /* hover, focus, small state changes */
   --duration-normal: 250ms;  /* panels, sheets, disclosure */
@@ -323,6 +373,23 @@ vestibular trigger. Honour it globally, once:
   }
 }
 ```
+
+### 2.6 Layout and accessibility constants
+
+The three numbers §1 and §3 state in prose, as tokens — so a component and the test that
+checks it are reading the same value rather than two copies of it that agree today.
+
+```css
+:root {
+  --hit-target:      44px;    /* §3, the minimum interactive target */
+  --sidebar-width:   260px;   /* §1 */
+  --inspector-width: 320px;   /* §1 */
+}
+```
+
+`--hit-target` is applied through a single `.hit-target` class rather than repeated on
+each control, which is what lets `layout.test.tsx` walk every rendered interactive element
+and resolve one number.
 
 ---
 
@@ -354,12 +421,23 @@ retrofit across forty of them.
   is an inspector or an inline disclosure. Modals need `<dialog>`, focus trapping, `Esc`,
   and focus restored to the trigger on close.
 - **Empty states.** Every list gets one: an icon, one line of what goes here, one action.
-  An empty pane with no explanation reads as a bug.
+  An empty pane with no explanation reads as a bug — the user cannot tell "nothing here
+  yet" from "this failed to load", and assumes the worse of the two. The action is omitted
+  **only** when there is genuinely nothing the user can do yet; a control that does nothing
+  is worse than no control, because it reads as a defect rather than as a boundary.
 - **Loading.** Skeletons that match the final layout, never a centred spinner over a blank
   region — a spinner discards the layout information the user is about to need. For
-  streamed text, render tokens as they arrive.
+  streamed text, render tokens as they arrive. **Label one skeleton per region, not each
+  shape:** six live regions all announcing "loading" is worse than none, so the rest are
+  `aria-hidden` decoration.
 - **Destructive actions.** `--danger`, and confirmation names the specific thing being
   destroyed. "Delete document?" is not good enough; "Delete *Q3 Revenue Policy*?" is.
+- **Appearance.** Three choices, not two: **Match system**, **Light**, **Dark**. "System"
+  is a real preference — it means *keep following the OS* — and a light/dark switch throws
+  the user's answer away the moment they change their OS setting. The explicit choice is
+  stored and stamped on `<html>` as `data-theme` before first paint, and it must win in
+  both directions (§2.1). Each option carries a text label as its accessible name; a sun
+  and a moon are not self-evident to everyone, and to a screen reader they are nothing.
 
 ---
 
@@ -382,3 +460,41 @@ Settled, and consistent with the zero-cost constraint (ADAPTATION §1):
 `/openapi.json`; generate the client. A hand-maintained TypeScript interface mirroring a
 Pydantic model is a second source of truth that silently drifts, and the drift surfaces as
 a runtime error in front of a user.
+
+---
+
+## 6. Where the system lives (as of `F0`)
+
+The system is implemented, not aspirational. Before adding a component, look at what is
+already there — the answer to "what class do I use for a 44px target" is a class that
+exists.
+
+| Concern | File |
+|---|---|
+| Every token in §2, and the only colour literals in the frontend | `frontend/src/app/globals.css` |
+| The Tailwind theme mapping (`@theme inline`, and the `--color-*: initial` reset) | same file, lower half |
+| `.hit-target`, `.material-chrome`, `.measure`, `.list-group` / `.list-row` | same file, `@layer components` |
+| Theme preference, the pre-paint script, the store | `frontend/src/lib/theme.ts` |
+| `Button`, `List`, `EmptyState`, `Skeleton` | `frontend/src/components/ui/` |
+| `ThemeToggle` | `frontend/src/components/theme/` |
+| The three-column shell and the breakpoint sheets | `frontend/src/components/shell/AppShell.tsx` |
+| Generated API types (never hand-edited; `npm run generate:api`) | `frontend/src/lib/api/schema.ts` |
+
+**Three tests hold the system together, and they are the ones to keep working rather than
+to route around:**
+
+- `test_no_component_hardcodes_a_colour` — greps every component source for a hex literal
+  and for `rgb(`/`hsl(`. Crude, and it is what keeps §2 true after the twentieth component.
+- `test_every_token_in_the_design_system_is_defined_in_globals_css` — parses §2 of *this
+  document* and fails on any token the CSS does not define. A token documented but missing
+  is a literal waiting to be written, so **adding a token here without adding it there is a
+  build failure**, which is the intended direction of pressure.
+- `test_every_interactive_target_is_at_least_44px` — resolves `min-height`/`min-width`
+  through `--hit-target` from the compiled stylesheet. A new control that skips
+  `.hit-target` fails it.
+
+**jsdom cannot evaluate `prefers-color-scheme`, layout, or cascade layers.** The test
+harness (`frontend/src/test/harness.ts`) flattens the layers so `getComputedStyle` returns
+real values, and the halves it still cannot reach — the media block's scope, the rendered
+column widths, the absence of a theme flash — were confirmed in headless Chrome. From
+`M3.4`, Playwright is where that belongs.

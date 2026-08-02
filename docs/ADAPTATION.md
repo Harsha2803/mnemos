@@ -170,7 +170,7 @@ Every tenant-scoped table: `org_id` + RLS `FORCE` on `app.current_org` GUC.
 |---|---|---|
 | **M1** | Container stack + backend skeleton | — |
 | **M2** | Alembic + full schema | — |
-| **F0** | — | App shell: Next.js, design tokens, three-column layout, theming, primitives, generated client |
+| **F0** ✅ | — | App shell: Next.js, design tokens, three-column layout, theming, primitives, generated client |
 | **M3** | Identity: internal auth, JWT, RBAC, tags, OIDC, API keys | Sign-in, session handling, protected shell, API-key management |
 | **M4** | Port memory/retrieval/context kernel to PG + pgvector | **Context inspector** — admitted vs excluded and why, budget spend, losing candidates |
 | **M5** | objectstore (MinIO) + connectors + Redis Streams events | Sources: connect, browse, watch events |
@@ -194,10 +194,14 @@ own system — its own accent, neutrals and identity — informed by Apple's des
 for typography, spatial rhythm, materials and motion character. §0 there records which
 Apple assets are off-limits (SF Pro as a webfont, SF Symbols) and what is used instead.
 
-**Current position: M1, M2 and `M3.1`–`M3.3` are merged to `main` (PR #1, PR #2 at
-`98fe47a`). `M3.4`'s **backend half** is on `feat/m3.4-platform-jwt` (PR #6); its UI slice
-is not built. `F0`, the frontend foundation, is the task that unblocks every remaining UI
-slice — see [TRACKER §5](../TRACKER.md#5-next-task). `M3.5`–`M3.7` follow. See §8.**
+**Current position: M1, M2, `M3.1`–`M3.3` and `M3.7` are on `main` (PR #1, PR #2 at
+`98fe47a`, PR #5), and so is `M3.4`'s backend half (PR #6). `F0` — the frontend foundation
+— is done: `frontend/` holds a running, themed, accessible three-column shell,
+`docker compose up -d` serves it at `http://localhost:3000`, and `web` is healthy
+alongside the other eight services. The next task is **`M3.4`'s frontend half** — the
+sign-in screen and session handling, items 7–9 of
+[TRACKER §5](../TRACKER.md#5-next-task) — which is the first slice to land on F0's shell.
+`M3.5` and `M3.6` follow, each carrying a UI slice. See §8.**
 
 M3's exit criterion "RLS blocks cross-org" turned out to be unmet by M2 rather than merely
 untested; that is written up in §8 and in [TRACKER §3](../TRACKER.md#3-current-state--what-is-actually-built).
@@ -205,6 +209,71 @@ untested; that is written up in §8 and in [TRACKER §3](../TRACKER.md#3-current
 ---
 
 ## 8. Current state
+
+### F0 — app shell ✅
+
+The one task with no backend half, because `frontend/` was an empty directory and there
+was nothing for a sign-in screen to be built *in*. Verified 2026-08-02.
+
+- **Next.js 15 App Router, React 19, TypeScript `strict`** plus the four checks `strict`
+  leaves off. `output: "standalone"`; `frontend/Dockerfile` is three stages in the same
+  shape as `backend/Dockerfile` — dependency layer keyed on the manifest alone, build, then
+  a runtime stage with no toolchain, running as uid 10001.
+- **Tokens as the only source of colour** (C13). Every custom property from
+  [`DesignSystem.md`](DesignSystem.md) §2 lives in `src/app/globals.css` and is mapped into
+  Tailwind v4 through `@theme inline`. There is no `tailwind.config.js`, and
+  `--color-*: initial` deletes Tailwind's built-in palette — without that, `bg-red-500`
+  stays spellable, contains no hex literal, and defeats the grep that enforces the rule.
+- **Theming with three preferences.** "Match system" is a real answer, so choosing it
+  *removes* `data-theme` rather than setting it to `"system"` — a value that matches
+  neither rule and would pin every OS-following user to light. A blocking inline script in
+  `<head>` applies a stored choice before first paint.
+- **The three-column shell** — 260px sidebar, content at the 46rem measure, 320px
+  collapsible inspector, chrome on the translucent material with its opaque `@supports`
+  fallback. Below 1024px the inspector becomes a Radix Dialog and below 768px the sidebar
+  does too: a change of component, not of width, since a sheet traps focus and closes on
+  Esc and a narrower column does neither.
+- **Base primitives only** — `Button` (three ranks, no fourth), grouped-inset `List` with
+  separators inset to the text origin, `EmptyState`, `Skeleton`, `ThemeToggle`. Every test
+  queries by role and accessible name.
+- **Generated API client.** `openapi-typescript` against the live `/openapi.json`, output
+  committed, `npm run generate:api` in `package.json`. Nothing hand-written.
+- **One real call end to end**: `/readyz` through the generated client and TanStack Query,
+  rendered as a health indicator in the sidebar and a dependency list on the overview page.
+  Each of the container, the CORS configuration, the generated types and the query layer
+  already worked alone; this is what proves they work together.
+- **`docker-compose.yml`**: `profiles: ["web"]` deleted and a healthcheck added, so plain
+  `docker compose up -d` brings the frontend up and `docker compose ps` says something
+  about a page rather than about a process.
+
+Measured against the running stack and in headless Chrome over CDP:
+
+```
+docker compose ps    ->  web  Up (healthy), with api keycloak minio ollama
+                         postgres realtime redis worker
+curl -o /dev/null -w '%{http_code}' http://localhost:3000   ->  200
+--dump-dom after JS  ->  "API ready" · "postgres" · "redis"
+
+dark OS,  no choice   ->  data-theme=null   body bg rgb(11, 11, 15)
+dark OS,  chose light ->  data-theme=light  body bg rgb(255, 255, 255)
+light OS, chose dark  ->  data-theme=dark   body bg rgb(11, 11, 15)
+sidebar 260px · inspector 320px · .measure 736px (= 46rem)
+900px wide: inspector leaves the layout.  600px: sidebar leaves too.
+CDP screencast over a hard reload, dark OS + stored light choice:
+  13 frames, the first already light — no flash.
+```
+
+| Check | Result |
+|---|---|
+| `npm run test` | **41 passed** (Vitest + Testing Library + `vitest-axe`) |
+| `npx tsc --noEmit` · `npm run lint` · `npm run build` | clean |
+| `npm audit` | 0 vulnerabilities |
+| axe on the shell | 0 violations |
+| `pytest` · `alembic check` | **97 passed** · no drift — F0 changes no Python |
+
+Deliberately absent: any sign-in form (M3.4), any chat UI (M8), any inspector *content*
+(M4). The inspector renders an `EmptyState` saying so, because an empty pane with no
+explanation reads as a bug and the user cannot tell "not built yet" from "broken".
 
 ### M1 — container stack + backend skeleton ✅
 
@@ -545,9 +614,11 @@ prompt injection that defeats the AST parser cannot write, because the role cann
 compose file maps host `15432 -> 5432` and `6380 -> 6379`. Container-to-container traffic
 is unaffected and still uses the standard ports over the compose network.
 
-**`web` is behind a compose profile.** `./frontend` has no Dockerfile until M13, and an
-unresolvable build context aborted the whole `up`. Default `up` brings up the working
-stack; `docker compose --profile web up` opts in once M13 lands.
+~~**`web` is behind a compose profile.**~~ **Un-gated by `F0`, 2026-08-02.** The profile
+existed because `./frontend` had no Dockerfile and an unresolvable build context aborted
+the whole `up`. It does now, so plain `docker compose up -d` brings the frontend up with
+everything else and `web` has a healthcheck of its own — a stack whose UI needs a
+remembered extra flag is a stack whose UI does not get looked at.
 
 ### Not started
 
