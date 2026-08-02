@@ -460,3 +460,41 @@ Settled, and consistent with the zero-cost constraint (ADAPTATION §1):
 `/openapi.json`; generate the client. A hand-maintained TypeScript interface mirroring a
 Pydantic model is a second source of truth that silently drifts, and the drift surfaces as
 a runtime error in front of a user.
+
+---
+
+## 6. Where the system lives (as of `F0`)
+
+The system is implemented, not aspirational. Before adding a component, look at what is
+already there — the answer to "what class do I use for a 44px target" is a class that
+exists.
+
+| Concern | File |
+|---|---|
+| Every token in §2, and the only colour literals in the frontend | `frontend/src/app/globals.css` |
+| The Tailwind theme mapping (`@theme inline`, and the `--color-*: initial` reset) | same file, lower half |
+| `.hit-target`, `.material-chrome`, `.measure`, `.list-group` / `.list-row` | same file, `@layer components` |
+| Theme preference, the pre-paint script, the store | `frontend/src/lib/theme.ts` |
+| `Button`, `List`, `EmptyState`, `Skeleton` | `frontend/src/components/ui/` |
+| `ThemeToggle` | `frontend/src/components/theme/` |
+| The three-column shell and the breakpoint sheets | `frontend/src/components/shell/AppShell.tsx` |
+| Generated API types (never hand-edited; `npm run generate:api`) | `frontend/src/lib/api/schema.ts` |
+
+**Three tests hold the system together, and they are the ones to keep working rather than
+to route around:**
+
+- `test_no_component_hardcodes_a_colour` — greps every component source for a hex literal
+  and for `rgb(`/`hsl(`. Crude, and it is what keeps §2 true after the twentieth component.
+- `test_every_token_in_the_design_system_is_defined_in_globals_css` — parses §2 of *this
+  document* and fails on any token the CSS does not define. A token documented but missing
+  is a literal waiting to be written, so **adding a token here without adding it there is a
+  build failure**, which is the intended direction of pressure.
+- `test_every_interactive_target_is_at_least_44px` — resolves `min-height`/`min-width`
+  through `--hit-target` from the compiled stylesheet. A new control that skips
+  `.hit-target` fails it.
+
+**jsdom cannot evaluate `prefers-color-scheme`, layout, or cascade layers.** The test
+harness (`frontend/src/test/harness.ts`) flattens the layers so `getComputedStyle` returns
+real values, and the halves it still cannot reach — the media block's scope, the rendered
+column widths, the absence of a theme flash — were confirmed in headless Chrome. From
+`M3.4`, Playwright is where that belongs.
