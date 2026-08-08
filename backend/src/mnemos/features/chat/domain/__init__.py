@@ -15,6 +15,8 @@ from mnemos.features.chat.domain.models import (
     ChatSessionDetail,
     ChatSessionPage,
     ChatSessionSummary,
+    CitationInput,
+    CitationRecord,
 )
 
 __all__ = [
@@ -28,4 +30,6 @@ __all__ = [
     "ChatSessionPage",
     "ChatSessionSummary",
     "ChatStreamEvent",
+    "CitationInput",
+    "CitationRecord",
 ]

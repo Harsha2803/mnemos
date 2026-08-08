@@ -35,8 +35,10 @@ from mnemos.features.chat.domain import (
     ChatMessageRecord,
     ChatSessionId,
     ChatSessionSummary,
+    CitationRecord,
 )
 from mnemos.features.identity.application.principals import AuthenticatedCaller
+from mnemos.flows.rag.application import RagFlow
 
 router = APIRouter(prefix="/chat", tags=["chat"])
 
@@ -63,6 +65,7 @@ class ChatMessageResponse(BaseModel):
     ordinal: int
     role: Literal["system", "user", "assistant", "tool"]
     content: str
+    flow: str | None
     prompt_tokens: int
     completion_tokens: int
     latency_ms: int | None
@@ -71,9 +74,23 @@ class ChatMessageResponse(BaseModel):
     created_at: str
 
 
+class CitationResponse(BaseModel):
+    id: str
+    message_id: str
+    marker: int
+    document_id: str | None
+    chunk_id: str | None
+    quoted_text: str
+    start_char: int | None
+    end_char: int | None
+    page_number: int | None
+    score: float | None
+
+
 class ChatSessionDetailResponse(BaseModel):
     session: ChatSessionResponse
     messages: list[ChatMessageResponse]
+    citations: list[CitationResponse]
 
 
 class CreateSessionRequest(BaseModel):
@@ -86,6 +103,9 @@ class RenameSessionRequest(BaseModel):
 
 class SendMessageRequest(BaseModel):
     content: str = Field(min_length=1, max_length=32_000)
+    #: Manual for now — `A4`'s classifier replaces this with real routing
+    #: (TRACKER §5 deliverable 5's explicit, written-down provisionality).
+    use_documents: bool = False
 
 
 def _session_response(summary: ChatSessionSummary) -> ChatSessionResponse:
@@ -107,6 +127,7 @@ def _message_response(record: ChatMessageRecord) -> ChatMessageResponse:
         ordinal=record.ordinal,
         role=record.role.value,
         content=record.content,
+        flow=record.flow,
         prompt_tokens=record.prompt_tokens,
         completion_tokens=record.completion_tokens,
         latency_ms=record.latency_ms,
@@ -116,12 +137,35 @@ def _message_response(record: ChatMessageRecord) -> ChatMessageResponse:
     )
 
 
+def _citation_response(record: CitationRecord) -> CitationResponse:
+    return CitationResponse(
+        id=str(record.id),
+        message_id=str(record.message_id),
+        marker=record.marker,
+        document_id=str(record.document_id) if record.document_id else None,
+        chunk_id=str(record.chunk_id) if record.chunk_id else None,
+        quoted_text=record.quoted_text,
+        start_char=record.start_char,
+        end_char=record.end_char,
+        page_number=record.page_number,
+        score=record.score,
+    )
+
+
 def _service(request: Request) -> ChatService:
     service = getattr(request.app.state, "chat_service", None)
     if not isinstance(service, ChatService):  # pragma: no cover - the lifespan sets it
         msg = "chat service is not configured"
         raise RuntimeError(msg)
     return service
+
+
+def _rag(request: Request) -> RagFlow:
+    flow = getattr(request.app.state, "rag_flow", None)
+    if not isinstance(flow, RagFlow):  # pragma: no cover - the lifespan sets it
+        msg = "the RAG flow is not configured"
+        raise RuntimeError(msg)
+    return flow
 
 
 @router.post("/sessions", status_code=status.HTTP_201_CREATED)
@@ -171,6 +215,7 @@ async def get_session(
     return ChatSessionDetailResponse(
         session=_session_response(detail.session),
         messages=[_message_response(m) for m in detail.messages],
+        citations=[_citation_response(c) for c in detail.citations],
     )
 
 
@@ -209,13 +254,23 @@ async def send_message(
     body: SendMessageRequest,
     caller: Annotated[AuthenticatedCaller, Depends(require_caller)],
     service: Annotated[ChatService, Depends(_service)],
+    rag: Annotated[RagFlow, Depends(_rag)],
 ) -> StreamingResponse:
-    events = service.stream_reply(
-        org_id=caller.principal.org_id,
-        user_id=caller.principal.principal_id,
-        session_id=_parse_session_id(session_id),
-        content=body.content,
-    )
+    if body.use_documents:
+        events = rag.stream_reply(
+            org_id=caller.principal.org_id,
+            user_id=caller.principal.principal_id,
+            caller_tags=tuple(caller.principal.tags.slugs),
+            session_id=_parse_session_id(session_id),
+            content=body.content,
+        )
+    else:
+        events = service.stream_reply(
+            org_id=caller.principal.org_id,
+            user_id=caller.principal.principal_id,
+            session_id=_parse_session_id(session_id),
+            content=body.content,
+        )
     # Priming: the first `__anext__()` runs everything up to (and possibly
     # past) the first token — session lookup, persisting the user's message,
     # opening the model connection. A failure there is still an ordinary

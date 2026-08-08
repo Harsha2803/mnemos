@@ -13,6 +13,8 @@ from mnemos.features.chat.domain import (
     ChatMessageRecord,
     ChatSessionId,
     ChatSessionSummary,
+    CitationInput,
+    CitationRecord,
 )
 from mnemos.features.identity.domain import OrgId, UserId
 
@@ -68,7 +70,20 @@ class ChatRepository(Protocol):
         latency_ms: int,
         model: str,
         finish_reason: str,
+        flow: str | None = None,
     ) -> ChatMessageRecord: ...
+
+    async def add_citations(
+        self, *, org_id: OrgId, message_id: ChatMessageId, citations: Sequence[CitationInput]
+    ) -> None:
+        """`flows/rag` calls this after `append_assistant_message` returns —
+        a citation without a message to attach to cannot exist, so the two
+        are always sequential rather than one call carrying both."""
+        ...
+
+    async def list_citations(
+        self, *, org_id: OrgId, session_id: ChatSessionId
+    ) -> Sequence[CitationRecord]: ...
 
 
 __all__ = ["ChatMessageId", "ChatRepository"]
