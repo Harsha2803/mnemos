@@ -13,6 +13,10 @@ import { vi } from "vitest";
 export const navigation = {
   pathname: "/",
   searchParams: new URLSearchParams(),
+  // `useParams()` — route segments, e.g. `{ sessionId: "..." }` for
+  // `/chat/[sessionId]`. Empty by default because most tests render a page
+  // with no dynamic segment; `visit` is how a chat test supplies one.
+  params: {} as Record<string, string>,
   push: vi.fn(),
   replace: vi.fn(),
   refresh: vi.fn(),
@@ -24,6 +28,7 @@ export const navigation = {
 export function resetNavigation(): void {
   navigation.pathname = "/";
   navigation.searchParams = new URLSearchParams();
+  navigation.params = {};
   navigation.push.mockClear();
   navigation.replace.mockClear();
   navigation.refresh.mockClear();
@@ -33,7 +38,12 @@ export function resetNavigation(): void {
 }
 
 /** Put the test on a given URL, the way a real visit would. */
-export function visit(pathname: string, query = ""): void {
+export function visit(
+  pathname: string,
+  query = "",
+  params: Record<string, string> = {},
+): void {
   navigation.pathname = pathname;
   navigation.searchParams = new URLSearchParams(query);
+  navigation.params = params;
 }
