@@ -2,6 +2,7 @@
 
 import { usePathname } from "next/navigation";
 
+import { ChatSessionList } from "@/components/chat/ChatSessionList";
 import { List, ListItem } from "@/components/ui/List";
 
 import { AccountFooter } from "./AccountFooter";
@@ -18,18 +19,22 @@ export function SidebarContent() {
         <p className="text-footnote text-label-secondary">Workspace</p>
       </div>
 
-      <List label="Sections">
-        {DESTINATIONS.map(({ href, label, Icon }) => (
-          <ListItem
-            key={href}
-            href={href}
-            current={pathname === href}
-            leading={<Icon className="size-[18px]" strokeWidth={1.5} aria-hidden="true" />}
-          >
-            {label}
-          </ListItem>
-        ))}
-      </List>
+      <div className="flex min-h-0 flex-1 flex-col gap-4 overflow-y-auto">
+        <List label="Sections">
+          {DESTINATIONS.map(({ href, label, Icon }) => (
+            <ListItem
+              key={href}
+              href={href}
+              current={href === "/" ? pathname === "/" : pathname?.startsWith(href) === true}
+              leading={<Icon className="size-[18px]" strokeWidth={1.5} aria-hidden="true" />}
+            >
+              {label}
+            </ListItem>
+          ))}
+        </List>
+
+        <ChatSessionList />
+      </div>
 
       {/* The footer the shell reserved at F0, now carrying a real identity
           rather than a placeholder: who is signed in, which tenant, and the way

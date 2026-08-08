@@ -21,6 +21,7 @@ vi.mock("next/navigation", () => ({
   useRouter: () => navigation,
   usePathname: () => navigation.pathname,
   useSearchParams: () => navigation.searchParams,
+  useParams: () => navigation.params,
 }));
 
 // The stylesheet the app actually ships, compiled by the same PostCSS/Tailwind

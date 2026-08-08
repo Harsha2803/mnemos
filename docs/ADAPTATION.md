@@ -4,8 +4,8 @@
 > self-contained: architecture, the capability inventory, schema, milestones, and current
 > state. [`TRACKER.md`](../TRACKER.md) holds live task status; this holds the design.
 
-**Last updated:** 2026-08-03 — aligned to the 2026-08-02 re-plan in
-[TRACKER §3.0](../TRACKER.md#30-the-plan--four-phases-and-the-sentence-each-one-earns)
+**Last updated:** 2026-08-08 — `A1` shipped (talk to it: the Ollama gateway, chat
+persistence, SSE streaming, the chat surface); `A2` is next
 
 ---
 
@@ -230,8 +230,8 @@ Two rules govern every row.
 | ID | What it builds | You can now… | Status |
 |---|---|---|---|
 | **A0** | Sign-in screen + browser session handling (`M3.4`'s UI half) + the fail-closed route guard (deny by default) | **sign in through Keycloak, stay signed in across a reload, and sign out** — and no route added after this is reachable unauthenticated | ✅ 2026-08-03 |
-| **A1** | LLM gateway (Ollama) · chat sessions + messages · SSE streaming · the chat surface | **talk to it** — ask a question and watch the answer stream in token by token | ⬜ **next** |
-| **A2** | Upload → extract → chunk → embed (pgvector HNSW) · retrieval ported from `_v1` · RAG flow · citations · knowledge library | **upload a document and ask questions about it**, with citations you click into | ⬜ |
+| **A1** | LLM gateway (Ollama) · chat sessions + messages · SSE streaming · the chat surface | **talk to it** — ask a question and watch the answer stream in token by token | ✅ 2026-08-08 |
+| **A2** | Upload → extract → chunk → embed (pgvector HNSW) · retrieval ported from `_v1` · RAG flow · citations · knowledge library | **upload a document and ask questions about it**, with citations you click into | ⬜ **next** |
 | **A3** | NL2SQL: introspection · glossary · generate · AST read-only guard · `mnemos_ro` execution · narration · SQL panel | **ask a question about your data in English** and see the SQL, the rows and the narration — and see the guard visibly refuse a write | ⬜ |
 | **A4** | Router: classify a message → chat / RAG / NL2SQL · flow indicator | **ask anything without choosing a mode**, and see which flow answered and why | ⬜ |
 
@@ -300,16 +300,16 @@ for typography, spatial rhythm, materials and motion character. §0 there record
 Apple assets are off-limits (SF Pro as a webfont, SF Symbols) and what is used instead.
 
 **Current position.** Everything in the "Already built" table above is on `main`, plus
-**`A0`** (PR #11): the sign-in screen, browser session handling and the fail-closed route
-guard. `docker compose up -d` brings up nine services, and at `http://localhost:3000` a
-person can now sign in through Keycloak, stay signed in across a reload, and sign out —
-the first C14 sentence this project has been able to write. See §8.
+**`A0`** (PR #11) and **`A1`** (PR #13). `docker compose up -d` brings up nine services,
+and at `http://localhost:3000` a person can now sign in through Keycloak, stay signed in
+across a reload, sign out, and — new in `A1` — ask Mnemos a question and watch the answer
+stream in token by token, in a conversation that survives a reload. It answers from the
+model alone; there is still nothing to ground an answer in. See §8.
 
-**The next task is `A1`** — the LLM gateway over Ollama, chat persistence, SSE streaming
-and the chat surface, fully specified in [TRACKER §5](../TRACKER.md#5-next-task). It is the
-milestone that makes the shell worth signing in to. It answers from the model alone; the
-documents arrive in `A2` and the database in `A3`, both behind the same gateway and the
-same streaming endpoint `A1` builds.
+**The next task is `A2`** — upload a document, extract and chunk it, embed it onto
+pgvector, and port `_v1`'s retrieval kernel from SQLite brute-force cosine onto pgvector
+HNSW + pg_trgm, fully specified in [TRACKER §5](../TRACKER.md#5-next-task). The database
+arrives in `A3`, behind the same gateway and streaming endpoint `A1` built.
 
 `M3`'s exit criterion "RLS blocks cross-org" turned out to be unmet by `M2` rather than
 merely untested; that is written up in §8 and in
@@ -808,28 +808,57 @@ the whole `up`. It does now, so plain `docker compose up -d` brings the frontend
 everything else and `web` has a healthcheck of its own — a stack whose UI needs a
 remembered extra flag is a stack whose UI does not get looked at.
 
+### A1 — talk to it ✅
+
+Verified 2026-08-08 on branch `feat/a1-chat` (PR #13). The full write-up, with commands run
+and output observed, is in [TRACKER §3](../TRACKER.md#-a1--talk-to-it-verified-2026-08-08)
+— this is the short version for a reader who only needs the shape of what landed.
+
+`features/llm/` is a narrow `ChatModel` port (`stream`/`complete`/`health`) over
+`OllamaChatModel`, so `A4`'s router and `C2`'s cost ledger can swap models later without
+touching a call site, and `/readyz` now genuinely depends on the configured model being
+pulled (CodingStandards §7 — fail at startup, not at somebody's first message). `features/
+chat/` adds `ChatService` and `SqlChatRepository` behind the `chat_session`/`chat_message`
+tables `M2` already created; the streaming endpoint answers `text/event-stream` with named
+`token`/`done`/`error` frames, persists the assistant's message only once the stream
+completes (so an abandoned stream leaves no half-written row), and the router primes the
+generator once so a pre-first-token failure is an ordinary 404/502 rather than a stream
+that opened and died. The frontend adds `/chat` and `/chat/[sessionId]`, a composer
+(Enter sends, Shift+Enter newlines, a Stop control while streaming), and a session list in
+the sidebar.
+
+Two things worth carrying forward rather than rediscovering: nothing in the API process
+had ever imported the full SQLAlchemy model registry (`mnemos.platform.models`), and the
+first foreign key crossing a feature boundary (`chat_message.bundle_id → context_bundle`)
+raised `NoReferencedTableError` from a live query rather than from `alembic check` — fixed
+with one import in `main.py`'s composition root (TRACKER §4 item 41). And the bootstrap
+admin cannot sign in through Keycloak as itself against this repository's own persistent
+stack, because the realm's seeded `admin@mnemos.local` collides on email with the
+bootstrap-created internal user of the same name and is correctly denied by the
+just-in-time-provisioning rule from `M3.4` (TRACKER §4 item 40) — browser evidence from
+here on signs in as `analyst@mnemos.local` instead.
+
 ### Not started
 
-**All of Phase A, B, C and D** — §7. Concretely, and stated plainly because the gap
-between what `docs/` describes and what runs is the thing this file exists to keep honest:
+**Phase A2 onward, and all of B, C and D** — §7. Concretely, and stated plainly because the
+gap between what `docs/` describes and what runs is the thing this file exists to keep
+honest:
 
-- **There is no conversation surface.** No chat UI, no LLM gateway, no streaming endpoint.
-  `A1` builds them.
 - **There is no RAG in this stack.** Nothing uploads, extracts, chunks or embeds; the
   `chunk` and `chunk_embedding` tables exist and are empty, and the retrieval code that
-  will fill them is still quarantined in `_v1/` on SQLite. `A2`.
+  will fill them is still quarantined in `_v1/` on SQLite. `A2`, and it is next.
 - **There is no NL2SQL.** The `mnemos_analytics` warehouse is seeded and the `mnemos_ro`
   role is proven read-only (below), but nothing generates SQL against them. `A3`.
 - **There is no router, no tool runtime, no agent flow, no prompt store, no cost ledger
-  and no context inspector content.** `A4`, `B3`, `B4`, `C2`, `C4`.
-- ~~**There is no sign-in screen.**~~ **Built in `A0`.** What is missing now is anything
-  to *say* to it: the shell has one Overview page, no composer and no model behind it.
-  `A1`, and it is next.
+  and no context inspector content beyond a static `EmptyState`.** `A4`, `B3`, `B4`, `C2`,
+  `C4`.
+- ~~**There is no conversation surface.**~~ **Built in `A1`.** What is missing now is
+  anything to *ground* an answer in — a document (`A2`) or a database (`A3`).
 
 What *is* built is the foundation those stand on: the container stack, the 41-table schema
 with row-level security that is in force rather than merely declared, identity through a
-full OIDC round trip and platform JWT with refresh rotation, `mnemosctl bootstrap`, CI, and
-the app shell. Evidence for each is above.
+full OIDC round trip and platform JWT with refresh rotation, `mnemosctl bootstrap`, CI, the
+app shell, and now a working conversation surface. Evidence for each is above.
 
 ---
 
