@@ -28,13 +28,24 @@ const KEYCLOAK = process.env.MNEMOS_E2E_KEYCLOAK_URL ?? "http://localhost:8080";
  * `mnemos-dev-admin-password` (TRACKER §3 Environment) is the *internal*
  * provider's password for the local `app_user` row that bootstrap wrote. It has
  * nothing to do with Keycloak. What Keycloak's login form wants is the
- * credential in `deploy/keycloak/mnemos-realm.json`, which is `admin`. Both are
- * dev-stack credentials in the same class as Keycloak's own `admin`/`admin`,
- * and neither is ever to be reused anywhere real.
+ * credential in `deploy/keycloak/mnemos-realm.json`. Both are dev-stack
+ * credentials in the same class as Keycloak's own `admin`/`admin`, and neither
+ * is ever to be reused anywhere real.
+ *
+ * **Deliberately not `admin@mnemos.local`** (TRACKER §4 item 40, found while
+ * verifying `A1` against this same persistent, bootstrapped "mnemos" org
+ * rather than the throwaway one item 38 used). `mnemosctl bootstrap` creates
+ * that email as an *internal*-provider user; signing in through Keycloak as
+ * the realm user of the same name collides on email and is correctly denied
+ * by M3.4's JIT-provisioning rule — matching is on `external_subject`, never
+ * on email, and an email already held by a different subject is a denial
+ * rather than a silent link. `analyst@mnemos.local` has no bootstrap-created
+ * counterpart, so it provisions cleanly, and nothing this file asserts
+ * depends on which seeded user is doing the signing in.
  */
 const ORG = process.env.MNEMOS_E2E_ORG ?? "mnemos";
-const EMAIL = process.env.MNEMOS_E2E_EMAIL ?? "admin@mnemos.local";
-const PASSWORD = process.env.MNEMOS_E2E_PASSWORD ?? "admin";
+const EMAIL = process.env.MNEMOS_E2E_EMAIL ?? "analyst@mnemos.local";
+const PASSWORD = process.env.MNEMOS_E2E_PASSWORD ?? "analyst";
 
 async function reachable(url: string): Promise<boolean> {
   try {
