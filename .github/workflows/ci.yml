@@ -350,13 +350,24 @@ jobs:
     steps:
       - uses: actions/checkout@v4
 
-      # `ollama` pulls ~2GB and no smoke assertion needs a model loaded, so it
-      # is the one service excluded. Everything the API depends on to reach
-      # `ready` is included, which is what the readiness probe is asserting.
+      # `ollama` used to be the one service excluded here — nothing checked
+      # a model was loaded, so the ~2GB pull bought this job nothing. `A1`
+      # changed that: `/readyz` now calls `ChatModel.health()`, so a missing
+      # model is exactly the kind of misconfiguration CodingStandards §7 says
+      # should fail at startup rather than at somebody's first chat message —
+      # and the compose job is what actually proves that startup path works.
       - name: Build and start the stack
         run: |
           docker compose up -d --build \
-            postgres redis minio keycloak migrate api worker realtime web
+            postgres redis minio keycloak ollama migrate api worker realtime web
+
+      # Blocking and separate from the `/readyz` wait below, so a slow model
+      # pull cannot be mistaken for a wedged API — the two failure modes get
+      # two different error messages instead of one shared timeout.
+      - name: Pull the Ollama model /readyz now requires
+        run: |
+          docker compose exec -T ollama ollama pull qwen2.5:3b-instruct
+          docker compose exec -T ollama ollama list
 
       - name: Wait for /readyz
         run: |
@@ -370,6 +381,7 @@ jobs:
             sleep 5
           done
           echo "::error::api never became ready"
+          curl -s http://localhost:8000/readyz || true
           exit 1
 
       - name: Wait for the web app
