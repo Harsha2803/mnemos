@@ -20,6 +20,14 @@ from fastapi import Depends, FastAPI, Request
 from fastapi.middleware.cors import CORSMiddleware
 from fastapi.responses import JSONResponse
 
+# Every model module, imported for its side effect on `Base.metadata` before
+# any ORM operation runs. `platform/db.py` documents why this has to be a
+# single shared import surface; the reason it has to run *here* is that a
+# feature's own adapter module only registers that feature's tables; a
+# `ForeignKey("context_bundle.id")` on `chat_message` cannot be resolved
+# unless something has also imported `features.context.adapters.models`, and
+# nothing about importing `chat`'s router implies that it will have been.
+import mnemos.platform.models  # noqa: F401
 from mnemos.core.clock import SYSTEM_CLOCK
 from mnemos.core.config import Settings, get_settings
 from mnemos.core.errors import MnemosError
@@ -27,7 +35,10 @@ from mnemos.core.ids import DEFAULT_ID_GENERATOR
 from mnemos.core.logging import configure_logging, get_logger, request_id_var
 from mnemos.core.security import PasswordHasher
 from mnemos.entrypoints.api.routers import auth as auth_router
+from mnemos.entrypoints.api.routers import chat as chat_router
 from mnemos.entrypoints.api.security import enforce_authentication, public_route_paths
+from mnemos.features.chat.adapters.repository import SqlChatRepository
+from mnemos.features.chat.application.service import ChatService
 from mnemos.features.identity.adapters.directory import SqlOrgDirectory, SqlUserDirectory
 from mnemos.features.identity.adapters.login_state import RedisLoginStateStore
 from mnemos.features.identity.adapters.principals import SqlPrincipalRepository
@@ -42,6 +53,7 @@ from mnemos.features.identity.providers import (
     PlatformTokenConfig,
     ProviderFactory,
 )
+from mnemos.features.llm.adapters.ollama import OllamaChatModel
 from mnemos.platform.cache import Cache
 from mnemos.platform.db import Database
 
@@ -113,11 +125,29 @@ async def lifespan(app: FastAPI) -> AsyncIterator[None]:
         clock=SYSTEM_CLOCK,
     )
 
+    # --- chat: the LLM gateway over Ollama, behind the `ChatModel` port -----
+    # One `httpx.AsyncClient` for the model server, separate from `app.state.http`
+    # (which follows redirects for the OIDC round trip): a chat request must
+    # never silently follow a redirect to somewhere that is not Ollama.
+    app.state.ollama_http = httpx.AsyncClient()
+    app.state.chat_model = OllamaChatModel(
+        client=app.state.ollama_http,
+        base_url=settings.ollama_base_url,
+        model=settings.ollama_model,
+        timeout_s=float(settings.ollama_timeout_s),
+    )
+    app.state.chat_service = ChatService(
+        repository=SqlChatRepository(app.state.db, DEFAULT_ID_GENERATOR),
+        model=app.state.chat_model,
+        history_turns=settings.chat_history_turns,
+    )
+
     log.info("api.startup", env=str(settings.env), api_prefix=settings.api_prefix)
     try:
         yield
     finally:
         await app.state.http.aclose()
+        await app.state.ollama_http.aclose()
         await app.state.cache.close()
         await app.state.db.dispose()
         log.info("api.shutdown")
@@ -222,6 +252,7 @@ def create_app() -> FastAPI:
         for name, probe in (
             ("postgres", app.state.db.ping),
             ("redis", app.state.cache.ping),
+            ("ollama", app.state.chat_model.health),
         ):
             try:
                 await probe()
@@ -241,12 +272,13 @@ def create_app() -> FastAPI:
             "name": settings.app_name,
             "version": "0.2.0",
             "docs": "/docs",
-            "milestone": "A0 — identity: OIDC login issues a platform JWT with "
-            "refresh rotation, and every route is authenticated by default; "
-            "the LLM gateway and the chat surface are next",
+            "milestone": "A1 — talk to it: an Ollama-backed chat gateway, "
+            "persisted sessions and messages, and token-by-token streaming; "
+            "documents (A2) and the database (A3) are next",
         }
 
     app.include_router(auth_router.router, prefix=settings.api_prefix)
+    app.include_router(chat_router.router, prefix=settings.api_prefix)
 
     return app
 
