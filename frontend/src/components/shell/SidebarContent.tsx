@@ -19,20 +19,27 @@ export function SidebarContent() {
         <p className="text-footnote text-label-secondary">Workspace</p>
       </div>
 
-      <div className="flex min-h-0 flex-1 flex-col gap-4 overflow-y-auto">
-        <List label="Sections">
-          {DESTINATIONS.map(({ href, label, Icon }) => (
-            <ListItem
-              key={href}
-              href={href}
-              current={href === "/" ? pathname === "/" : pathname?.startsWith(href) === true}
-              leading={<Icon className="size-[18px]" strokeWidth={1.5} aria-hidden="true" />}
-            >
-              {label}
-            </ListItem>
-          ))}
-        </List>
+      {/* `shrink-0` on the destinations, and the scroll on the conversations
+          rather than on the pair. A flex child shrinks below its content by
+          default, so with enough conversations the destinations were being
+          squeezed until the "Conversations" header overlapped them and
+          swallowed clicks meant for the nav — found by running the Playwright
+          specs in sequence against a stack that had accumulated sessions,
+          which is exactly the failure a fresh single-spec run cannot see. */}
+      <List label="Sections" className="shrink-0">
+        {DESTINATIONS.map(({ href, label, Icon }) => (
+          <ListItem
+            key={href}
+            href={href}
+            current={href === "/" ? pathname === "/" : pathname?.startsWith(href) === true}
+            leading={<Icon className="size-[18px]" strokeWidth={1.5} aria-hidden="true" />}
+          >
+            {label}
+          </ListItem>
+        ))}
+      </List>
 
+      <div className="min-h-0 flex-1 overflow-y-auto">
         <ChatSessionList />
       </div>
 

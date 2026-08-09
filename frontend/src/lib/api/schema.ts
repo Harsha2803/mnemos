@@ -250,10 +250,53 @@ export interface paths {
         patch?: never;
         trace?: never;
     };
+    "/api/v1/knowledge/documents": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /** List Documents */
+        get: operations["list_documents_api_v1_knowledge_documents_get"];
+        put?: never;
+        /** Upload Document */
+        post: operations["upload_document_api_v1_knowledge_documents_post"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/v1/knowledge/documents/{document_id}": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /** Get Document */
+        get: operations["get_document_api_v1_knowledge_documents__document_id__get"];
+        put?: never;
+        post?: never;
+        /** Delete Document */
+        delete: operations["delete_document_api_v1_knowledge_documents__document_id__delete"];
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
 }
 export type webhooks = Record<string, never>;
 export interface components {
     schemas: {
+        /** Body_upload_document_api_v1_knowledge_documents_post */
+        Body_upload_document_api_v1_knowledge_documents_post: {
+            /** File */
+            file: string;
+            /** Title */
+            title?: string | null;
+        };
         /** ChatMessageResponse */
         ChatMessageResponse: {
             /** Id */
@@ -267,6 +310,8 @@ export interface components {
             role: "system" | "user" | "assistant" | "tool";
             /** Content */
             content: string;
+            /** Flow */
+            flow: string | null;
             /** Prompt Tokens */
             prompt_tokens: number;
             /** Completion Tokens */
@@ -285,6 +330,8 @@ export interface components {
             session: components["schemas"]["ChatSessionResponse"];
             /** Messages */
             messages: components["schemas"]["ChatMessageResponse"][];
+            /** Citations */
+            citations: components["schemas"]["CitationResponse"][];
         };
         /** ChatSessionListResponse */
         ChatSessionListResponse: {
@@ -308,10 +355,52 @@ export interface components {
             /** Updated At */
             updated_at: string;
         };
+        /** CitationResponse */
+        CitationResponse: {
+            /** Id */
+            id: string;
+            /** Message Id */
+            message_id: string;
+            /** Marker */
+            marker: number;
+            /** Document Id */
+            document_id: string | null;
+            /** Chunk Id */
+            chunk_id: string | null;
+            /** Quoted Text */
+            quoted_text: string;
+            /** Start Char */
+            start_char: number | null;
+            /** End Char */
+            end_char: number | null;
+            /** Page Number */
+            page_number: number | null;
+            /** Score */
+            score: number | null;
+        };
         /** CreateSessionRequest */
         CreateSessionRequest: {
             /** Title */
             title?: string | null;
+        };
+        /** DocumentResponse */
+        DocumentResponse: {
+            /** Id */
+            id: string;
+            /** Title */
+            title: string;
+            /** Media Type */
+            media_type: string;
+            /** Byte Size */
+            byte_size: number;
+            /** Status */
+            status: string;
+            /** Superseded By */
+            superseded_by: string | null;
+            /** Chunk Count */
+            chunk_count: number;
+            /** Created At */
+            created_at: string;
         };
         /** HTTPValidationError */
         HTTPValidationError: {
@@ -375,6 +464,11 @@ export interface components {
         SendMessageRequest: {
             /** Content */
             content: string;
+            /**
+             * Use Documents
+             * @default false
+             */
+            use_documents: boolean;
         };
         /**
          * TokenRequest
@@ -854,6 +948,119 @@ export interface operations {
                 content: {
                     "application/json": unknown;
                 };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
+    list_documents_api_v1_knowledge_documents_get: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["DocumentResponse"][];
+                };
+            };
+        };
+    };
+    upload_document_api_v1_knowledge_documents_post: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "multipart/form-data": components["schemas"]["Body_upload_document_api_v1_knowledge_documents_post"];
+            };
+        };
+        responses: {
+            /** @description Successful Response */
+            201: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["DocumentResponse"];
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
+    get_document_api_v1_knowledge_documents__document_id__get: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                document_id: string;
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["DocumentResponse"];
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
+    delete_document_api_v1_knowledge_documents__document_id__delete: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                document_id: string;
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Successful Response */
+            204: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content?: never;
             };
             /** @description Validation Error */
             422: {

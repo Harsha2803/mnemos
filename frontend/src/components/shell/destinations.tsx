@@ -1,4 +1,4 @@
-import { LayoutGrid, MessageCircle, type LucideIcon } from "lucide-react";
+import { FileText, LayoutGrid, MessageCircle, type LucideIcon } from "lucide-react";
 
 export type Destination = {
   href: string;
@@ -9,9 +9,9 @@ export type Destination = {
 /**
  * Only destinations that exist.
  *
- * The sidebar grows a row per milestone — sources at B1, knowledge at A2 —
- * and a row that leads nowhere is worse than a short list, because the user
- * cannot tell "not built yet" from "broken".
+ * The sidebar grows a row per milestone — sources at B1 — and a row that
+ * leads nowhere is worse than a short list, because the user cannot tell
+ * "not built yet" from "broken".
  *
  * The sidebar and the toolbar title both read this list, so the label in the
  * bar is the label in the nav by construction rather than by coincidence.
@@ -19,6 +19,7 @@ export type Destination = {
 export const DESTINATIONS: readonly Destination[] = [
   { href: "/", label: "Overview", Icon: LayoutGrid },
   { href: "/chat", label: "Chat", Icon: MessageCircle },
+  { href: "/knowledge", label: "Knowledge", Icon: FileText },
 ];
 
 /**

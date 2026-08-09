@@ -3,6 +3,7 @@ import type { ReactElement } from "react";
 import { vi } from "vitest";
 
 import { Providers } from "@/app/providers";
+import { InspectorSelectionProvider } from "@/lib/inspector/SelectionProvider";
 
 /**
  * Render inside the real application providers.
@@ -10,9 +11,18 @@ import { Providers } from "@/app/providers";
  * A test-only QueryClient with different defaults would prove the component
  * works under settings the app does not use, which is the standard way a retry
  * or staleTime bug survives a green suite.
+ *
+ * `InspectorSelectionProvider` is here for the same reason it is in
+ * `app/(app)/layout.tsx`: it sits above both the shell (which renders the
+ * inspector) and the page (which decides what to inspect), so a component
+ * rendered without it is a component rendered outside the real tree.
  */
 export function renderWithProviders(ui: ReactElement): RenderResult {
-  return render(<Providers>{ui}</Providers>);
+  return render(
+    <Providers>
+      <InspectorSelectionProvider>{ui}</InspectorSelectionProvider>
+    </Providers>,
+  );
 }
 
 /** Stub `fetch` with a single JSON response, as the API would send it. */
