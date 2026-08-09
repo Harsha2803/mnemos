@@ -6,17 +6,18 @@
 > **and [`docs/ADAPTATION.md`](docs/ADAPTATION.md)** *in the same commit* — a stale
 > tracker is worse than none.
 
-**Last updated:** 2026-08-08
-**Phase:** **A — make it a chatbot.** `A0` ✅, `A1` ✅ — **you can sign in at
-`http://localhost:3000`, ask Mnemos something, and watch the answer stream in token by
-token, in a conversation that is still there tomorrow.** It answers from the model alone;
-nothing is grounded in a document or a database yet
-**Next task:** `A2` — **ask about your documents**, fully specified in §5. Take them one at
-a time, in order
-**Branch:** `feat/a2-rag` off `main`. **`main` contains M1+M2 (PR #1), M3.1–M3.3 (PR #2),
-the slice plan (PR #3), CI (PR #4), M3.7 bootstrap (PR #5), F0 the app shell, M3.4's
+**Last updated:** 2026-08-10
+**Phase:** **A — make it a chatbot.** `A0` ✅, `A1` ✅, `A2` ✅ — **you can sign in at
+`http://localhost:3000`, upload a document, ask about it, and click the citation to see the
+passage the answer came from.** What is still missing is the database (`A3`) and a router
+that picks the flow for you (`A4`)
+**Next task:** `A3` — **ask about your data in English**, fully specified in §5. Take them
+one at a time, in order
+**Branch:** `feat/a3-nl2sql` off `main`. **`main` contains M1+M2 (PR #1), M3.1–M3.3 (PR
+#2), the slice plan (PR #3), CI (PR #4), M3.7 bootstrap (PR #5), F0 the app shell, M3.4's
 backend half, the re-plan (PR #8), the compose fixes and smoke job (PRs #9, #10), `A0` the
-auth surface (PR #11), and `A1` the LLM gateway, chat persistence and streaming (PR #13)**
+auth surface (PR #11), `A1` the LLM gateway, chat persistence and streaming (PR #13), and
+`A2` RAG over uploaded documents (PR #14)**
 
 > ### 2026-08-08 — a marathon run, §0 rule 9 suspended for its duration
 >
@@ -204,8 +205,8 @@ That right-hand column is not a summary — it is the exit criterion.
 |---|---|---|---|
 | **A0** | Sign-in screen + browser session handling (M3.4's UI half) + the fail-closed route guard (deny by default, from old `M3.6`) | **sign in through Keycloak, stay signed in across a reload, and sign out** — and no route added after this is reachable unauthenticated | ✅ |
 | **A1** | LLM gateway (Ollama) · chat sessions + messages · SSE streaming · the chat surface | **talk to it** — ask a question and watch the answer stream in token by token | ✅ 2026-08-08 |
-| **A2** | Upload → extract → chunk → embed (pgvector HNSW) · retrieval ported from `_v1` · RAG flow · citations · knowledge library | **upload a document and ask questions about it**, with citations you click into | ⬜ **next** |
-| **A3** | NL2SQL: introspection · glossary · generate · AST read-only guard · `mnemos_ro` execution · narration · SQL panel | **ask a question about your data in English** and see the SQL, the rows and the narration — and see the guard visibly refuse a write | ⬜ |
+| **A2** | Upload → extract → chunk → embed (pgvector HNSW) · retrieval ported from `_v1` · RAG flow · citations · knowledge library | **upload a document and ask questions about it**, with citations you click into | ✅ 2026-08-10 |
+| **A3** | NL2SQL: introspection · glossary · generate · AST read-only guard · `mnemos_ro` execution · narration · SQL panel | **ask a question about your data in English** and see the SQL, the rows and the narration — and see the guard visibly refuse a write | ⬜ **next** |
 | **A4** | Router: classify a message → chat / RAG / NL2SQL · flow indicator | **ask anything without choosing a mode**, and see which flow answered and why | ⬜ |
 
 **At the end of Phase A the thing this project is for exists.** Everything after deepens it.
@@ -265,6 +266,122 @@ discarded. If you find a reference to an old ID anywhere, this is the translatio
 | `M12` router | `A4` | Moved **earlier**: without it the user has to pick a mode, which is not what a chatbot is |
 | `M13` frontend | dissolved into `F0` + a UI slice per milestone | Unchanged by this re-plan |
 | `M14` realtime + e2e + docs | `D1` | |
+
+### ✅ A2 — ask about your documents, verified 2026-08-10
+
+**You can now upload a document, ask a question about it, and click the citation in the
+answer to see the exact passage it came from.** That is the sentence C14 asks for, and it
+is the one that makes the "grounded in your content" claim demonstrable rather than
+architectural.
+
+| Layer | What landed |
+|---|---|
+| `platform/objectstore/` | `ObjectStore` port + `S3ObjectStore` over MinIO. boto3 has no async client, so every call goes through `anyio.to_thread.run_sync` (CodingStandards §3) |
+| `features/knowledge/domain/` | Ported from `_v1`: `chunk_text` (structure-aware, char offsets retained), `HashingEmbedder`, `HeuristicTokenizer`, RRF fusion, Jaccard dedup. All pure |
+| `features/knowledge/adapters/extraction.py` | Text/Markdown/PDF, off the event loop. An unsupported media type is a named `ValidationError` |
+| `features/knowledge/adapters/repository.py` | Documents, chunks, embeddings. Content-hash dedup checked *before* extraction, so a duplicate upload costs one `SELECT` |
+| `features/knowledge/adapters/retrieval.py` | The vector operator over pgvector HNSW and the lexical one over pg_trgm, **both with the ACL predicate and `is_current` inside the scan** |
+| `flows/rag/` | Prompt assembly from numbered passages, citation extraction, and the streaming flow reusing `A1`'s `ChatModel` port and streaming shape unchanged |
+| `entrypoints/api/routers/knowledge.py` | `POST/GET/DELETE /v1/knowledge/documents` |
+| `frontend/src/app/(app)/knowledge/` | The library: upload, list, delete with a naming confirmation |
+| `frontend/src/lib/inspector/`, `components/shell/InspectorContent.tsx` | The inspector's first real content — the cited passage and its char span |
+
+**The two constraints this milestone exists to honour, and how each is asserted.**
+
+*C4 — authorization is evaluated inside the scan; post-filtering is banned.*
+`test_acl_pushdown_beats_post_filtering_on_yield` is CodingStandards §9's mandatory case 3.
+Ten documents on one topic, eight tagged to a role the caller does not hold, `k=3`:
+
+```
+pushdown  (predicate in the WHERE)  -> 2 accessible chunks   <- both that exist
+post-filter (top-k then drop)       -> 0 accessible chunks   <- k spent on denied rows
+assert pushdown_yield > post_filter_yield
+```
+
+The post-filtering arm is written out in the test *only to measure it*, the same way the
+README's benchmark keeps a fair naive arm (C10). Without it the inequality would be an
+assertion about one number.
+
+*C6 — superseded revisions are excluded in the scan, not down-ranked.*
+`test_a_superseded_document_revision_is_excluded_from_the_scan_not_down_ranked` uploads two
+handbook revisions, retrieves, supersedes, retrieves again, and asserts the old text is
+**absent** rather than lower:
+
+```
+before mark_superseded : "capped at ten working days"  present
+after  mark_superseded : "capped at ten working days"  absent
+                         "capped at five working days" present
+```
+
+Asserted by absence deliberately: obsolete text is often the *better* lexical match, which
+is exactly why ranking cannot fix it and why this is the README's headline number.
+
+**Evidence in a real browser against the rebuilt compose stack** (signed in as
+`analyst@mnemos.local`, §4 item 40):
+
+```
+Knowledge -> upload handbook.txt  ->  "1 passages · 220 B · ready"
+Chat -> New chat -> [x] Use documents
+  "How many days of unused leave can I carry over?"
+  -> "[1] Employee Handbook 2026 states that carry-over of unused discretionary
+      leave into the following calendar year is capped at five working days."
+click [1] -> inspector:
+  Source [1] · Document passage · Characters 0–310 · relevance 0.29
+  "Employee Handbook 2026 / Leave and time off / Carry-over of unused
+   discretionary leave into the following calendar year is capped at five
+   working days. ..."
+```
+
+And through the API against the same stack, `flow` and the citation row are real columns
+rather than a rendering:
+
+```
+POST /v1/chat/sessions/{id}/messages  {"use_documents": true}
+  done frame: {"flow":"rag","model":"qwen2.5:3b-instruct","prompt_tokens":181,...}
+GET  /v1/chat/sessions/{id}
+  [assistant] flow=rag
+  citation [1] chunk=019fe21b... span=0-377
+```
+
+| Check | Result |
+|---|---|
+| `make test` | **278 passed** (was 250; +17 knowledge domain, +11 knowledge endpoints) |
+| `make lint` | clean |
+| `make types` | `mypy --strict`, clean on 153 source files — **scope widened** to `flows/` and `platform/`, since `A2` is the first milestone with real logic in `flows/` (Makefile and CI both) |
+| `make check` | "No new upgrade operations detected" — **no migration**; `M2` created every table this writes to |
+| `npm run test` | **89 passed** (was 82; +1 composer toggle, +4 knowledge library, +2 citations) |
+| `npm run lint` · `npx tsc --noEmit` · `npm run build` | clean |
+| `npm run test:e2e` | **9 passed**, and run twice consecutively to prove it leaves no residue — the knowledge spec deletes its own document and `SELECT count(*) FROM document` returns 0 afterward |
+| `/readyz` | `{"postgres":"ok","redis":"ok","ollama":"ok","objectstore":"ok"}` |
+| `gh auth status` | `Harsha2803` active (C9) |
+
+**A layout bug the e2e suite found and unit tests structurally could not.** The sidebar's
+destinations list is a flex child, and a flex child shrinks below its content by default —
+so on a stack with enough accumulated conversations the list was squeezed until the
+"Conversations" header overlapped it and intercepted clicks meant for the nav. It only
+reproduces with a long session list, which is to say only on a stack somebody has actually
+used, which is why it survived every green single-spec run. `shrink-0` on the
+destinations, scroll on the conversations alone. Same lesson as §4 item 32 in a new place:
+the state you develop against is not the state a user arrives in.
+
+**Deviations from the written spec, both deliberate:**
+
+- **`flows/rag/` duplicates `ChatService.stream_reply`'s loop rather than sharing it.**
+  The layering rule (ADAPTATION §5) is that `features` must never import `flows`; having
+  `ChatService` call the RAG flow would invert it, and having the flow subclass the service
+  would couple two things whose only shared part is a `while` loop over model events. The
+  duplication is a page of straightforward code and is the cost of the rule, noted here so
+  a later reader does not "fix" it by breaking the layering.
+- **`features/llm/` still has no `application/`, and `features/knowledge/` gained one.**
+  Consistent with `A1`'s recorded deviation: a package gets an `application/` when it has a
+  use case, and `KnowledgeService` is one.
+
+**Explicitly deferred, and where to:** the six-phase context compiler, the budget allocator
+with section floors, trust fencing and the provenance manifest are `C4` — `A2` truncates in
+fused-score order and says so in `domain/retrieval.py`'s docstring. Ingestion runs
+synchronously in the request handler; `ingest_job`/`ingest_job_event` exist and are unused
+until `B2`. `_v1`'s `calibrate_utility` and `resolve_conflicts` are not ported, for the
+reasons in that same docstring.
 
 ### ✅ A1 — talk to it, verified 2026-08-08
 
@@ -1014,16 +1131,20 @@ Recorded so they are not rediscovered as surprises:
    it is measured once, on Postgres, rather than twice.
 2. **Duplicate waste rises at large budgets** (14% at 3000) because more
    near-threshold content is admitted. Dedup is a threshold, not a guarantee.
-3. **Brute-force cosine over all chunks** on every query in `_v1`. Fine at 56 chunks,
-   `O(n)` and wrong at 100k. The HNSW indexes exist in the schema as of M2; wiring the
-   scan to use them is `A2`.
+3. ~~**Brute-force cosine over all chunks** on every query in `_v1`.~~ **Discharged by
+   `A2`, 2026-08-10** *for the live path*. `features/knowledge/adapters/retrieval.py`
+   orders by pgvector's `<=>` through the HNSW index `M2` created, with the authorization
+   and currency predicates in the same `WHERE`. The `_v1` kernel still contains the
+   brute-force scan and still runs the published benchmark on it; that copy dies when the
+   memory half is ported in `C4` and the benchmark is re-pointed at Postgres.
 4. **`all_chunks()` reloads the whole corpus per operator call** — three times per
-   compile. Obvious caching win, deliberately not done in `_v1` because it is thrown
-   away when retrieval is ported in `A2`.
-5. **No LLM in the loop yet.** The v0.1 benchmark measures *what reaches the model*, not
-   answer correctness. Ollama is now running, so an LLM-in-the-loop arm becomes possible
-   from `A1`, which brings the Ollama gateway — but it must not replace the deterministic
-   metrics.
+   compile. Still true **in `_v1` only**; the ported retrieval path (`A2`) never loads a
+   corpus into Python at all. Dies with the rest of `_v1` at `C4`.
+5. **No LLM in the loop in the *benchmark*.** The v0.1 benchmark measures *what reaches the
+   model*, not answer correctness, and that is still true — `A1` and `A2` put a real model
+   in the *product* path, but `bench.py` is still the deterministic-metrics harness and
+   must stay one. An LLM-in-the-loop arm is possible now; it must be added *alongside* the
+   deterministic metrics, never in place of them, whenever `C4` re-runs the benchmark.
 6. **The heuristic tokenizer approximates BPE.** Within a few percent on English prose;
    a `tiktoken` adapter would remove the approximation.
 7. ~~**RLS is untested by an automated test.**~~ **Discharged 2026-07-27**, and it was
@@ -1042,12 +1163,12 @@ Recorded so they are not rediscovered as surprises:
    because it is not in the M3 diff. One-line fix whenever that file is next edited.
 10. **`context_bundle` and `bundle_item` have no writer yet.** The tables and the budget
     CHECK exist; the compiler that fills them is `C4`.
-11. ~~**The frontend is still an empty directory.**~~ **Discharged by `F0`, 2026-08-02.**
-    The shell is at `http://localhost:3000`, `web` is un-gated and healthy in
-    `docker compose ps`, and the evidence is in §3. What remains missing is *screens*, not
-    scaffolding: there is no sign-in form (`A0`), no chat surface (`A1`) and no inspector
-    content (`C4`), and each is named against the milestone that owns it rather than left
-    implied.
+11. ~~**The frontend is still an empty directory.**~~ **Discharged by `F0`, 2026-08-02**,
+    and the screens it named have since arrived: the sign-in form (`A0`), the chat surface
+    (`A1`), and the knowledge library plus the inspector's first content (`A2`). What the
+    inspector still lacks is the *context bundle* — what was admitted, what was excluded
+    and why, and the budget spend — which is `C4`; as of `A2` it shows the cited passage
+    and its char span, and its empty state says which half is still missing.
 12. **Deviation (M3.2), now confirmed correct by M3.3: the OIDC validator trusts *two*
     configured issuers, not `issuer_internal` alone.** The old §5 said to validate `iss`
     against `issuer_internal`. **A real token from the live realm carries
@@ -1398,239 +1519,165 @@ Recorded so they are not rediscovered as surprises:
 
 ## 5. NEXT TASK
 
-### `A2` — ask about your documents: upload, extract, chunk, embed, retrieve, cite
+### `A3` — ask about your data: NL2SQL with two independent read-only defences
 
 **Do this one only** (rule 9 is suspended for the current run — see the 2026-08-08 note
-near the top of this file — but §5 is still rewritten before each milestone, per this
-protocol, so treat this section as the complete brief regardless of who reads it next).
-`A1` made the shell worth signing in to. This is the milestone that makes it worth
-uploading something to:
+near the top of this file — but §5 is still rewritten before each milestone, so treat this
+as the complete brief regardless of who reads it next).
 
-> **You can now upload a document and ask questions about it, with citations you click
-> into.**
+> **You can now ask a question about your data in English and see the SQL, the rows and
+> the narration — and see the guard visibly refuse a write.**
 
-**This is where `_v1`'s retrieval kernel gets ported**, not rewritten — `core/`, `embed.py`,
-`retrieval.py` and `store.py` in `backend/src/mnemos/_v1/` are real, tested code (23
-passing tests) that ran on SQLite with brute-force cosine search. The port target is
-Postgres + pgvector HNSW, which the schema (`M2`) already has: `document`, `chunk` and
-`chunk_embedding` exist, `chunk_embedding` already carries an HNSW index on `halfvec_cosine_ops`
-and denormalised `acl_tag_ids`/`trust_tier` columns for pushdown (C4), and `chunk` already
-carries a GIN trigram index for the lexical arm. None of that is provisional — it was built
-in `M2` for exactly this milestone.
+That last clause is half the milestone. **A defence nobody can see is a defence nobody
+believes**, so the refusal is a screen a stranger can produce on purpose, not a log line.
 
-**What is deliberately *not* ported here: the six-phase compiler.** README §"How the
-compiler works" and ADAPTATION §1 describe `BIND → PLAN → OPTIMISE → EXECUTE → REFINE →
-ASSEMBLE` with budget allocation, section floors, trust fencing and a provenance manifest —
-that whole governance layer, plus bitemporal memory, is `C4`'s deep slice, landing once
-across both RAG and NL2SQL rather than half-built here and rebuilt there. `A2` needs only
-enough assembly to answer a question from retrieved chunks: fuse, dedup, truncate to a
-token budget in score order, done. Building the real allocator against one flow before the
-second flow (`A3`) exists to allocate between would mean rewriting it in `C4` anyway.
+**The one architectural rule here, and it is `C1`-adjacent in importance: two independent
+defences, neither sufficient alone** (ADAPTATION §9, README "Design decisions worth
+defending"). An AST guard that rejects anything but a `SELECT`, *and* execution as
+`mnemos_ro`, a Postgres role that physically cannot write. The guard alone is one parser
+bug from a write; the role alone gives no useful error and no audit trail of the attempt.
+Both, and `test_the_readonly_role_refuses_a_write_the_guard_somehow_allowed` is the test
+that proves the second one is really there rather than assumed.
+
+**The warehouse and the role already exist.** `deploy/postgres/init/02-analytics-seed.sql`
+seeds a separate `mnemos_analytics` database — 900 `sales_order`, 6 `customer`,
+6 `product`, 4 `region` — and creates `mnemos_ro`, whose read-only-ness was proven at `M1`
+(`ADAPTATION §8`: `mnemos_ro` INSERT → `ERROR: permission denied for table region`).
+`Settings.analytics_database_url` already points at it as `mnemos_ro`, and
+`sql_statement_timeout_ms`, `sql_max_rows` and `sql_repair_attempts` are already settings.
+None of that is provisional; it was built at `M1` for this milestone.
 
 **Read first, in this order:**
 
-1. §0 through §4 of this file, and the whole of the `A1` write-up in §3 just above this
-   section — the persistence/streaming/priming patterns it established are reused here
-   almost unchanged, just with a retrieval step ahead of the model call.
-2. [`docs/DesignSystem.md`](docs/DesignSystem.md) §3 and §4 in full, same as `A1` required.
-   New territory this milestone needs: **Loading** ("skeletons that match the final
-   layout") for the upload/processing state, and **Destructive actions** ("confirmation
-   names the specific thing being destroyed") for deleting a document.
-3. [`docs/CodingStandards.md`](docs/CodingStandards.md) §3 (CPU-bound work — chunking,
-   embedding — goes to a thread pool, never inline: `anyio.to_thread.run_sync`) and §9's
-   mandatory ACL-pushdown-vs-post-filtering test, which is the one this milestone's
-   retrieval query has to pass.
-4. [`docs/ADAPTATION.md`](docs/ADAPTATION.md) §6 (the `knowledge` schema group) and §9
-   (locked decisions — "Hashing embedder default, neural opt-in" governs this milestone
-   directly: **do not make the neural embedder the default path**, C1/C2).
-5. **The code you port from, read before writing anything new:**
-   - `backend/src/mnemos/_v1/embed.py` — `Embedder` protocol, `HashingEmbedder` (default,
-     zero-download) and the neural adapter behind the same port. The schema's
-     `chunk_embedding.embedding` is `HALFVEC(384)` and `Settings.embedding_dim = 384`
-     already — construct `HashingEmbedder(dim=384)`, not its 256-dim benchmark default.
-   - `backend/src/mnemos/_v1/ingest.py` — structure-aware chunking with char offsets. Read
-     it for the *algorithm*; the code itself is SQLite-shaped and gets rewritten against
-     the `chunk` table's columns (`start_char`/`end_char`/`page_number`/`heading_path`
-     already exist for exactly this).
-   - `backend/src/mnemos/_v1/retrieval.py` — the vector and lexical operators, RRF fusion
-     (`rrf_k` is already a setting), dedup by near-duplicate threshold
-     (`near_duplicate_threshold`, already a setting). Port the *fusion and dedup logic*
-     over a new pgvector-backed vector operator and a pg_trgm-backed lexical operator —
-     the SQLite/numpy brute-force scan itself is exactly what §4 item 3 says to discard.
-   - `backend/src/mnemos/features/knowledge/adapters/models.py` — `Document`, `Chunk`,
-     `ChunkEmbedding` already exist, fully specified, with the comments explaining *why*
-     each column is shaped the way it is (currency via `superseded_by`, not down-ranking;
-     offsets into original text; denormalised ACL columns for pushdown). Also
-     `IngestJob`/`IngestJobEvent` — present in the schema but **out of scope for the
-     ingestion pipeline itself**, see below.
-   - `backend/src/mnemos/platform/objectstore/` — check whether a port exists yet; if not,
-     a minimal one (put/get by key, over MinIO's S3 API) is part of deliverable 1. The full
-     connector abstraction (`SourceConnector`, multiple backends) is `B1` — this milestone
-     needs exactly enough to store an uploaded file and re-read it in the citation
-     click-through.
-   - `backend/src/mnemos/features/chat/application/service.py` (`A1`) — `stream_reply`'s
-     shape (persist question → call model → persist answer only on completion → SSE
-     token/done/error) is reused for the RAG flow with a retrieval step inserted before the
-     model call, not rebuilt.
-   - `backend/src/mnemos/entrypoints/api/routers/chat.py` (`A1`) — the priming pattern
-     (advance the generator once outside the `StreamingResponse` so a pre-first-token
-     failure is a normal exception) applies again here for "document not found" / "nothing
-     retrieved".
-   - `frontend/src/lib/chat/stream.ts` (`A1`) — the SSE reader is flow-agnostic already;
-     citations arrive as part of the `done` event's payload rather than needing a second
-     channel.
+1. §0 through §4 of this file, and the `A2` write-up in §3 — the flow shape (`flows/rag/`),
+   the streaming reuse, and the provisional `use_documents` selector are all patterns this
+   milestone follows and extends.
+2. [`docs/CodingStandards.md`](docs/CodingStandards.md) §9's **mandatory case 4**: "DML
+   nested inside a CTE, inside a `UNION`, and inside a subquery is rejected; unparseable
+   SQL is rejected fail-closed rather than passed through." Those four are the acceptance
+   tests, not suggestions.
+3. [`docs/DesignSystem.md`](docs/DesignSystem.md) §3 and §4. New territory: a **result
+   grid** (tabular data at the 46rem measure is wrong — the SQL panel and grid want the
+   full content column, so decide and write down how) and the **denial state**, which is a
+   first-class screen here rather than an error toast.
+4. [`docs/ADAPTATION.md`](docs/ADAPTATION.md) §3's `datasources` rows and §6's
+   `datasources` schema group — `sql_datasource`, `sql_run` (per-attempt safety verdicts,
+   authorized/denied tables) and `glossary_term` all exist from `M2`.
+5. **The code you extend:**
+   - `backend/src/mnemos/features/datasources/adapters/models.py` — `SqlDatasource`,
+     `SqlRun`, `SqlSchemaObject`, `GlossaryTerm`, already specified. Read the comments:
+     `sql_run` is designed to record *every attempt* with its verdict, which is what makes
+     a refused query auditable rather than merely refused.
+   - `backend/src/mnemos/core/types.py` — `SqlVerdict` already enumerates
+     `allowed`/`rejected_write`/`rejected_unauthorized_table`/`rejected_unparseable`/
+     `rejected_too_complex`, and `check_in` pins the column to it. Use these; do not invent
+     a parallel vocabulary.
+   - `backend/src/mnemos/flows/rag/` (`A2`) — the flow shape to mirror: a `domain/` of pure
+     functions, an `application/` that streams, reusing `A1`'s `ChatModel` port and the
+     `AssistantToken`/`AssistantDone`/`AssistantError` events unchanged.
+   - `backend/src/mnemos/entrypoints/api/routers/chat.py` — where `use_documents` selects a
+     flow today. `A3` adds a second selector in the same provisional shape; `A4` replaces
+     both with a classifier.
+   - `frontend/src/lib/inspector/SelectionProvider.tsx` (`A2`) — the selection union is
+     deliberately named (`{kind: "citation", ...}`) so `A3` can add `{kind: "sql_run", ...}`
+     without reshaping it.
 
-**Scope — six deliverables, one commit each (a deliverable's UI slice may share its commit
-or land in the next one, never in a later milestone — C12).**
+**Scope — five deliverables, one commit each.**
 
-1. **Object storage, minimally.** A port in `platform/objectstore/` (or extend one if it
-   already exists) — `put(key, bytes) -> None`, `get(key) -> bytes`, `presigned_url(key) ->
-   str | None` (used or not depending on whether citations serve bytes through the API or
-   directly from MinIO; decide and write down which). MinIO adapter using the settings
-   already in `core/config.py` (`object_endpoint`, `object_access_key`,
-   `object_secret_key`, `object_bucket`). The full `SourceConnector` abstraction with
-   multiple backends is `B1` — this is upload-only, one adapter, no factory.
-2. **Extraction and chunking**, off the event loop (CodingStandards §3). Plain text and PDF
-   (`pypdf`, already a dependency) to start; a media type Mnemos cannot extract is a
-   `ValidationError` naming the type, not a silent empty document. Chunking retains
-   `start_char`/`end_char` (and `page_number` for PDFs) so a citation can highlight the
-   exact span. `content_sha256` on both `document` and `chunk` — re-uploading identical
-   bytes must be a no-op against the existing `uq_document_org_id_content_sha256`
-   constraint, not a duplicate competing with itself in retrieval.
-3. **Embedding and the pgvector write.** `HashingEmbedder(dim=384)` by default (C1/C2 — no
-   download in the default path); the neural adapter stays available behind the same port
-   for anyone who opts in, exactly as `_v1` already argues. One `chunk_embedding` row per
-   chunk per model, `is_current=true`, `acl_tag_ids` and `trust_tier` copied from the
-   parent `document` at write time (the denormalisation `ChunkEmbedding`'s docstring
-   explains) so the retrieval scan never joins back to `document` to know what it may
-   return.
-4. **Retrieval**, ported onto pgvector HNSW + pg_trgm. Vector operator: `ORDER BY embedding
-   <=> :query_vector` through the HNSW index, `WHERE org_id = :org AND is_current AND
-   (acl_tag_ids && :caller_tags OR acl_tag_ids = '{}')` — authorization **inside** the
-   scan, never a post-filter (C4, `test_acl_pushdown_beats_post_filtering_on_yield` is the
-   mandatory case CodingStandards §9 names). Lexical operator over `chunk.text`'s trigram
-   index. RRF fusion, then dedup by the near-duplicate threshold — both ported from
-   `_v1/retrieval.py`'s logic, re-homed onto async Postgres queries. **Superseded documents
-   are excluded in the scan** (`document.superseded_by IS NULL` in the same predicate),
-   never down-ranked — the headline distinction the whole project's deep claim rests on
-   (C6), and the reason this line matters even before `C4`'s benchmark re-run makes it a
-   measured number again.
-5. **The RAG flow and the streaming endpoint.** `flows/rag/` — given a question, run
-   retrieval, assemble a prompt from the top-k chunks in fused-score order up to
-   `default_token_budget` (a real token count via the same tokenizer `_v1` uses, not a
-   character-count guess), call `ChatModel.stream` (`A1`'s port, unchanged), persist the
-   assistant message with `flow="rag"` (the `chat_message.flow` column already exists for
-   this) and citations. `message_citation` rows (schema exists) link a marker in the
-   answer text to a `chunk_id` plus the `start_char`/`end_char` it drew from. Reuses `A1`'s
-   `POST /v1/chat/sessions/{id}/messages` endpoint rather than a new one — the field that
-   chooses RAG over plain chat for this milestone is deliberately manual (a `flow` hint in
-   the request body, or "does this session have documents attached" — decide and write the
-   reasoning down; `A4` replaces whichever heuristic this milestone picks with a real
-   classifier, so it does not need to be clever, only honest about being provisional).
-6. **The UI**: an upload control and a knowledge library, plus citations in the chat
-   surface.
-   - **Upload**: drag-and-drop or a file picker, a progress/processing state using
-     `Skeleton` (never a spinner — DesignSystem §4), and a clear failure state naming what
-     went wrong (unsupported type, too large — `Settings.max_upload_bytes` already exists).
-   - **Knowledge library**: a `/knowledge` destination listing uploaded documents — title,
-     status, upload date — with a delete action whose confirmation names the specific
-     document (DesignSystem §4, "Delete *Q3 Revenue Policy*?" not "Delete document?").
-     Deleting cascades to chunks and embeddings (the FK `ondelete="CASCADE"` already does
-     the database half; confirm the object-store bytes are removed too, or say in §4 why
-     not yet).
-   - **Citations**: a marker in the assistant's answer (`[1]`, `[2]`, …) that opens the
-     source in the inspector — the panel `F0` reserved and that has rendered `EmptyState`
-     ever since. This is the inspector's first real content, though not yet the full
-     context bundle (`C4` still owns that); showing the cited chunk's text, the document
-     title and the char span it came from is enough for this milestone's citations to be
-     genuinely click-through rather than decorative.
+1. **Schema introspection.** `features/datasources/`: connect to `analytics_database_url`
+   as `mnemos_ro`, read `information_schema` for tables, columns and types, and cache the
+   result in `sql_schema_object`. This is the schema *context* the generator is given —
+   the model cannot be trusted to guess table names, and a hallucinated table is the
+   commonest NL2SQL failure. Refresh is an explicit action, not a per-query cost.
+2. **The business glossary.** `glossary_term` rows — "revenue means `sales_order.total_amount`
+   summed", "active customer means one with an order in the last 90 days" — fed into the
+   same schema context. Seed a handful for the demo warehouse; a CRUD surface for them is
+   `C2`-adjacent and out of scope unless the UI slice needs one to be demonstrable.
+3. **Generation and the AST guard.** Generate SQL through the `ChatModel` port, then parse
+   it with **`sqlglot`** (a new dependency — free, pure-Python, and the alternative is
+   hand-rolling a SQL parser, which is the actual security-critical mistake here) and walk
+   the AST. Reject anything that is not a single read: `INSERT`/`UPDATE`/`DELETE`/`MERGE`/
+   `TRUNCATE`/`DROP`/`ALTER`/`CREATE`/`GRANT`, and reject them **wherever they appear** —
+   inside a CTE, inside a `UNION` arm, inside a subquery. Unparseable SQL is rejected
+   **fail-closed**, never passed through on the theory that the role will catch it. Every
+   attempt writes a `sql_run` row with its `SqlVerdict` and the tables it touched.
+4. **Execution and narration.** Execute the allowed statement as `mnemos_ro` with
+   `sql_statement_timeout_ms` and a `sql_max_rows` cap, then narrate the result set through
+   the model. Persist the assistant message with `flow="nl2sql"` and the `sql_run` id, so a
+   later reader can open the answer and find the exact statement that produced it.
+   `sql_repair_attempts` exists for the "the model wrote invalid SQL, tell it the error and
+   let it try once more" loop — bounded, and every attempt gets its own `sql_run` row.
+5. **The SQL panel.** In the chat surface: the generated SQL (monospace, syntax-plain is
+   fine), the result grid, and the narration. **And the refusal**, as a real state: when
+   the guard rejects, the screen shows the SQL it refused and the verdict in plain words —
+   "this would have written to `sales_order`; Mnemos only reads" — not a generic error.
+   That screen *is* deliverable 5's reason to exist.
 
 **Acceptance**
 
-- `test_uploading_the_same_bytes_twice_is_a_no_op` — the content-hash uniqueness
-  constraint, exercised through the upload endpoint, not asserted against the migration.
-- `test_a_document_from_another_org_is_not_retrievable` — against a real Postgres, the
-  RLS/ACL-pushdown claim, same shape as `test_a_chat_session_from_another_org_is_not_readable`.
-- `test_acl_pushdown_beats_post_filtering_on_yield` (CodingStandards §9, mandatory case 3)
-  — with a majority of a small corpus tagged inaccessible to the caller, pushdown returns
-  the accessible top-k and a naive post-filter implementation would return fewer; assert
-  the inequality so an "optimisation" that reintroduces post-filtering regresses visibly.
-- `test_a_superseded_document_revision_is_excluded_from_the_scan_not_down_ranked` — two
-  revisions of one `lineage_key`, only the current one ever appears in retrieved candidates,
-  asserted by checking the superseded chunk never appears rather than merely ranks lower.
-- `test_a_rag_answer_streams_and_persists_its_citations` — SSE frames on the wire (the
-  `A1` lesson: assert at the boundary), and `message_citation` rows exist afterward pointing
-  at real `chunk_id`s.
-- `test_a_question_with_no_matching_chunks_answers_honestly_rather_than_hallucinating` —
-  whatever the flow does when retrieval returns nothing must be visible in the prompt
-  (an explicit "no relevant documents found" framing), not silently fall back to `A1`'s
-  bare chat behaviour without saying so.
-- `test_extraction_of_an_unsupported_media_type_is_a_named_validation_error_not_a_silent_empty_document`.
-- **Frontend:** `test_the_citation_marker_opens_the_source_in_the_inspector`.
-- **Frontend:** `test_upload_shows_a_layout_matching_skeleton_never_a_spinner`.
-- **Frontend:** `test_deleting_a_document_names_it_in_the_confirmation`.
-- **Frontend:** `test_the_knowledge_library_has_no_axe_violations`.
-- **Playwright**, extending `frontend/e2e/`: sign in (as `analyst@mnemos.local` —
-  §4 item 40), upload a short text file, ask a question only that document could answer,
-  watch the answer cite it, click the citation, see the source. Skips loudly with the
-  stack down.
-- **Gates:** `make test` above 250 · `make lint` · `make types` clean · `make check` clean
-  (**no migration expected** — `M2` created every table this milestone writes to; if a
-  column is missing, say so in §4 before adding one) · frontend `lint`, `tsc --noEmit`,
-  `test`, `build` · **CI green, all three jobs including `compose`.**
+- `test_dml_is_rejected_inside_a_cte_a_union_and_a_subquery` — three cases, one test name,
+  CodingStandards §9 case 4. A guard that only checks the statement's top-level type passes
+  a naive test and fails this one, which is the whole point.
+- `test_unparseable_sql_is_rejected_fail_closed`.
+- `test_the_readonly_role_refuses_a_write_the_guard_somehow_allowed` — the second defence,
+  proven independently by executing a write **directly** as `mnemos_ro`, bypassing the
+  guard entirely. Without this the two-defence claim rests on one of them.
+- `test_a_select_is_allowed` — the control. A guard that refuses everything passes all four
+  above.
+- `test_every_attempt_writes_a_sql_run_row_with_its_verdict` — including the refused ones,
+  because an audit trail that only records successes is not one.
+- `test_a_query_against_another_orgs_datasource_is_a_404`.
+- `test_the_result_set_is_capped_at_sql_max_rows`.
+- `test_a_statement_that_exceeds_the_timeout_is_cancelled_not_left_running`.
+- **Frontend:** `test_the_sql_panel_shows_the_statement_the_grid_and_the_narration`.
+- **Frontend:** `test_a_refused_query_shows_the_verdict_and_the_sql_it_refused`.
+- **Frontend:** `test_the_sql_panel_has_no_axe_violations`.
+- **Playwright**, extending `frontend/e2e/`: sign in as `analyst@mnemos.local` (§4 item
+  40), ask "what was revenue by region last quarter", see SQL + grid + narration. Then
+  provoke a refusal and see it named on screen. Skips loudly with the stack down; cleans up
+  after itself like `knowledge.spec.ts` does.
+- **Gates:** `make test` above 278 · `make lint` · `make types` clean · `make check` clean
+  (**a migration may genuinely be needed here** if `sql_run` lacks a column the flow wants
+  — unlike `A1` and `A2`, that would be legitimate; say so in §4 and write a reversible
+  revision) · frontend `lint`, `tsc --noEmit`, `test`, `build` · **CI green, all jobs.**
 
 **Watch out for these:**
 
-- **Post-filtering is banned, not merely discouraged** (C4). The authorization predicate
-  goes in the same `WHERE` as the vector/trigram search, or the ACL-pushdown test fails by
-  design — that test exists precisely to catch "filter in Python after the query" as a
-  regression, because it is the natural-looking shortcut.
-- **Superseded documents are excluded, not down-ranked** (C6). A document currency check
-  that lowers a score is a document currency check that still lets an obsolete revision
-  win when nothing else is close — the whole headline number in the README depends on this
-  being a hard exclusion in the scan.
-- **CPU-bound chunking/embedding must not block the event loop** (CodingStandards §3) — the
-  same lesson `PasswordHasher` already applies for argon2id. `anyio.to_thread.run_sync`,
-  not an inline call in an `async def`.
-- **The hashing embedder is the default; do not wire the neural one in as default "because
-  it's better."** C1/C2 exist so the benchmark and the demo both reproduce with no
-  download and no GPU. The neural adapter stays behind the same port, opt-in.
+- **Do not let the AST guard be the only defence, and do not let `mnemos_ro` be the only
+  one either.** The first is one parser bug from a write; the second gives an unhelpful
+  Postgres error and no audit trail. Both, always, and the test above proves the second
+  independently.
+- **`sqlglot` must parse with the Postgres dialect**, or it will accept syntax Postgres
+  rejects and reject syntax Postgres accepts — either way the guard is reasoning about a
+  different language than the one that will execute.
+- **The analytics database is a separate connection, not `Database`.** `Database` is the
+  application's own Postgres as `mnemos_app`. `mnemos_analytics` as `mnemos_ro` is a second
+  engine with its own pool and its own statement timeout, and mixing them would put the
+  warehouse query inside a transaction holding RLS state for the app database.
+- **Never interpolate the model's SQL into another statement.** It is executed as-is, once,
+  after the guard — string-building around it (adding a `LIMIT` by concatenation, say) is
+  how a guarded statement becomes an unguarded one. Cap rows by fetching at most
+  `sql_max_rows + 1` from the cursor instead.
 - **`alembic check` from a host venv talks to the wrong Postgres** (§4 item 33) — `make
-  check`, always.
-- **`ruff format` is version-sensitive** (§4 item 22) — `make lint`, always.
-- **Nothing in the API process imports the full model registry by default** (§4 item 41,
-  found in `A1`) — `main.py` already carries the fix; if a new entrypoint (a worker task
-  for ingestion, if this milestone adds one) does its own ORM operations without going
-  through `main.py`'s composition root, it needs the same `import mnemos.platform.models`
-  or a cross-feature FK will raise from inside a live query rather than from `alembic
-  check`.
-- **Sign in as `analyst@mnemos.local` in any browser evidence, not `admin@mnemos.local`**
-  (§4 item 40) — the latter is denied by design against this repository's persistent,
-  already-bootstrapped `mnemos` org.
+  check`, always. **`ruff format` is version-sensitive** (§4 item 22) — `make lint`.
+- **Sign in as `analyst@mnemos.local` in browser evidence** (§4 item 40).
 
-**Explicitly not in `A2`:** the full context compiler, budget allocator with section
-floors, trust fencing, provenance manifest, context inspector as a *general* panel, and
-bitemporal memory — all `C4`. The connector abstraction beyond a single MinIO upload path,
-the event bus, and multiple source backends — `B1`. Ingestion job machinery (heartbeat,
-retries, stuck-job detection, a worker queue) — `B2`; this milestone's ingestion runs
-synchronously in the request handler, which is honest at demo scale and is exactly what
-`B2` replaces with real job tracking. NL2SQL (`A3`) and routing between flows (`A4`) — the
-manual flow selection this milestone ships is provisional by design, written down as such
-in deliverable 5.
+**Explicitly not in `A3`:** the router that chooses NL2SQL without being told (`A4` — this
+milestone ships a second provisional selector beside `use_documents`), a datasource
+registry UI or a second warehouse dialect (the `SqlDialect` port makes that a config
+exercise; Postgres only, ADAPTATION §3), the cost ledger for generated queries (`C2`), and
+the context compiler (`C4`).
 
 ### Then, in order — the phase tables in §3.0 are the plan
 
 Each row there is one session, and each carries its own "you can now ___" (C14). The next
 few, so the shape is visible without scrolling back:
 
-- **`A2` — ask about your documents.** Specified in full above; this is the task.
-- **`A3` — ask about your data.** Introspect `mnemos_analytics`, glossary terms, generate
-  SQL, **AST read-only guard plus the `mnemos_ro` role** as two independent defences, execute,
-  narrate. The UI shows the SQL, the grid and the narration — and shows the guard refusing a
-  write, because a defence nobody can see is a defence nobody believes.
-- **`A4` — stop choosing a mode.** Classify each message to a flow and show which one
-  answered and why — this is also where `A2`'s provisional manual flow selection gets
-  replaced by a real classifier.
+- **`A3` — ask about your data.** Specified in full above; this is the task.
+- **`A4` — stop choosing a mode.** Classify each message to chat / RAG / NL2SQL and show
+  which flow answered and why. This is also where the two provisional selectors — `A2`'s
+  `use_documents` and `A3`'s NL2SQL equivalent — are replaced by a real classifier, and
+  both were written down as provisional precisely so this milestone knows what to remove.
 
 Then Phase B (`B1`–`B4`), Phase C (`C1`–`C4`), Phase D (`D1`) — §3.0.
 
