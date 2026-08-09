@@ -231,7 +231,7 @@ Two rules govern every row.
 |---|---|---|---|
 | **A0** | Sign-in screen + browser session handling (`M3.4`'s UI half) + the fail-closed route guard (deny by default) | **sign in through Keycloak, stay signed in across a reload, and sign out** — and no route added after this is reachable unauthenticated | ✅ 2026-08-03 |
 | **A1** | LLM gateway (Ollama) · chat sessions + messages · SSE streaming · the chat surface | **talk to it** — ask a question and watch the answer stream in token by token | ✅ 2026-08-08 |
-| **A2** | Upload → extract → chunk → embed (pgvector HNSW) · retrieval ported from `_v1` · RAG flow · citations · knowledge library | **upload a document and ask questions about it**, with citations you click into | ✅ 2026-08-10 |
+| **A2** | Upload → extract → chunk → embed (pgvector HNSW) · retrieval ported from `_v1` · RAG flow · citations · knowledge library | **upload a document and ask questions about it**, with citations you click into | 🟡 PR #14 open, CI red (see the warning note near the top of TRACKER.md) |
 | **A3** | NL2SQL: introspection · glossary · generate · AST read-only guard · `mnemos_ro` execution · narration · SQL panel | **ask a question about your data in English** and see the SQL, the rows and the narration — and see the guard visibly refuse a write | ⬜ **next** |
 | **A4** | Router: classify a message → chat / RAG / NL2SQL · flow indicator | **ask anything without choosing a mode**, and see which flow answered and why | ⬜ |
 
@@ -299,18 +299,18 @@ own system — its own accent, neutrals and identity — informed by Apple's des
 for typography, spatial rhythm, materials and motion character. §0 there records which
 Apple assets are off-limits (SF Pro as a webfont, SF Symbols) and what is used instead.
 
-**Current position.** Everything in the "Already built" table above is on `main`, plus
-**`A0`** (PR #11), **`A1`** (PR #13) and **`A2`** (PR #14). `docker compose up -d` brings
-up nine services, and at `http://localhost:3000` a person can now sign in through Keycloak,
-stay signed in across a reload, sign out, ask Mnemos a question and watch the answer stream
-in token by token, and — new in `A2` — upload a document, ask about it, and click the
-citation in the answer to see the passage it came from. See §8.
+**Current position.** `main`'s tip has `A0` (PR #11) and `A1` (PR #13). **`A2` is built,
+verified in a browser, and pushed to `feat/a2-rag`, but PR #14 is still open** — its
+`compose` CI job is red on a MinIO startup-ordering bug, not yet fixed. See the ⚠️ warning
+block near the top of [TRACKER.md](../TRACKER.md) for the exact diagnosis and the steps to
+finish it. Once PR #14 is merged, `docker compose up -d` will bring up nine services with
+upload → ask → cite working end to end; until then that flow only exists on the branch.
 
-**The next task is `A3`** — natural language over the `mnemos_analytics` warehouse:
-introspection, a business glossary, generated SQL behind **two independent read-only
-defences** (an AST guard and the `mnemos_ro` role), execution, and narration, fully
-specified in [TRACKER §5](../TRACKER.md#5-next-task). The router that stops the user having
-to choose a flow is `A4`.
+**The next task is to merge PR #14, then start `A3`** — natural language over the
+`mnemos_analytics` warehouse: introspection, a business glossary, generated SQL behind
+**two independent read-only defences** (an AST guard and the `mnemos_ro` role), execution,
+and narration, fully specified in [TRACKER §5](../TRACKER.md#5-next-task). The router that
+stops the user having to choose a flow is `A4`.
 
 `M3`'s exit criterion "RLS blocks cross-org" turned out to be unmet by `M2` rather than
 merely untested; that is written up in §8 and in
