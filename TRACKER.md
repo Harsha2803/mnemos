@@ -6,75 +6,28 @@
 > **and [`docs/ADAPTATION.md`](docs/ADAPTATION.md)** *in the same commit* — a stale
 > tracker is worse than none.
 
-**Last updated:** 2026-08-10 (session paused mid-`A2`-merge; see the note directly below
-before doing anything else)
-**Phase:** **A — make it a chatbot.** `A0` ✅, `A1` ✅ merged. `A2` is **code-complete and
-verified in a real browser, but NOT merged** — PR #14 is open on `feat/a2-rag` with one
-known, unfixed CI failure. Do not start `A3` until PR #14 is green and merged.
-**Next task:** finish and merge PR #14 (one specific fix, below), **then** `A3` — fully
-specified in §5.
-**Branch right now:** `feat/a2-rag`, pushed, PR #14 open, not draft, not merged.
-`main`'s tip is still `d11fad8` (`A1`, PR #13) — `A2` is not in it yet.
+**Last updated:** 2026-08-11 (`A2` merged to `main`; see the §3 `A2` entry for evidence)
+**Phase:** **A — make it a chatbot.** `A0` ✅, `A1` ✅, `A2` ✅ — all merged.
+**Next task:** `A3` (NL2SQL) — fully specified in §5. Not yet started; no branch cut for it
+yet.
+**Branch right now:** `main`, clean, no open PRs. `main`'s tip is the squashed `A2` commit
+(PR #14, merged 2026-08-11).
 
-> ### ⚠️ 2026-08-10 — stopped mid-session with PR #14 open and CI red. Read this first.
+> ### 2026-08-11 — PR #14 merged; the `compose` CI gap is fixed
 >
-> The previous run built all of `A2` (backend + frontend + tests + e2e), verified the "you
-> can now upload a document and ask about it" sentence live in a browser against a
-> locally-rebuilt stack (screenshots and API traces are in the PR #14 description and in
-> the §3 write-up below), and pushed everything to `feat/a2-rag`. **It was stopped by the
-> user before merging**, partway through waiting on GitHub Actions.
->
-> **The `compose` CI job on PR #14 is red.** `backend` and `frontend` are both green.
-> `compose` fails with:
-> ```
-> {"status":"not_ready","checks":{"postgres":"ok","redis":"ok","ollama":"ok",
->  "objectstore":"error: DependencyUnavailableError"}}
-> ##[error]api never became ready
-> ```
-> **Diagnosis (not yet fixed):** `docker-compose.yml`'s `api` service `depends_on` lists
-> `minio: {condition: service_healthy}` but **not** `minio-init` (the one-shot `mc mb`
-> container that actually creates the `mnemos-documents` bucket `A2`'s `S3ObjectStore`
-> needs). `minio` itself reports healthy the moment the MinIO *server* is up, before
-> `minio-init` has necessarily run and created the bucket. Locally this race is usually won
-> by the time a developer gets around to testing, which is exactly why it was never caught
-> until CI — a fresh `docker compose up` on a clean runner has no such luck. `S3ObjectStore.health()`
-> calls `head_bucket`, which fails until the bucket exists, so `/readyz` never turns green
-> and the 5-minute wait in the `compose` job times out.
->
-> **The fix, not yet applied:** add `minio-init: {condition: service_completed_successfully}`
-> to `api`'s `depends_on` in `docker-compose.yml` (and probably `worker`'s too, once `B2`
-> gives the worker its own object-store reads). That is very likely the *whole* fix — it is
-> a one-line addition to an existing `depends_on:` block — but it has not been tried or
-> verified. Verify by: making the change, `docker compose down -v`, `docker compose up -d
-> --build`, and watching `curl localhost:8000/readyz` turn fully green including
-> `"objectstore":"ok"` without a manual `docker compose exec` intervention. Then push and
-> confirm the `compose` CI job on PR #14 goes green.
->
-> **Everything else about `A2` is real and verified:** 278 backend tests (see §3's `A2`
-> entry for the ACL-pushdown and supersession-exclusion evidence), 89 frontend tests, 9/9
-> Playwright e2e passing twice consecutively with no residue, and the full upload→ask→cite
-> round trip performed in a headless browser with screenshots. The only open item is this
-> one CI/compose wiring gap.
->
-> **Do this, in order, next session:**
-> 1. `git status` / `git branch --show-current` — confirm you're on `feat/a2-rag` (or check
->    it out: `git fetch && git checkout feat/a2-rag`). Confirm `gh auth status` shows
->    `Harsha2803` active (C9) before anything else.
-> 2. Apply the `minio-init` dependency fix above, verify locally as described, commit
->    (`fix(compose): api waits for the MinIO bucket, not just the MinIO server`), push.
-> 3. Watch PR #14's checks (`gh pr checks 14 --watch`) until all three are green.
-> 4. Squash-merge PR #14 (`gh pr merge 14 --squash --delete-branch`), matching how #11 and
->    #13 were merged. Confirm `main`'s tip is the squashed `A2` commit and no PRs are open
->    (`gh pr list --state open` → empty).
-> 5. Rebuild the full stack from the merged `main` (`docker compose down -v && docker
->    compose up -d --build && make bootstrap`) and re-confirm `/readyz` is fully green and
->    the A2 sentence still works, now against the *merged* image rather than the branch.
-> 6. Only then branch `feat/a3-nl2sql` off the now-updated `main` and start `A3`, which is
->    already fully specified in §5 below.
->
-> The header two lines above (Phase/Next task/Branch) and this whole note should be deleted
-> and replaced with a normal `A2` ✅ entry once steps 1–5 are done — do not leave this
-> warning block in place after it no longer describes reality.
+> The one blocker left from the 2026-08-08/10 run was a `compose` CI job failing because
+> `api`'s `depends_on` waited for `minio` to be healthy but not for `minio-init` (the
+> one-shot container that creates the `mnemos-documents` bucket) to finish — so
+> `S3ObjectStore.health()`'s `head_bucket` call could race the bucket's creation on a clean
+> runner. Fixed by adding `minio-init: {condition: service_completed_successfully}` to
+> `api`'s `depends_on` in `docker-compose.yml`. Verified locally (`docker compose down -v &&
+> docker compose up -d --build`, `/readyz` turned fully green with no manual intervention),
+> then pushed to `feat/a2-rag`, watched all three PR #14 checks go green, and squash-merged
+> (`gh pr merge 14 --squash --delete-branch`), matching how #11 and #13 were merged. Then,
+> from a truly clean state (`docker compose down -v && up -d --build && make bootstrap` on
+> the merged `main`), the A2 sentence — upload a document, ask about it, get a cited answer,
+> click the citation — was re-verified via the real `frontend/e2e/knowledge.spec.ts`
+> Playwright suite against the merged image (not the branch), and it passed clean.
 
 > ### 2026-08-08 — a marathon run, §0 rule 9 suspended for its duration
 >
@@ -262,7 +215,7 @@ That right-hand column is not a summary — it is the exit criterion.
 |---|---|---|---|
 | **A0** | Sign-in screen + browser session handling (M3.4's UI half) + the fail-closed route guard (deny by default, from old `M3.6`) | **sign in through Keycloak, stay signed in across a reload, and sign out** — and no route added after this is reachable unauthenticated | ✅ |
 | **A1** | LLM gateway (Ollama) · chat sessions + messages · SSE streaming · the chat surface | **talk to it** — ask a question and watch the answer stream in token by token | ✅ 2026-08-08 |
-| **A2** | Upload → extract → chunk → embed (pgvector HNSW) · retrieval ported from `_v1` · RAG flow · citations · knowledge library | **upload a document and ask questions about it**, with citations you click into | 🟡 PR #14 open, CI red (see the warning note near the top of TRACKER.md) |
+| **A2** | Upload → extract → chunk → embed (pgvector HNSW) · retrieval ported from `_v1` · RAG flow · citations · knowledge library | **upload a document and ask questions about it**, with citations you click into | ✅ merged (PR #14) |
 | **A3** | NL2SQL: introspection · glossary · generate · AST read-only guard · `mnemos_ro` execution · narration · SQL panel | **ask a question about your data in English** and see the SQL, the rows and the narration — and see the guard visibly refuse a write | ⬜ **next** |
 | **A4** | Router: classify a message → chat / RAG / NL2SQL · flow indicator | **ask anything without choosing a mode**, and see which flow answered and why | ⬜ |
 
