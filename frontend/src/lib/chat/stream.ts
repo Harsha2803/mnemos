@@ -31,6 +31,15 @@ export type ChatStreamHandlers = {
   onError: (message: string) => void;
 };
 
+export type ChatStreamOptions = {
+  /**
+   * Answer from the knowledge base rather than the model alone. Manual for
+   * now — `A4`'s classifier replaces this with real routing, and the backend
+   * says the same thing in `SendMessageRequest`.
+   */
+  useDocuments?: boolean;
+};
+
 /**
  * Streams one reply. Resolves once the stream ends, however it ended —
  * `onDone`/`onError` is how the caller learns which.
@@ -40,9 +49,13 @@ export async function streamChatReply(
   content: string,
   handlers: ChatStreamHandlers,
   signal?: AbortSignal,
+  options: ChatStreamOptions = {},
 ): Promise<void> {
   const url = `${API_BASE_URL}/api/v1/chat/sessions/${sessionId}/messages`;
-  const body = JSON.stringify({ content });
+  const body = JSON.stringify({
+    content,
+    use_documents: options.useDocuments ?? false,
+  });
 
   let response = await send(url, body, getAccessToken(), signal);
   if (response.status === 401) {

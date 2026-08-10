@@ -138,6 +138,10 @@ class Settings(BaseSettings):
     rrf_k: int = 60
     near_duplicate_threshold: float = Field(default=0.86, ge=0.0, le=1.0)
     utility_decay_tau: float = Field(default=6.0, gt=0.0)
+    # How many candidates each retrieval operator (vector, lexical) returns
+    # before fusion — generous enough that RRF has something to fuse over,
+    # small enough that a demo-scale corpus scan stays fast.
+    retrieval_k: int = 8
 
     # -- nl2sql -----------------------------------------------------------
     # Separate database, read-only role. The AST guard is the second line of

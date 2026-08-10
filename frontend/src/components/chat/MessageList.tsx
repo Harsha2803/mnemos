@@ -3,6 +3,8 @@ import { useEffect, useRef } from "react";
 
 import { EmptyState } from "@/components/ui/EmptyState";
 
+import type { Citation } from "@/lib/knowledge/api";
+
 import { MessageBubble, type DisplayMessage } from "./MessageBubble";
 
 /**
@@ -11,7 +13,12 @@ import { MessageBubble, type DisplayMessage } from "./MessageBubble";
  * list scrolls itself to the newest turn on every change, which is what makes
  * that filling visible without the user reaching for the scrollbar.
  */
-export function MessageList({ messages }: { messages: DisplayMessage[] }) {
+export type MessageListProps = {
+  messages: DisplayMessage[];
+  onCitationClick?: (citation: Citation) => void;
+};
+
+export function MessageList({ messages, onCitationClick }: MessageListProps) {
   const bottomRef = useRef<HTMLDivElement>(null);
 
   useEffect(() => {
@@ -35,7 +42,11 @@ export function MessageList({ messages }: { messages: DisplayMessage[] }) {
   return (
     <div className="flex flex-col gap-6 px-4 py-6">
       {messages.map((message) => (
-        <MessageBubble key={message.id} message={message} />
+        <MessageBubble
+          key={message.id}
+          message={message}
+          onCitationClick={onCitationClick}
+        />
       ))}
       <div ref={bottomRef} />
     </div>

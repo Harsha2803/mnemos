@@ -36,6 +36,7 @@ from mnemos.core.logging import configure_logging, get_logger, request_id_var
 from mnemos.core.security import PasswordHasher
 from mnemos.entrypoints.api.routers import auth as auth_router
 from mnemos.entrypoints.api.routers import chat as chat_router
+from mnemos.entrypoints.api.routers import knowledge as knowledge_router
 from mnemos.entrypoints.api.security import enforce_authentication, public_route_paths
 from mnemos.features.chat.adapters.repository import SqlChatRepository
 from mnemos.features.chat.application.service import ChatService
@@ -53,9 +54,15 @@ from mnemos.features.identity.providers import (
     PlatformTokenConfig,
     ProviderFactory,
 )
+from mnemos.features.knowledge.adapters.repository import KnowledgeRepository
+from mnemos.features.knowledge.adapters.retrieval import SqlRetriever
+from mnemos.features.knowledge.application.service import KnowledgeService
+from mnemos.features.knowledge.domain import HashingEmbedder, HeuristicTokenizer
 from mnemos.features.llm.adapters.ollama import OllamaChatModel
+from mnemos.flows.rag.application import RagFlow
 from mnemos.platform.cache import Cache
 from mnemos.platform.db import Database
+from mnemos.platform.objectstore.s3 import S3ObjectStore
 
 log = get_logger(__name__)
 
@@ -140,6 +147,31 @@ async def lifespan(app: FastAPI) -> AsyncIterator[None]:
         repository=SqlChatRepository(app.state.db, DEFAULT_ID_GENERATOR),
         model=app.state.chat_model,
         history_turns=settings.chat_history_turns,
+    )
+
+    # --- knowledge: object storage, extraction, chunking, embedding, retrieval
+    app.state.object_store = S3ObjectStore(
+        endpoint_url=settings.object_endpoint,
+        access_key=settings.object_access_key,
+        secret_key=settings.object_secret_key.get_secret_value(),
+        bucket=settings.object_bucket,
+        region=settings.object_region,
+    )
+    app.state.knowledge_service = KnowledgeService(
+        repository=KnowledgeRepository(app.state.db, DEFAULT_ID_GENERATOR),
+        retriever=SqlRetriever(app.state.db),
+        objects=app.state.object_store,
+        embedder=HashingEmbedder(dim=settings.embedding_dim),
+        tokenizer=HeuristicTokenizer(),
+        rrf_k=settings.rrf_k,
+        near_duplicate_threshold=settings.near_duplicate_threshold,
+    )
+    app.state.rag_flow = RagFlow(
+        chat_repository=SqlChatRepository(app.state.db, DEFAULT_ID_GENERATOR),
+        knowledge=app.state.knowledge_service,
+        model=app.state.chat_model,
+        token_budget=settings.default_token_budget,
+        retrieval_k=settings.retrieval_k,
     )
 
     log.info("api.startup", env=str(settings.env), api_prefix=settings.api_prefix)
@@ -253,6 +285,7 @@ def create_app() -> FastAPI:
             ("postgres", app.state.db.ping),
             ("redis", app.state.cache.ping),
             ("ollama", app.state.chat_model.health),
+            ("objectstore", app.state.object_store.health),
         ):
             try:
                 await probe()
@@ -272,13 +305,14 @@ def create_app() -> FastAPI:
             "name": settings.app_name,
             "version": "0.2.0",
             "docs": "/docs",
-            "milestone": "A1 — talk to it: an Ollama-backed chat gateway, "
-            "persisted sessions and messages, and token-by-token streaming; "
-            "documents (A2) and the database (A3) are next",
+            "milestone": "A2 — ask about your documents: upload, extract, "
+            "chunk, embed onto pgvector, retrieve, and cite; the database "
+            "(A3) is next",
         }
 
     app.include_router(auth_router.router, prefix=settings.api_prefix)
     app.include_router(chat_router.router, prefix=settings.api_prefix)
+    app.include_router(knowledge_router.router, prefix=settings.api_prefix)
 
     return app
 

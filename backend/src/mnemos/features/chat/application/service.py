@@ -96,7 +96,10 @@ class ChatService:
     ) -> ChatSessionDetail:
         session = await self._owned_session(org_id=org_id, user_id=user_id, session_id=session_id)
         messages = await self._repository.list_messages(org_id=org_id, session_id=session_id)
-        return ChatSessionDetail(session=session, messages=tuple(messages))
+        citations = await self._repository.list_citations(org_id=org_id, session_id=session_id)
+        return ChatSessionDetail(
+            session=session, messages=tuple(messages), citations=tuple(citations)
+        )
 
     async def rename_session(
         self, *, org_id: OrgId, user_id: UserId, session_id: ChatSessionId, title: str

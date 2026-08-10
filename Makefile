@@ -97,7 +97,8 @@ lint: ## Lint and format-check. _v1/ is quarantined until it is ported (A2/C4).
 
 types: ## mypy --strict over the non-quarantined tree
 	cd backend && ../$(VENV)/bin/mypy --strict \
-	  src/mnemos/core src/mnemos/features src/mnemos/entrypoints
+	  src/mnemos/core src/mnemos/features src/mnemos/entrypoints \
+	  src/mnemos/flows src/mnemos/platform
 
 # ------------------------------------------------------------------ frontend
 

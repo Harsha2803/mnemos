@@ -32,21 +32,25 @@ you to discover. `docs/` is the full target architecture; this is the honest sta
 | **Identity** | Full OIDC round trip against Keycloak (PKCE S256, split-horizon issuers), internal password auth behind the same provider seam, platform JWT with refresh-token rotation and family revocation, and `mnemosctl bootstrap` to create the first org and admin |
 | **CI** | Every PR runs pytest against a real Postgres and a real Keycloak, ruff, `mypy --strict`, `alembic check`, and a frontend gate of lint + `tsc` + tests + a real `next build` |
 | **The app shell** | A themed, accessible three-column Next.js app at `http://localhost:3000`, with a generated API client and one real call end to end |
+| **Sign-in** | A sign-in screen over the OIDC round trip, sessions that survive a reload, real sign-out, and a fail-closed route guard — a route that declares nothing is authenticated |
+| **Chat** | An Ollama-backed gateway behind a `ChatModel` port, persisted sessions and messages, and SSE streaming that renders token by token |
+| **RAG** | Upload → extract → chunk → embed onto pgvector HNSW → hybrid retrieval (vector + trigram, RRF-fused, deduplicated) → an answer with citations you click into. **Authorization is a predicate inside the scan and superseded revisions are excluded there too**, both pinned by tests rather than asserted |
 
 **Not built yet.** Stated plainly, because a README that lets you assume otherwise is
 lying by omission:
 
-- **There is no chat surface.** No conversation UI, no LLM gateway wired in, no streaming
-  endpoint. Ollama is running and nothing talks to it yet.
-- **There is no RAG in this stack.** Nothing uploads, extracts, chunks or embeds. The
-  `chunk` and `chunk_embedding` tables exist and are empty. The retrieval and compiler code
-  that will fill them is real and tested, but it is quarantined in `backend/src/mnemos/_v1/`
-  on SQLite — it is the v0.1 kernel that produced the benchmark below, and it has not been
-  ported yet.
 - **There is no NL2SQL.** The `mnemos_analytics` warehouse is seeded and its `mnemos_ro`
   role is proven read-only, but nothing generates SQL against it.
-- **There is no sign-in screen, no tool runtime, no agent flow, no prompt store, no cost
-  dashboard and no context inspector content.**
+- **There is no router.** You tick a box to answer from your documents; nothing classifies
+  a message to a flow on its own.
+- **There is no tool runtime, no agent flow, no prompt store and no cost dashboard.**
+- **The context inspector shows a cited passage, not a compiled context bundle.** The
+  compiler, the budget allocator and the bitemporal memory layer that produced the numbers
+  below are still quarantined in `backend/src/mnemos/_v1/` on SQLite. Retrieval has been
+  ported onto Postgres; memory and the compiler have not, which is why the benchmark below
+  is still labelled as measured on SQLite.
+- **Ingestion is synchronous.** It runs in the request handler; the job machinery —
+  heartbeat, retries, stuck-job detection — exists in the schema and is not yet wired.
 
 **Phase A builds the product surface** — sign-in, then chat, then documents, then the
 database, then the router. The milestone plan is [`TRACKER.md`](TRACKER.md) §3.0 and the
@@ -343,8 +347,8 @@ backend/src/mnemos/
   flows/          rag · nl2sql · agent · router
   entrypoints/    api (FastAPI) · worker · realtime (WS) · cli.py (mnemosctl)
   migrations/     alembic, one logical change per revision, reversible
-  _v1/            ▲ the v0.1 kernel — compiler, retrieval, benchmark, on SQLite ▲
-                    quarantined; ported in A2 (retrieval) and C4 (memory + compiler)
+  _v1/            ▲ the v0.1 kernel — compiler, memory, benchmark, on SQLite ▲
+                    retrieval ported out in A2; memory + compiler remain, ported in C4
 backend/tests/    the suite — identity, tenant isolation, tokens, invariants
 frontend/src/     Next.js app router · components · generated API client
 deploy/           postgres init (extensions + analytics warehouse) · keycloak realm
@@ -355,7 +359,7 @@ bench_results/    the JSON behind the tables above
 Run the gates the way CI does:
 
 ```bash
-cd backend  && ../.venv/bin/python -m pytest      # 183 passed (needs Docker + Keycloak)
+cd backend  && ../.venv/bin/python -m pytest      # 278 passed (needs Docker + Keycloak)
 cd frontend && npm ci && npm run lint && npx tsc --noEmit && npm run test && npm run build
 ```
 

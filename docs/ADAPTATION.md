@@ -4,8 +4,8 @@
 > self-contained: architecture, the capability inventory, schema, milestones, and current
 > state. [`TRACKER.md`](../TRACKER.md) holds live task status; this holds the design.
 
-**Last updated:** 2026-08-08 — `A1` shipped (talk to it: the Ollama gateway, chat
-persistence, SSE streaming, the chat surface); `A2` is next
+**Last updated:** 2026-08-10 — `A2` shipped (ask about your documents: upload, extract,
+chunk, embed onto pgvector, retrieve with the ACL predicate in the scan, cite); `A3` is next
 
 ---
 
@@ -231,8 +231,8 @@ Two rules govern every row.
 |---|---|---|---|
 | **A0** | Sign-in screen + browser session handling (`M3.4`'s UI half) + the fail-closed route guard (deny by default) | **sign in through Keycloak, stay signed in across a reload, and sign out** — and no route added after this is reachable unauthenticated | ✅ 2026-08-03 |
 | **A1** | LLM gateway (Ollama) · chat sessions + messages · SSE streaming · the chat surface | **talk to it** — ask a question and watch the answer stream in token by token | ✅ 2026-08-08 |
-| **A2** | Upload → extract → chunk → embed (pgvector HNSW) · retrieval ported from `_v1` · RAG flow · citations · knowledge library | **upload a document and ask questions about it**, with citations you click into | ⬜ **next** |
-| **A3** | NL2SQL: introspection · glossary · generate · AST read-only guard · `mnemos_ro` execution · narration · SQL panel | **ask a question about your data in English** and see the SQL, the rows and the narration — and see the guard visibly refuse a write | ⬜ |
+| **A2** | Upload → extract → chunk → embed (pgvector HNSW) · retrieval ported from `_v1` · RAG flow · citations · knowledge library | **upload a document and ask questions about it**, with citations you click into | 🟡 PR #14 open, CI red (see the warning note near the top of TRACKER.md) |
+| **A3** | NL2SQL: introspection · glossary · generate · AST read-only guard · `mnemos_ro` execution · narration · SQL panel | **ask a question about your data in English** and see the SQL, the rows and the narration — and see the guard visibly refuse a write | ⬜ **next** |
 | **A4** | Router: classify a message → chat / RAG / NL2SQL · flow indicator | **ask anything without choosing a mode**, and see which flow answered and why | ⬜ |
 
 **At the end of Phase A the thing this project is for exists.** Everything after deepens it.
@@ -299,17 +299,18 @@ own system — its own accent, neutrals and identity — informed by Apple's des
 for typography, spatial rhythm, materials and motion character. §0 there records which
 Apple assets are off-limits (SF Pro as a webfont, SF Symbols) and what is used instead.
 
-**Current position.** Everything in the "Already built" table above is on `main`, plus
-**`A0`** (PR #11) and **`A1`** (PR #13). `docker compose up -d` brings up nine services,
-and at `http://localhost:3000` a person can now sign in through Keycloak, stay signed in
-across a reload, sign out, and — new in `A1` — ask Mnemos a question and watch the answer
-stream in token by token, in a conversation that survives a reload. It answers from the
-model alone; there is still nothing to ground an answer in. See §8.
+**Current position.** `main`'s tip has `A0` (PR #11) and `A1` (PR #13). **`A2` is built,
+verified in a browser, and pushed to `feat/a2-rag`, but PR #14 is still open** — its
+`compose` CI job is red on a MinIO startup-ordering bug, not yet fixed. See the ⚠️ warning
+block near the top of [TRACKER.md](../TRACKER.md) for the exact diagnosis and the steps to
+finish it. Once PR #14 is merged, `docker compose up -d` will bring up nine services with
+upload → ask → cite working end to end; until then that flow only exists on the branch.
 
-**The next task is `A2`** — upload a document, extract and chunk it, embed it onto
-pgvector, and port `_v1`'s retrieval kernel from SQLite brute-force cosine onto pgvector
-HNSW + pg_trgm, fully specified in [TRACKER §5](../TRACKER.md#5-next-task). The database
-arrives in `A3`, behind the same gateway and streaming endpoint `A1` built.
+**The next task is to merge PR #14, then start `A3`** — natural language over the
+`mnemos_analytics` warehouse: introspection, a business glossary, generated SQL behind
+**two independent read-only defences** (an AST guard and the `mnemos_ro` role), execution,
+and narration, fully specified in [TRACKER §5](../TRACKER.md#5-next-task). The router that
+stops the user having to choose a flow is `A4`.
 
 `M3`'s exit criterion "RLS blocks cross-org" turned out to be unmet by `M2` rather than
 merely untested; that is written up in §8 and in
@@ -808,6 +809,37 @@ the whole `up`. It does now, so plain `docker compose up -d` brings the frontend
 everything else and `web` has a healthcheck of its own — a stack whose UI needs a
 remembered extra flag is a stack whose UI does not get looked at.
 
+### A2 — ask about your documents ✅
+
+Verified 2026-08-10 on branch `feat/a2-rag` (PR #14). Full evidence, with commands and
+observed output, is in [TRACKER §3](../TRACKER.md#-a2--ask-about-your-documents-verified-2026-08-10).
+
+**The `_v1` retrieval kernel is ported, not rewritten.** Chunking with char offsets, the
+hashing embedder, the heuristic tokenizer, RRF fusion and Jaccard dedup all move across
+essentially intact; what changes is that the *operators* are SQL now —
+`ORDER BY embedding <=> :query` through the HNSW index `M2` created, and pg_trgm's `%` for
+the lexical arm — because the brute-force numpy scan could not push a predicate into the
+scan and could not survive a real corpus. §8's "carried over from v0.1" note is half
+discharged: retrieval has landed, memory governance and the compiler remain for `C4`.
+
+**Both published constraints are asserted rather than asserted-about.** C4 (authorization
+inside the scan, post-filtering banned) is pinned by
+`test_acl_pushdown_beats_post_filtering_on_yield`, which builds the banned post-filtering
+arm alongside the real one purely to measure the difference — the same discipline C10
+applies to the benchmark's naive arm. C6 (superseded revisions excluded, not down-ranked)
+is pinned by asserting the obsolete text is *absent* from the candidate set, since
+down-ranking is exactly the failure the README's headline number is about.
+
+**The inspector has its first real content.** Clicking a `[n]` marker in an answer fills
+the panel `F0` reserved with the cited passage and the character span it came from. The
+context *bundle* — admitted, excluded, budget spend — is still `C4`, and the empty state
+says which half is missing rather than implying the panel is finished.
+
+Deliberately deferred and recorded rather than implied: the six-phase compiler and its
+allocator (`C4`; `A2` truncates in fused-score order), ingestion job machinery (`B2`; `A2`
+ingests synchronously in the request handler), and the connector abstraction (`B1`; `A2`
+has one MinIO upload path and no factory).
+
 ### A1 — talk to it ✅
 
 Verified 2026-08-08 on branch `feat/a1-chat` (PR #13). The full write-up, with commands run
@@ -840,25 +872,31 @@ here on signs in as `analyst@mnemos.local` instead.
 
 ### Not started
 
-**Phase A2 onward, and all of B, C and D** — §7. Concretely, and stated plainly because the
+**Phase A3 onward, and all of B, C and D** — §7. Concretely, and stated plainly because the
 gap between what `docs/` describes and what runs is the thing this file exists to keep
 honest:
 
-- **There is no RAG in this stack.** Nothing uploads, extracts, chunks or embeds; the
-  `chunk` and `chunk_embedding` tables exist and are empty, and the retrieval code that
-  will fill them is still quarantined in `_v1/` on SQLite. `A2`, and it is next.
 - **There is no NL2SQL.** The `mnemos_analytics` warehouse is seeded and the `mnemos_ro`
-  role is proven read-only (below), but nothing generates SQL against them. `A3`.
-- **There is no router, no tool runtime, no agent flow, no prompt store, no cost ledger
-  and no context inspector content beyond a static `EmptyState`.** `A4`, `B3`, `B4`, `C2`,
-  `C4`.
-- ~~**There is no conversation surface.**~~ **Built in `A1`.** What is missing now is
-  anything to *ground* an answer in — a document (`A2`) or a database (`A3`).
+  role is proven read-only (below), but nothing generates SQL against them. `A3`, and it
+  is next.
+- **There is no router.** A person still has to tick "Use documents" to get a grounded
+  answer; nothing classifies a message to a flow on its own. `A4` — and both provisional
+  selectors are written down as provisional so `A4` knows what to remove.
+- **There is no tool runtime, no agent flow, no prompt store and no cost ledger.** `B3`,
+  `B4`, `C2`.
+- **The context inspector shows a cited passage, not a context bundle.** `A2` gave it its
+  first real content; what was admitted, what was excluded and why, and the token spend
+  against budget, are `C4`. So is bitemporal memory, and so is re-running the benchmark on
+  Postgres — until then the README's numbers stay labelled as measured on SQLite.
+- ~~**There is no RAG in this stack.**~~ **Built in `A2`.** Upload, extract, chunk, embed
+  onto pgvector HNSW, retrieve with the ACL predicate inside the scan, cite.
+- ~~**There is no conversation surface.**~~ **Built in `A1`.**
 
 What *is* built is the foundation those stand on: the container stack, the 41-table schema
 with row-level security that is in force rather than merely declared, identity through a
 full OIDC round trip and platform JWT with refresh rotation, `mnemosctl bootstrap`, CI, the
-app shell, and now a working conversation surface. Evidence for each is above.
+app shell, a working conversation surface, and retrieval over uploaded documents with
+click-through citations. Evidence for each is above.
 
 ---
 

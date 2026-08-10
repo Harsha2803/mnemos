@@ -9,6 +9,7 @@ from __future__ import annotations
 
 from dataclasses import dataclass
 from datetime import datetime
+from uuid import UUID
 
 from mnemos.core.types import MessageRole
 from mnemos.features.chat.domain.ids import ChatMessageId, ChatSessionId
@@ -34,6 +35,7 @@ class ChatMessageRecord:
     ordinal: int
     role: MessageRole
     content: str
+    flow: str | None
     prompt_tokens: int
     completion_tokens: int
     latency_ms: int | None
@@ -44,12 +46,42 @@ class ChatMessageRecord:
 
 
 @dataclass(frozen=True, slots=True)
+class CitationInput:
+    """What `flows/rag` hands `ChatRepository.add_citations` — no id yet,
+    unlike `CitationRecord`, which is the read-back shape."""
+
+    marker: int
+    document_id: UUID
+    chunk_id: UUID
+    quoted_text: str
+    start_char: int
+    end_char: int
+    page_number: int | None
+    score: float
+
+
+@dataclass(frozen=True, slots=True)
+class CitationRecord:
+    id: UUID
+    message_id: ChatMessageId
+    marker: int
+    document_id: UUID | None
+    chunk_id: UUID | None
+    quoted_text: str
+    start_char: int | None
+    end_char: int | None
+    page_number: int | None
+    score: float | None
+
+
+@dataclass(frozen=True, slots=True)
 class ChatSessionDetail:
     """A session plus the messages in it, ordinal-ordered — the shape
     `GET /v1/chat/sessions/{id}` answers with."""
 
     session: ChatSessionSummary
     messages: tuple[ChatMessageRecord, ...]
+    citations: tuple[CitationRecord, ...] = ()
 
 
 @dataclass(frozen=True, slots=True)

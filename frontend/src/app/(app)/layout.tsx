@@ -2,6 +2,7 @@ import type { ReactNode } from "react";
 
 import { AuthBoundary } from "@/components/auth/AuthBoundary";
 import { AppShell } from "@/components/shell/AppShell";
+import { InspectorSelectionProvider } from "@/lib/inspector/SelectionProvider";
 
 /**
  * Everything in this route group is behind the session.
@@ -15,7 +16,12 @@ import { AppShell } from "@/components/shell/AppShell";
 export default function AppLayout({ children }: { children: ReactNode }) {
   return (
     <AuthBoundary>
-      <AppShell>{children}</AppShell>
+      {/* Outside `AppShell`, because the shell renders the inspector and the
+          page inside it decides what the inspector shows — both ends need the
+          same provider above them. */}
+      <InspectorSelectionProvider>
+        <AppShell>{children}</AppShell>
+      </InspectorSelectionProvider>
     </AuthBoundary>
   );
 }

@@ -1,151 +1,244 @@
 You are picking up an in-progress project called Mnemos, at
 /home/shreeharsha/Personal/Projects/Resume_001/mnemos
 
-Read these files IN THIS ORDER before writing any code. Do not skim them and do not
-start editing after the first one — the second file is the design and the first is only
-the status.
-
-  1. TRACKER.md                  what is built, the constraints, and the exact next task
-  2. docs/ADAPTATION.md          what the thing IS: architecture, capability map,
-                                 schema plan, milestones M1-M14, locked decisions
-  3. README.md                   the public framing and the published benchmark numbers
-  4. docs/CodingStandards.md     before your first line of code
-
-TRACKER.md section 5 is the task. It is written to be self-contained; implement exactly
-that, and do not substitute your own idea of what should come next.
+This file was rewritten on 2026-08-10, mid-marathon-run, when a session was stopped by the
+user before finishing. It replaces an older version of itself that described the state as
+of M3.7/F0 — that version is gone; trust this one and TRACKER.md, not your memory of any
+prior prompt.txt.
 
 ------------------------------------------------------------------------------
-ONE TASK PER SESSION — THIS IS THE MOST IMPORTANT RULE HERE
+READ FIRST, IN THIS ORDER
 
-Do ONE of these, then STOP:
+  1. TRACKER.md            — read section 0, the ⚠️ warning block near the top, and
+                              section 3's A0/A1/A2 entries in full. Then section 5.
+  2. docs/ADAPTATION.md    — architecture, capability map, schema, milestone ledger
+  3. README.md             — public framing and the benchmark numbers
+  4. docs/CodingStandards.md / docs/DesignSystem.md — before writing backend / frontend code
 
-  (a) If something was left unfinished by the previous session, finish THAT. Nothing
-      else. TRACKER.md section 5 and the branch's open PR will tell you what it was.
+TRACKER.md is authoritative over this file for anything the two disagree about — this file
+is a pointer to it, not a duplicate of it.
 
-  (b) Otherwise, implement exactly ONE task from TRACKER.md section 5. One. Not the
-      one after it, however small or tempting the next one looks.
+------------------------------------------------------------------------------
+EXACTLY WHERE THIS WAS LEFT — read this before touching anything
 
-Then close out properly and stop: tests green, both tracker files updated, scoped
-commits, branch pushed, PR updated, and a short honest report of what you did and what
-you did not.
+A prior session (2026-08-08 through 2026-08-10) was explicitly told by the project owner to
+finish the ENTIRE remaining plan in one continuous run, suspending the normal
+one-task-per-session rule for that run only (recorded in TRACKER.md section 0, rule 9's
+note, and in the header). It built and merged:
 
-DO NOT roll on to the next task. DO NOT ask "shall I continue with the next one?" and
-DO NOT start it while waiting for an answer. The next task gets a NEW SESSION — that is
-deliberate, because a long session burns usage limits that are better spent on fresh
-context.
+  - A0 (auth surface)         — PR #11, merged, on main
+  - A1 (talk to it)           — PR #13, merged, on main
+  - A2 (RAG over documents)   — PR #14, OPEN, NOT MERGED, CI red on one job
 
-If the one task turns out to be bigger than it looked, do not silently expand the
-session to absorb it. Split it, implement the first piece properly, and REWRITE
-TRACKER.md section 5 so the remainder is fully specified for whoever picks it up next.
-A clean handoff is worth more than a rushed finish.
+The session was stopped by the user partway through merging PR #14. **A2's code is
+complete and was verified working in a real browser** (upload -> ask -> citation
+click-through, screenshotted, with the API traces pasted into TRACKER.md section 3's `A2`
+entry) — but the PR is not merged and main does NOT have A2 in it yet.
 
-Stopping early with the tree in a clean, committed, documented state is the correct
-outcome. Stopping mid-edit with uncommitted work is not.
+**The one concrete blocker, fully diagnosed but not yet fixed:**
+
+`docker-compose.yml`'s `api` service depends on `minio: {condition: service_healthy}` but
+NOT on `minio-init` (the one-shot container that runs `mc mb` to create the
+`mnemos-documents` bucket). MinIO reports healthy the instant the server process is up,
+which can be before `minio-init` has created the bucket. `A2`'s `S3ObjectStore.health()`
+calls `head_bucket` and fails until the bucket exists, so `/readyz` never turns fully green
+in a clean CI run, and the `compose` GitHub Actions job on PR #14 times out after 5 minutes
+waiting for it. `backend` and `frontend` CI jobs are both green; only `compose` is red.
+
+Fix (not yet applied or verified):
+
+  Add `minio-init: {condition: service_completed_successfully}` to `api`'s `depends_on:`
+  block in docker-compose.yml. Probably also worth adding to `worker` once B2 gives it
+  object-store reads, but that is not blocking A2.
+
+Verify by: `docker compose down -v && docker compose up -d --build`, then
+`curl localhost:8000/readyz` repeatedly until it shows
+`{"status":"ready","checks":{"postgres":"ok","redis":"ok","ollama":"ok","objectstore":"ok"}}`
+with NO manual `docker compose exec` intervention in between. Then commit
+(`fix(compose): api waits for the MinIO bucket, not just the MinIO server`), push to
+`feat/a2-rag`, and watch PR #14's checks go green (`gh pr checks 14 --watch`).
+
+------------------------------------------------------------------------------
+WHAT TO DO, IN ORDER, THE MOMENT YOU START
+
+  1. `gh auth status` — confirm `Harsha2803` is active. Stop and say so if it is not.
+  2. `git fetch && git status` — you may be on any branch. Check out `feat/a2-rag`
+     (`git checkout feat/a2-rag`) if it still exists locally, or `git checkout -b
+     feat/a2-rag origin/feat/a2-rag` if not. Confirm `git log --oneline -5` shows the A2
+     commits (they end in "docs: record A2 and specify A3 for the next agent").
+  3. `gh pr list --state open` — confirm PR #14 is what you expect (A2, open, not draft).
+  4. Apply the minio-init fix above, verify it locally exactly as described, commit, push.
+  5. `gh pr checks 14 --watch` until all three jobs are green.
+  6. `gh pr merge 14 --squash --delete-branch` (this is how #11 and #13 were merged —
+     match that convention). Confirm afterward: `git fetch && git log origin/main -3
+     --oneline` shows the squashed A2 commit at the tip, and `gh pr list --state open` is
+     empty.
+  7. From a truly clean state, prove it: `git checkout main && git pull`, then
+     `docker compose down -v && docker compose up -d --build && make bootstrap`. Sign in at
+     http://localhost:3000 as `analyst@mnemos.local` / `analyst` (NOT `admin@mnemos.local`
+     — see TRACKER section 4 item 40 for why that specific account is broken by design) and
+     re-perform the A2 sentence once against the merged image, not the branch you developed
+     against.
+  8. Update TRACKER.md: delete the ⚠️ warning block and the "Branch right now" / "Next
+     task" header lines that describe this handoff, replace them with a normal `A2 ✅`
+     entry (the write-up in section 3 already exists and is accurate — you are only fixing
+     the header and removing the warning, not rewriting the evidence). Do the same
+     s/PR #14 open, CI red/✅/ fix to the two status-table rows in TRACKER.md and
+     docs/ADAPTATION.md that currently read "PR #14 open, CI red". Commit this as its own
+     small `docs:` commit.
+  9. Only now branch `feat/a3-nl2sql` off the updated `main` and start `A3`, which is
+     already fully specified in TRACKER.md section 5 (NL2SQL: introspection, glossary,
+     generated SQL behind two independent read-only defences — an AST guard via `sqlglot`
+     and the `mnemos_ro` Postgres role — execution, and narration).
+
+Do not skip step 7. "CI is green" and "the merged stack actually starts clean and the
+feature still works" are different claims — TRACKER section 4 item 32 is the story of a
+milestone that shipped with 191 passing tests while main could not start, and the whole
+reason the compose CI job and this step 7 both exist is to not repeat that.
+
+------------------------------------------------------------------------------
+THE RULE THAT WAS SUSPENDED, AND WHETHER IT STILL IS
+
+The user's original instruction for the 2026-08-08 run said: finish the WHOLE remaining
+plan (A2 through D1, thirteen milestones) in one continuous run, not one task per session.
+That instruction technically still stands unless whoever is reading this has been told
+otherwise — but the session that received it was explicitly stopped by the user mid-task
+("Stop for now. Enough of implementation.") on 2026-08-10, before A2 even finished merging.
+
+**Read this as: do NOT assume you should silently plow through A3, A4, B1...D1 the moment
+you sit down.** Finish merging PR #14 (steps 1-8 above), and then use your judgment based
+on how you were actually invoked this session:
+  - If invoked with an explicit instruction to keep going through the whole plan, keep
+    going, milestone by milestone, exactly as TRACKER section 0's suspended-rule note
+    describes (own branch, own PR, own commits per milestone, CI green and merged before
+    moving on — do not repeat the mistake of moving to A3 with A2 still unmerged).
+  - If invoked normally (one task per session, the ordinary rule), stop after step 8
+    above — that is a complete, coherent unit of work — and let the next session decide
+    whether to start A3.
+
+Either way: never leave a PR open and unmerged at the end of a session if it is genuinely
+finished and green. The user has said directly, more than once, that they want everything
+merged to main with no PRs left open.
 
 ------------------------------------------------------------------------------
 WHAT THIS PROJECT IS
 
-An AI workspace chatbot. One conversation surface; a router decides whether an answer
-needs documents (RAG), a database (NL2SQL), a tool (MCP), memory, or a combination.
-Underneath, every message has an inspectable context bundle and a governed memory layer
-that distinguishes current facts from superseded ones.
+An enterprise AI assistant. One conversation surface; a router (A4, not built yet) will
+decide whether an answer needs documents (RAG, built in A2), a database (NL2SQL, next up
+as A3), a tool (MCP, B3), memory, or a combination. Underneath, every message will have an
+inspectable, budgeted context bundle (C4) and a governed memory layer distinguishing
+current facts from superseded ones (also C4) — that is the project's one deep technical
+claim, measured on the v0.1 kernel and not yet re-measured on Postgres.
 
-Positioning: the app does many things. Context and memory management is the thing that
-STANDS OUT among them, not the whole product.
-
-It is a portfolio project. Production practices, single-node scale.
+It is a portfolio project. Production practices, single-node scale, zero paid dependencies
+in the default path, ever.
 
 ------------------------------------------------------------------------------
 HARD RULES — violating any of these is worse than doing nothing
 
-* ZERO MONETARY COST. Every component free and self-hosted. No API key for any
-  capability in the default path.
+* ZERO MONETARY COST. Every component free and self-hosted. No API key for any capability
+  in the default path. Ollama is the default model forever.
 
-* NEVER COPY FROM ../jiva/. That directory is the author's EMPLOYER'S PROPRIETARY
-  CODEBASE (J K Technosoft, project JIVA). It is reference for WHAT to build, never for
-  WHAT TO COPY. Architectural shape and capability lists are fine to learn from; source
-  code, schemas, migration bodies, prompts, domain registries and client names are not.
-  Every file in Mnemos is written fresh. See ADAPTATION.md section 2.
+* NEVER READ OR COPY FROM ../jiva/. That directory is the author's EMPLOYER'S proprietary
+  codebase. Not a reference, not a source, not to be cited. Every file in Mnemos is written
+  fresh. See ADAPTATION.md section 2 and constraint C11.
 
-* NEVER use the work GitHub account or email (harshaJKT, @jktech.com). Both a personal
-  and a work account are authenticated in `gh` on this machine. Confirm `Harsha2803` is
-  the active account before any push:  gh auth status
+* NEVER use the work GitHub account or email (harshaJKT, @jktech.com). Two accounts are
+  authenticated in `gh` on this machine. Confirm `Harsha2803` is active before any push.
 
 * NO PLACEHOLDERS, NO TODOs, NO STUBBED RETURNS. Split a task rather than stub it.
 
-* DO NOT re-litigate settled decisions (TRACKER section 2, ADAPTATION section 9).
-  Several are load-bearing for numbers published in the README. If you think one is
-  wrong, write an ADR superseding it — do not silently deviate.
+* EVERY FEATURE SHIPS ITS UI IN THE SAME MILESTONE (C12). Backend and frontend land
+  together.
+
+* THE UI FOLLOWS docs/DesignSystem.md (C13). Tokens are the only source of colour, type,
+  spacing and radius.
+
+* DO NOT re-litigate settled decisions (TRACKER section 2, ADAPTATION section 9, and now
+  also section 9's growing list of A0-A2 deviations, each argued in place). If you think
+  one is wrong, write an ADR superseding it — do not silently deviate.
 
 * DO NOT run `pkill -f mnemos` — it matches the agent's own shell. Kill by port or PID.
+
+* Never leave uncommitted work, and never leave a genuinely finished PR open. Push, open a
+  PR the moment a branch has its first commit (draft if unfinished), merge it the moment it
+  is actually done and green.
 
 ------------------------------------------------------------------------------
 HOW TO WORK
 
-Commits: one logical change per commit, conventional format. NEVER a bulk commit of
-unrelated files. The commit message should say why, not just what.
-
-Branches: work on a feature branch, never directly on main. The moment a branch has its
-first commit, push it and open a PR (draft if unfinished) so no branch gets lost.
-Check `git branch -a` and `gh pr list` at the start of every session.
+Commits: one logical change per commit, conventional format, explaining why not just what.
+Never a bulk commit of unrelated files.
 
 Every change ends with ALL of:
-  - pytest green            cd backend && ../.venv/bin/python -m pytest -q
-  - alembic check clean     cd backend && ../.venv/bin/alembic check
-  - TRACKER.md updated      status, next task, header
-  - ADAPTATION.md updated   section 7 milestone position, section 8 current state
-  - README numbers updated  ONLY if the retrieval or compile path moved, in which case
-                            re-run the benchmark and paste the real numbers
-  - a conventional commit, and the branch pushed with its PR
+  - make test            (278 passed as of A2; will be higher after A3)
+  - make lint / make types / make check
+  - frontend: npm run lint && npx tsc --noEmit && npm run test && npm run build
+  - TRACKER.md updated in the same commit as the work — status, evidence, next task
+  - docs/ADAPTATION.md updated in the same commit — section 7 position, section 8 state
+  - README numbers updated ONLY if the retrieval or compile path moved, with the real
+    benchmark re-run
+  - the branch pushed with its PR open and CI green before you call the branch done
 
-Both TRACKER.md and docs/ADAPTATION.md must be updated IN THE SAME COMMIT as the work.
-A reader who trusts one and not the other is worse off than one who trusts neither.
-
-Report honestly. If a test fails, say so and paste the output. If you skipped something,
-say which and why. Do not claim a milestone is done because the code exists — claim it
-when you have run it and seen the output.
-
-Then stop, per the one-task-per-session rule above. End your report by naming what the
-next session should pick up — do not begin it.
+Report honestly. Claim something works only after you have run it and seen the output —
+"the endpoint returns 200" is not the same claim as "I signed in and did X in a browser".
 
 ------------------------------------------------------------------------------
 RUNNING IT
 
-  docker compose up -d                     # nine services; add --profile web from M13
+  gh auth status                                 # confirm Harsha2803 is active
+  docker compose up -d --build                   # nine services
   docker compose ps
-  curl localhost:8000/readyz               # {"status":"ready", ...}
-  docker compose exec api mnemosctl db doctor    # live schema: tables, RLS, constraints
+  curl localhost:8000/readyz                     # postgres/redis/ollama/objectstore all "ok"
+  docker compose exec api mnemosctl bootstrap --org-slug mnemos --org-name Mnemos \
+      --admin-email admin@mnemos.local           # idempotent; MNEMOS_BOOTSTRAP_ADMIN_PASSWORD
+                                                  # or prompts
 
-  cd backend && ../.venv/bin/alembic upgrade head
   cd backend && ../.venv/bin/python -m pytest -q
+  make lint && make types && make check
 
-Host ports are remapped because this machine already runs its own Postgres and Redis:
-postgres 15432, redis 6380, api 8000, realtime 8001, keycloak 8080, minio 9000/9001,
-ollama 11434. Container-to-container traffic still uses the standard ports.
+Sign in at http://localhost:3000 as org `mnemos`, then on Keycloak's form use
+`analyst@mnemos.local` / `analyst` (or `user@mnemos.local` / `user`) — NOT
+`admin@mnemos.local` / `admin`, which is denied by design because the realm's seeded admin
+collides on email with the bootstrap-created internal admin. Full explanation in TRACKER
+section 4 item 40. This bit every e2e spec until it was diagnosed; do not rediscover it.
 
-The Python venv is at .venv/ in the repo root, and the package lives in backend/.
+Host ports (unchanged since M1): postgres 15432, redis 6380, api 8000, realtime 8001,
+keycloak 8080, minio 9000/9001, ollama 11434. Container-to-container traffic uses standard
+ports. Python venv is at .venv/ in the repo root; the package lives in backend/.
 
 ------------------------------------------------------------------------------
-WHERE THINGS ARE
+WHERE THINGS ARE (current, post-A2)
 
   backend/src/mnemos/
     core/          config, errors, logging, clock, ids, shared enums
-    platform/      db engine + tenant-scoped sessions, redis, models registry
-    features/      identity, memory, retrieval, context, knowledge, connectors,
-                   datasources, chat, tools, prompts, observability
-    flows/         rag, nl2sql, agent, router
+    platform/      db engine + tenant-scoped sessions, redis, objectstore (S3/MinIO), models
+    features/      identity, chat, llm (Ollama gateway), knowledge (RAG: extraction,
+                   chunking, embedding, pgvector+pg_trgm retrieval), memory, context,
+                   connectors, datasources, tools, prompts, observability
+    flows/         rag (built, A2), nl2sql (next, A3), agent, router
     entrypoints/   api, worker, realtime, cli
-    _v1/           the SQLite kernel, preserved verbatim until it is ported in M4.
-                   DO NOT import from it in new code. Port, then delete.
-  backend/migrations/    alembic revisions
+    _v1/           the SQLite kernel. Retrieval was ported OUT of it in A2 (do not import
+                   it for new retrieval work — features/knowledge/ is the real thing now).
+                   Memory + the six-phase compiler are still only in here, ported in C4.
+  backend/migrations/    alembic revisions (no new one needed since A0 — A1/A2 both used
+                          columns M2 already created)
+  backend/tests/          test_knowledge_domain.py / test_knowledge_endpoints.py are A2's;
+                          test_chat_endpoints.py / test_llm_gateway.py are A1's
+  frontend/src/
+    app/(app)/chat/, app/(app)/knowledge/    the two built screens
+    components/chat/, components/knowledge/, lib/chat/, lib/knowledge/, lib/inspector/
   deploy/                postgres init SQL, keycloak realm
   docs/                  architecture, schema, API contract, threat model, ADRs
 
-Layering rule: domain (pure) <- application <- adapters/api.
-`features` must never import `flows`.
+Layering rule: domain (pure) <- application <- adapters/api. `features` must never import
+`flows`; `flows` may import multiple `features` (this is exactly how flows/rag/ is allowed
+to depend on both features/chat and features/knowledge while keeping them ignorant of each
+other).
 
 ------------------------------------------------------------------------------
 START HERE
 
-Read TRACKER.md now, then docs/ADAPTATION.md. Tell me what the next task is and what
-you plan to do about it BEFORE you start writing code.
+Read TRACKER.md now — the ⚠️ warning block near the top first, then section 3's A2 entry,
+then section 5. Do steps 1-8 under "WHAT TO DO, IN ORDER" above before writing any new
+feature code. Tell me what you're about to do before you start.

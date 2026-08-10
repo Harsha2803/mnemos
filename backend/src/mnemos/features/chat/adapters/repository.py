@@ -21,12 +21,14 @@ from sqlalchemy import func, literal, select, tuple_, update
 
 from mnemos.core.ids import IdGenerator
 from mnemos.core.types import MessageRole
-from mnemos.features.chat.adapters.models import ChatMessage, ChatSession
+from mnemos.features.chat.adapters.models import ChatMessage, ChatSession, MessageCitation
 from mnemos.features.chat.domain import (
     ChatMessageId,
     ChatMessageRecord,
     ChatSessionId,
     ChatSessionSummary,
+    CitationInput,
+    CitationRecord,
 )
 from mnemos.features.identity.domain import OrgId, UserId
 from mnemos.platform.db import Database
@@ -148,6 +150,7 @@ class SqlChatRepository:
         latency_ms: int,
         model: str,
         finish_reason: str,
+        flow: str | None = None,
     ) -> ChatMessageRecord:
         return await self._append_message(
             org_id=org_id,
@@ -159,7 +162,43 @@ class SqlChatRepository:
             latency_ms=latency_ms,
             model=model,
             finish_reason=finish_reason,
+            flow=flow,
         )
+
+    async def add_citations(
+        self, *, org_id: OrgId, message_id: ChatMessageId, citations: Sequence[CitationInput]
+    ) -> None:
+        async with self._db.session(org_id=org_id) as session:
+            for citation in citations:
+                session.add(
+                    MessageCitation(
+                        id=self._ids.new(),
+                        org_id=org_id,
+                        message_id=message_id,
+                        marker=citation.marker,
+                        document_id=citation.document_id,
+                        chunk_id=citation.chunk_id,
+                        quoted_text=citation.quoted_text,
+                        start_char=citation.start_char,
+                        end_char=citation.end_char,
+                        page_number=citation.page_number,
+                        score=citation.score,
+                    )
+                )
+
+    async def list_citations(
+        self, *, org_id: OrgId, session_id: ChatSessionId
+    ) -> Sequence[CitationRecord]:
+        async with self._db.session(org_id=org_id) as session:
+            rows = (
+                await session.scalars(
+                    select(MessageCitation)
+                    .join(ChatMessage, ChatMessage.id == MessageCitation.message_id)
+                    .where(MessageCitation.org_id == org_id, ChatMessage.session_id == session_id)
+                    .order_by(ChatMessage.ordinal.asc(), MessageCitation.marker.asc())
+                )
+            ).all()
+        return [_citation_record(r) for r in rows]
 
     async def _append_message(
         self,
@@ -173,6 +212,7 @@ class SqlChatRepository:
         latency_ms: int | None = None,
         model: str | None = None,
         finish_reason: str | None = None,
+        flow: str | None = None,
     ) -> ChatMessageRecord:
         new_id = self._ids.new()
         next_ordinal = (
@@ -188,6 +228,7 @@ class SqlChatRepository:
                 ordinal=next_ordinal,
                 role=role.value,
                 content=content,
+                flow=flow,
                 prompt_tokens=prompt_tokens,
                 completion_tokens=completion_tokens,
                 latency_ms=latency_ms,
@@ -225,6 +266,7 @@ def _message_record(row: ChatMessage) -> ChatMessageRecord:
         ordinal=row.ordinal,
         role=MessageRole(row.role),
         content=row.content,
+        flow=row.flow,
         prompt_tokens=row.prompt_tokens,
         completion_tokens=row.completion_tokens,
         latency_ms=row.latency_ms,
@@ -232,4 +274,19 @@ def _message_record(row: ChatMessage) -> ChatMessageRecord:
         finish_reason=row.finish_reason,
         error_code=row.error_code,
         created_at=row.created_at,
+    )
+
+
+def _citation_record(row: MessageCitation) -> CitationRecord:
+    return CitationRecord(
+        id=row.id,
+        message_id=ChatMessageId(row.message_id),
+        marker=row.marker,
+        document_id=row.document_id,
+        chunk_id=row.chunk_id,
+        quoted_text=row.quoted_text,
+        start_char=row.start_char,
+        end_char=row.end_char,
+        page_number=row.page_number,
+        score=row.score,
     )

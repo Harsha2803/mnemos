@@ -126,7 +126,12 @@ jobs:
           # and zero `# type: ignore`s beyond one narrowly-scoped,
           # commented `type: ignore[no-untyped-call]` on a redis-py call
           # whose upstream signature has no annotations at all.
-          mypy --strict src/mnemos/core src/mnemos/features src/mnemos/entrypoints
+          # A2 widened this to `flows/` and `platform/` as well — both were
+          # previously covered only transitively (wherever features/entrypoints
+          # imported them), and A2 is the first milestone to put real logic in
+          # `flows/`. Keep this in step with the Makefile's `types` target.
+          mypy --strict src/mnemos/core src/mnemos/features src/mnemos/entrypoints \
+            src/mnemos/flows src/mnemos/platform
 
       # ---- the two gates that need real infrastructure ----
 

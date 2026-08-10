@@ -11,6 +11,8 @@ import { MessageList } from "@/components/chat/MessageList";
 import { Skeleton } from "@/components/ui/Skeleton";
 import { fetchSession } from "@/lib/chat/api";
 import { streamChatReply } from "@/lib/chat/stream";
+import { useInspectorSelection } from "@/lib/inspector/SelectionProvider";
+import type { Citation } from "@/lib/knowledge/api";
 
 function sessionQueryKey(sessionId: string) {
   return ["chat", "session", sessionId] as const;
@@ -28,6 +30,7 @@ export default function ChatSessionPage() {
   const params = useParams<{ sessionId: string }>();
   const sessionId = params.sessionId;
   const queryClient = useQueryClient();
+  const { select } = useInspectorSelection();
 
   const { data, isPending } = useQuery({
     queryKey: sessionQueryKey(sessionId),
@@ -36,17 +39,20 @@ export default function ChatSessionPage() {
 
   const [messages, setMessages] = useState<DisplayMessage[]>([]);
   const [streaming, setStreaming] = useState(false);
+  const [useDocuments, setUseDocuments] = useState(false);
   const abortRef = useRef<AbortController | null>(null);
   const loadedFor = useRef<string | null>(null);
 
   useEffect(() => {
     if (data === undefined || loadedFor.current === sessionId) return;
     loadedFor.current = sessionId;
+    const citations = data.citations ?? [];
     setMessages(
       data.messages.map((message) => ({
         id: message.id,
         role: message.role === "user" ? "user" : "assistant",
         content: message.content,
+        citations: citations.filter((c) => c.message_id === message.id),
       })),
     );
   }, [data, sessionId]);
@@ -93,6 +99,28 @@ export default function ChatSessionPage() {
           );
           setStreaming(false);
           void queryClient.invalidateQueries({ queryKey: CHAT_SESSIONS_QUERY_KEY });
+          // Citations are written server-side after the stream completes, so
+          // they are not in the `done` frame — refetch the session to pick
+          // them up, and let the effect above re-seed only if this is a
+          // different session (it is not, so state is preserved).
+          void queryClient
+            .invalidateQueries({ queryKey: sessionQueryKey(sessionId) })
+            .then(async () => {
+              const refreshed = await queryClient.fetchQuery({
+                queryKey: sessionQueryKey(sessionId),
+                queryFn: ({ signal }) => fetchSession(sessionId, signal),
+              });
+              const forMessage = (refreshed.citations ?? []).filter(
+                (c) => c.message_id === message.id,
+              );
+              if (forMessage.length > 0) {
+                setMessages((prev) =>
+                  prev.map((m) =>
+                    m.id === message.id ? { ...m, citations: forMessage } : m,
+                  ),
+                );
+              }
+            });
         },
         onError: (message) => {
           setMessages((prev) =>
@@ -110,12 +138,17 @@ export default function ChatSessionPage() {
         },
       },
       controller.signal,
+      { useDocuments },
     );
   }
 
   function handleStop(): void {
     abortRef.current?.abort();
     setStreaming(false);
+  }
+
+  function handleCitationClick(citation: Citation): void {
+    select({ kind: "citation", citation });
   }
 
   return (
@@ -128,10 +161,16 @@ export default function ChatSessionPage() {
             <Skeleton className="ml-auto h-12 w-1/2" />
           </div>
         ) : (
-          <MessageList messages={messages} />
+          <MessageList messages={messages} onCitationClick={handleCitationClick} />
         )}
       </div>
-      <Composer onSend={handleSend} onStop={handleStop} streaming={streaming} />
+      <Composer
+        onSend={handleSend}
+        onStop={handleStop}
+        streaming={streaming}
+        useDocuments={useDocuments}
+        onUseDocumentsChange={setUseDocuments}
+      />
     </div>
   );
 }
