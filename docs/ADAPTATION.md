@@ -232,7 +232,7 @@ Two rules govern every row.
 | **A0** | Sign-in screen + browser session handling (`M3.4`'s UI half) + the fail-closed route guard (deny by default) | **sign in through Keycloak, stay signed in across a reload, and sign out** — and no route added after this is reachable unauthenticated | ✅ 2026-08-03 |
 | **A1** | LLM gateway (Ollama) · chat sessions + messages · SSE streaming · the chat surface | **talk to it** — ask a question and watch the answer stream in token by token | ✅ 2026-08-08 |
 | **A2** | Upload → extract → chunk → embed (pgvector HNSW) · retrieval ported from `_v1` · RAG flow · citations · knowledge library | **upload a document and ask questions about it**, with citations you click into | ✅ 2026-08-11 (PR #14) |
-| **A3** | NL2SQL: introspection · glossary · generate · AST read-only guard · `mnemos_ro` execution · narration · SQL panel | **ask a question about your data in English** and see the SQL, the rows and the narration — and see the guard visibly refuse a write | ⬜ **next** |
+| **A3** | NL2SQL: introspection · glossary · generate · AST read-only guard · `mnemos_ro` execution · narration · SQL panel | **ask a question about your data in English** and see the SQL, the rows and the narration — and see the guard visibly refuse a write | 🟡 in progress — introspection done (PR #15 draft), glossary/generation/execution/UI remain |
 | **A4** | Router: classify a message → chat / RAG / NL2SQL · flow indicator | **ask anything without choosing a mode**, and see which flow answered and why | ⬜ |
 
 **At the end of Phase A the thing this project is for exists.** Everything after deepens it.
@@ -304,9 +304,14 @@ merged. `docker compose up -d` brings up nine services with upload → ask → c
 to end; verified against the merged image, not just the branch, via the real
 `frontend/e2e/knowledge.spec.ts` Playwright suite.
 
-**The next task is `A3`** — natural language over the `mnemos_analytics` warehouse:
-introspection, a business glossary, generated SQL behind **two independent read-only
-defences** (an AST guard and the `mnemos_ro` role), execution, and narration, fully
+**`A3` is in progress on `feat/a3-nl2sql`, PR #15 (draft, CI green, not merged).**
+Deliverable 1 of 5 — schema introspection — is done: `mnemosctl datasource introspect`
+registers the seeded `mnemos_analytics` warehouse per org and caches its schema, connecting
+as `mnemos_ro` (the same role generated SQL will execute as). Nothing about `A3` is visible
+in the product yet — no glossary, no generation, no AST guard, no execution, no SQL panel —
+so the PR stays draft per C12 until deliverable 5 lands. Remaining scope: the business
+glossary, generated SQL behind **two independent read-only defences** (an AST guard via
+`sqlglot` and the `mnemos_ro` role), execution, narration, and the SQL panel UI, fully
 specified in [TRACKER §5](../TRACKER.md#5-next-task). The router that stops the user having
 to choose a flow is `A4`.
 
@@ -806,6 +811,36 @@ existed because `./frontend` had no Dockerfile and an unresolvable build context
 the whole `up`. It does now, so plain `docker compose up -d` brings the frontend up with
 everything else and `web` has a healthcheck of its own — a stack whose UI needs a
 remembered extra flag is a stack whose UI does not get looked at.
+
+### A3 — ask about your data 🟡 in progress (1/5)
+
+Deliverable 1 (schema introspection) done 2026-08-11 on branch `feat/a3-nl2sql` (PR #15,
+draft). Full evidence is in
+[TRACKER §3](../TRACKER.md#-a3--ask-about-your-data-in-progress-15-pr-15-draft-2026-08-11).
+
+**Introspection connects with the datasource's own DSN, never through `Database`.**
+`Database` (`platform/db.py`) is the application's own Postgres, connected as `mnemos_app`
+with RLS-scoped sessions. `mnemos_analytics` is a second, unrelated Postgres database on
+the same server, connected as `mnemos_ro` — a role that is unprivileged in a completely
+different sense (it cannot write *anywhere*, not "cannot write outside its tenant"). A
+short-lived `create_async_engine(dsn, pool_size=1, ...)` per introspection call
+(`adapters/introspection.py`), disposed after — refresh is explicit and rare, not a
+connection the flow holds open.
+
+**The registry's DSN is encrypted at rest even though the demo DSN is not itself secret.**
+`SqlDatasource.dsn_encrypted` existed as a `LargeBinary` column since `M2` with no adapter
+that used it correctly; this deliverable added `core/crypto.py`'s `DsnCipher` (Fernet) and
+a `MNEMOS_DSN_ENCRYPTION_KEY` setting rather than leaving the column meaningfully unused —
+a registry that only sometimes encrypts is one an operator cannot reason about, and a real
+deployment's warehouse credentials are exactly the case this column exists for.
+
+**Test infrastructure now spans two databases on one container.** `conftest.py`'s
+`postgres` fixture creates `mnemos_analytics` alongside the existing `mnemos` database and
+seeds it by executing the real `deploy/postgres/init/02-analytics-seed.sql` — the same file
+`docker-compose.yml` runs — rather than a hand-written substitute. This is what let
+deliverable 1's tests prove the `mnemos_ro` role's can't-write guarantee directly
+(`INSERT ... -> asyncpg.exceptions.InsufficientPrivilegeError`) a session before deliverable
+3 (the AST guard) exists to depend on it.
 
 ### A2 — ask about your documents ✅
 

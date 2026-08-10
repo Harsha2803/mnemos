@@ -6,12 +6,75 @@
 > **and [`docs/ADAPTATION.md`](docs/ADAPTATION.md)** *in the same commit* — a stale
 > tracker is worse than none.
 
-**Last updated:** 2026-08-11 (`A2` merged to `main`; see the §3 `A2` entry for evidence)
-**Phase:** **A — make it a chatbot.** `A0` ✅, `A1` ✅, `A2` ✅ — all merged.
-**Next task:** `A3` (NL2SQL) — fully specified in §5. Not yet started; no branch cut for it
-yet.
-**Branch right now:** `main`, clean, no open PRs. `main`'s tip is the squashed `A2` commit
-(PR #14, merged 2026-08-11).
+**Last updated:** 2026-08-11 (`A3` deliverable 1/5 — schema introspection — committed and
+pushed; PR #15 open as **draft**, CI green, not yet merged — merge only once all five
+deliverables are on the branch, per C12)
+**Phase:** **A — make it a chatbot.** `A0` ✅, `A1` ✅, `A2` ✅ merged. `A3` **in progress**:
+deliverable 1 of 5 done (schema introspection). Deliverables 2-5 fully specified in §5.
+**Next task:** `A3` deliverable 2 — the business glossary. §5 has the complete brief for
+2-5, written at the same level of detail as the original A3 brief it replaces.
+**Branch right now:** `feat/a3-nl2sql`, pushed, PR #15 open as **draft** (draft is
+deliberate — C12/§0 rule 7 says every branch gets a PR immediately, but this one only
+becomes a real merge candidate once the UI slice in deliverable 5 lands; see §0 rule 8).
+CI is green on the branch as it stands (deliverable 1 only). `main`'s tip is still the
+squashed `A2` commit (PR #14) — `A3` is not in `main` yet, not even partially.
+
+> ### 2026-08-11 — `A3` started: deliverable 1 (schema introspection) done, PR #15 draft
+>
+> Same session as the `A2` merge above, continued rather than handed off — the project
+> owner asked for a good chunk of work and to stop only when the session ended, not for a
+> single task. `A3`'s five deliverables (TRACKER §5 as it stood before this note) are each
+> substantial and one — SQL generation behind the AST guard — is the security-critical
+> center of the milestone, so rather than rush all five in one sitting, this session did
+> deliverable 1 completely and for real, then stopped at a clean, tested, CI-green
+> boundary. Nothing here is a stub: every piece below is exercised by a real test against a
+> real Postgres.
+>
+> **What shipped, on `feat/a3-nl2sql`, commit `feat(nl2sql): schema introspection`:**
+> - `mnemosctl datasource introspect --org-slug X [--slug sales-warehouse]` — idempotently
+>   registers the seeded `analytics.*` warehouse for an org (encrypting its DSN with a new
+>   `core.crypto.DsnCipher`, Fernet, keyed by `MNEMOS_DSN_ENCRYPTION_KEY`), then introspects
+>   `information_schema` + `pg_class` **as `mnemos_ro`** — the same role generation will
+>   execute as, so introspection can never see more than execution can reach — and replaces
+>   (not accumulates onto) the org's `sql_schema_object` cache.
+> - The allowlist discipline `adapters/models.py` already documented is enforced in code
+>   now: `DatasourceService.register` raises on an empty `allowed_schemas` rather than
+>   treating empty as "everything" (`test_register_rejects_an_empty_allowlist`).
+> - `MNEMOS_ANALYTICS_DATABASE_URL` is now wired into `docker-compose.yml` — it did not
+>   exist before this session, so nothing running in a container could ever have reached
+>   `mnemos_analytics`. `analytics_database_url`'s default also now uses the `asyncpg`
+>   driver (it did not), matching `database_url`'s own `_require_async_driver` validator.
+> - **Test infrastructure that all of deliverables 3-4 will also depend on:** the shared
+>   `postgres` fixture in `conftest.py` now also creates `mnemos_analytics` and seeds it by
+>   running the real `deploy/postgres/init/02-analytics-seed.sql` against it (stripping only
+>   the `\connect` meta-command, which `asyncpg` cannot run). This is not incidental
+>   plumbing — `test_the_readonly_role_refuses_a_write_the_guard_somehow_allowed`
+>   (deliverable 3's acceptance test, not yet written) needs a real `mnemos_ro` role that
+>   really cannot write, and this session verified that guarantee directly
+>   (`INSERT ... -> asyncpg.exceptions.InsufficientPrivilegeError`) before building on it.
+>
+> **Verified, not just written:** `make test` — 298 passed (278 before this session, +20:
+>   12 new domain/integration tests for datasources, 8 pre-existing ones re-counted after
+>   the fixture change). `make lint` / `make types` / `make check` all clean (`alembic
+>   check` reports "No new upgrade operations detected" — `sql_datasource`,
+>   `sql_schema_object`, `glossary_term`, `sql_run` all already existed with `FORCE ROW
+>   LEVEL SECURITY` from `M2`, confirmed directly against `pg_class.relforcerowsecurity`
+>   before writing a line of repository code, so no migration was needed). PR #15's three
+>   CI jobs (`backend`, `frontend`, `compose`) are all green.
+>
+> **Deliberately left in draft, not merged:** C12 says a feature ships its UI in the same
+> milestone, and deliverable 1 has no UI of its own — the SQL panel (deliverable 5) is what
+> makes any of `A3` demonstrable. Merging deliverable 1 alone would put backend-only NL2SQL
+> code on `main` with nothing to show for it, which is the exact drift C12 exists to
+> prevent. The PR stays open and draft, gaining one commit per deliverable, until 5 lands;
+> then it goes through the same green-CI-then-squash-merge motion as #11/#13/#14.
+>
+> **What is NOT done, stated plainly so it is not mistaken for progress:** no glossary, no
+> SQL generation, no AST guard, no `sqlglot` usage anywhere yet (it is declared as a
+> dependency, per the original brief, and literally nothing imports it), no execution, no
+> narration, no chat-surface UI, no e2e test. §5 below specifies deliverables 2-5 in full —
+> read it before writing code, the same way this session read the original A3 brief before
+> starting deliverable 1.
 
 > ### 2026-08-11 — PR #14 merged; the `compose` CI gap is fixed
 >
@@ -216,7 +279,7 @@ That right-hand column is not a summary — it is the exit criterion.
 | **A0** | Sign-in screen + browser session handling (M3.4's UI half) + the fail-closed route guard (deny by default, from old `M3.6`) | **sign in through Keycloak, stay signed in across a reload, and sign out** — and no route added after this is reachable unauthenticated | ✅ |
 | **A1** | LLM gateway (Ollama) · chat sessions + messages · SSE streaming · the chat surface | **talk to it** — ask a question and watch the answer stream in token by token | ✅ 2026-08-08 |
 | **A2** | Upload → extract → chunk → embed (pgvector HNSW) · retrieval ported from `_v1` · RAG flow · citations · knowledge library | **upload a document and ask questions about it**, with citations you click into | ✅ merged (PR #14) |
-| **A3** | NL2SQL: introspection · glossary · generate · AST read-only guard · `mnemos_ro` execution · narration · SQL panel | **ask a question about your data in English** and see the SQL, the rows and the narration — and see the guard visibly refuse a write | ⬜ **next** |
+| **A3** | NL2SQL: introspection · glossary · generate · AST read-only guard · `mnemos_ro` execution · narration · SQL panel | **ask a question about your data in English** and see the SQL, the rows and the narration — and see the guard visibly refuse a write | 🟡 **in progress** — 1/5 (introspection), PR #15 draft |
 | **A4** | Router: classify a message → chat / RAG / NL2SQL · flow indicator | **ask anything without choosing a mode**, and see which flow answered and why | ⬜ |
 
 **At the end of Phase A the thing this project is for exists.** Everything after deepens it.
@@ -276,6 +339,65 @@ discarded. If you find a reference to an old ID anywhere, this is the translatio
 | `M12` router | `A4` | Moved **earlier**: without it the user has to pick a mode, which is not what a chatbot is |
 | `M13` frontend | dissolved into `F0` + a UI slice per milestone | Unchanged by this re-plan |
 | `M14` realtime + e2e + docs | `D1` | |
+
+### 🟡 A3 — ask about your data, in progress (1/5), PR #15 draft, 2026-08-11
+
+**Not verified end to end yet — no chat-surface UI exists, so there is no "you can now ___"
+sentence to demonstrate.** What is verified is deliverable 1 in isolation, against a real
+`mnemos_ro` connection to a real (test-seeded or compose-seeded) `mnemos_analytics`.
+
+**Deliverable 1 — schema introspection — done:**
+- `mnemosctl datasource introspect --org-slug X [--slug sales-warehouse]`
+  (`entrypoints/cli.py`) registers the demo warehouse for an org and refreshes its cached
+  schema. Idempotent registration: a second call returns the existing row
+  (`test_register_is_idempotent`).
+- `features/datasources/adapters/introspection.py`'s `PostgresIntrospector` connects with
+  the datasource's own DSN (never the app's `Database`) and reads `information_schema` +
+  `pg_class`, scoped to `allowed_schemas`:
+  `test_introspector_reads_only_the_allowed_schema`,
+  `test_introspector_sees_nothing_outside_the_requested_schema`.
+- `features/datasources/domain/schema.py`'s `build_schema_objects` is pure and unit-tested
+  independent of any database (`test_datasources_domain.py`, 4 tests) — table-level and
+  column-level draft rows, verified against a hand-built table/column list.
+- Refresh **replaces** the cache: `test_a_second_refresh_replaces_rather_than_accumulates`
+  asserts the live row count in `sql_schema_object` equals what the second refresh reported,
+  not the sum of two refreshes.
+- The allowlist's default-deny is enforced, not just documented:
+  `test_register_rejects_an_empty_allowlist`.
+- DSNs are encrypted at rest: `core/crypto.py`'s `DsnCipher` (Fernet), keyed by the new
+  `MNEMOS_DSN_ENCRYPTION_KEY` setting (dev default + the same
+  reject-the-dev-default-in-production pattern `MNEMOS_JWT_SECRET` already has).
+  `test_the_stored_dsn_is_encrypted_and_round_trips` asserts the plaintext DSN string never
+  appears in the stored bytes and that decryption recovers it exactly.
+
+**Test infrastructure added, load-bearing for deliverables 3-4 too:** `conftest.py`'s
+`postgres` fixture now creates `mnemos_analytics` and seeds it by running the real
+`deploy/postgres/init/02-analytics-seed.sql` (the same file `docker-compose.yml`'s
+`postgres` service init-mounts) against it — not a hand-rolled substitute schema. Proven
+directly before anything was built on top of it: connecting as `mnemos_ro` and attempting
+`INSERT INTO analytics.region ...` raises `asyncpg.exceptions.InsufficientPrivilegeError`.
+That is deliverable 3's second defence, already provable, a session before deliverable 3
+exists.
+
+**Gaps found and fixed as part of this work, not pre-existing and not left for later:**
+- `MNEMOS_ANALYTICS_DATABASE_URL` did not exist in `docker-compose.yml` — nothing running
+  in a container could have reached `mnemos_analytics` even though `Settings` had carried a
+  default for it since `M1`. Fixed.
+- `analytics_database_url`'s default was `postgresql://` (sync), not `postgresql+asyncpg://`
+  — would have failed the moment anything tried to build an async engine from it. Fixed,
+  and now validated by the same `_require_async_driver` check `database_url` has always had.
+
+**Evidence:** `make test` — 298 passed. `make lint` / `make types` / `make check` clean
+(`alembic check`: "No new upgrade operations detected" — confirmed `sql_datasource`,
+`sql_schema_object`, `glossary_term`, `sql_run` already had `FORCE ROW LEVEL SECURITY` from
+`M2` via a direct `pg_class` query before writing any repository code, rather than assuming
+it). PR #15: `backend`, `frontend`, `compose` all green, draft.
+
+**Not done — deliverables 2-5, specified in full in §5:** business glossary, SQL generation
++ the `sqlglot` AST read-only guard (the security-critical center of this milestone —
+`sqlglot` is declared as a dependency and imported nowhere yet), execution as `mnemos_ro`
+with the timeout/row-cap, narration, and the chat surface's SQL panel including the denial
+screen. No UI exists for any of `A3` yet — C12 is why the PR stays draft.
 
 ### ✅ A2 — ask about your documents, verified 2026-08-10
 
@@ -1529,17 +1651,20 @@ Recorded so they are not rediscovered as surprises:
 
 ## 5. NEXT TASK
 
-### `A3` — ask about your data: NL2SQL with two independent read-only defences
+### `A3` — ask about your data: NL2SQL with two independent read-only defences (2/5 remain: deliverables 3-4; 2 not started; 1 done)
 
-**Do this one only** (rule 9 is suspended for the current run — see the 2026-08-08 note
-near the top of this file — but §5 is still rewritten before each milestone, so treat this
-as the complete brief regardless of who reads it next).
+**Deliverable 1 (schema introspection) is done, committed, tested, and on
+`feat/a3-nl2sql` — PR #15, open as draft, CI green.** This section now specifies
+deliverables 2-5. Do not restart deliverable 1 or re-read the old version of this section
+looking for it; the §3 `A3` entry above has its evidence.
 
 > **You can now ask a question about your data in English and see the SQL, the rows and
 > the narration — and see the guard visibly refuse a write.**
 
-That last clause is half the milestone. **A defence nobody can see is a defence nobody
-believes**, so the refusal is a screen a stranger can produce on purpose, not a log line.
+Still the milestone's sentence, and still not true yet — nothing built so far is visible
+in the product. That last clause is half the milestone. **A defence nobody can see is a
+defence nobody believes**, so the refusal is a screen a stranger can produce on purpose,
+not a log line.
 
 **The one architectural rule here, and it is `C1`-adjacent in importance: two independent
 defences, neither sufficient alone** (ADAPTATION §9, README "Design decisions worth
@@ -1547,21 +1672,32 @@ defending"). An AST guard that rejects anything but a `SELECT`, *and* execution 
 `mnemos_ro`, a Postgres role that physically cannot write. The guard alone is one parser
 bug from a write; the role alone gives no useful error and no audit trail of the attempt.
 Both, and `test_the_readonly_role_refuses_a_write_the_guard_somehow_allowed` is the test
-that proves the second one is really there rather than assumed.
+that proves the second one is really there rather than assumed. **The second defence is
+already proven to exist**, independent of anything this milestone builds: connecting to
+`mnemos_analytics` as `mnemos_ro` and running `INSERT INTO analytics.region ...` raises
+`asyncpg.exceptions.InsufficientPrivilegeError` — verified directly while building
+deliverable 1's test fixture. Deliverable 3's acceptance test formalizes this; it does not
+discover it fresh.
 
-**The warehouse and the role already exist.** `deploy/postgres/init/02-analytics-seed.sql`
-seeds a separate `mnemos_analytics` database — 900 `sales_order`, 6 `customer`,
-6 `product`, 4 `region` — and creates `mnemos_ro`, whose read-only-ness was proven at `M1`
-(`ADAPTATION §8`: `mnemos_ro` INSERT → `ERROR: permission denied for table region`).
-`Settings.analytics_database_url` already points at it as `mnemos_ro`, and
-`sql_statement_timeout_ms`, `sql_max_rows` and `sql_repair_attempts` are already settings.
-None of that is provisional; it was built at `M1` for this milestone.
+**What deliverable 1 already gives you, so deliverable 3 does not rebuild it:**
+- `DatasourceService` (`features/datasources/application/service.py`) — `register()` and
+  `refresh_schema()`. Deliverable 3 will add a `generate()`-shaped method or a sibling
+  service; decide by reading `service.py` first, not by guessing its shape.
+- `sql_schema_object` rows, one table-level (`column_name IS NULL`) plus one per column,
+  per registered datasource — this **is** the schema context deliverable 3 feeds the model.
+  Read it with a plain `select(SqlSchemaObject).where(...)`, no new introspection needed.
+- The Postgres test fixture (`conftest.py`'s `postgres.analytics_ro_url` /
+  `.analytics_owner_dsn`) — a real `mnemos_analytics` seeded from the real
+  `deploy/postgres/init/02-analytics-seed.sql`. Deliverable 3/4's tests use this directly;
+  do not build a second fixture.
+- `mnemosctl datasource introspect --org-slug X` — run this against a live stack before
+  manually testing generation, or there will be no cached schema to generate against.
 
 **Read first, in this order:**
 
-1. §0 through §4 of this file, and the `A2` write-up in §3 — the flow shape (`flows/rag/`),
-   the streaming reuse, and the provisional `use_documents` selector are all patterns this
-   milestone follows and extends.
+1. §0 through §4 of this file, and the `A3` (deliverable 1) and `A2` write-ups in §3 — the
+   flow shape (`flows/rag/`), the streaming reuse, and the provisional `use_documents`
+   selector are all patterns this milestone follows and extends.
 2. [`docs/CodingStandards.md`](docs/CodingStandards.md) §9's **mandatory case 4**: "DML
    nested inside a CTE, inside a `UNION`, and inside a subquery is rejected; unparseable
    SQL is rejected fail-closed rather than passed through." Those four are the acceptance
@@ -1574,17 +1710,24 @@ None of that is provisional; it was built at `M1` for this milestone.
    `datasources` schema group — `sql_datasource`, `sql_run` (per-attempt safety verdicts,
    authorized/denied tables) and `glossary_term` all exist from `M2`.
 5. **The code you extend:**
+   - `backend/src/mnemos/features/datasources/` — deliverable 1's whole tree
+     (`domain/schema.py`, `application/{ports,service}.py`,
+     `adapters/{introspection,repository}.py`). This is the pattern: pure domain functions,
+     `Protocol` ports, Postgres adapters, a thin CLI or flow on top. Deliverables 2-4 are
+     more of this feature, not a new one.
    - `backend/src/mnemos/features/datasources/adapters/models.py` — `SqlDatasource`,
-     `SqlRun`, `SqlSchemaObject`, `GlossaryTerm`, already specified. Read the comments:
-     `sql_run` is designed to record *every attempt* with its verdict, which is what makes
-     a refused query auditable rather than merely refused.
+     `SqlRun`, `SqlSchemaObject`, `GlossaryTerm`. Read the comments: `sql_run` is designed
+     to record *every attempt* with its verdict, which is what makes a refused query
+     auditable rather than merely refused.
    - `backend/src/mnemos/core/types.py` — `SqlVerdict` already enumerates
      `allowed`/`rejected_write`/`rejected_unauthorized_table`/`rejected_unparseable`/
      `rejected_too_complex`, and `check_in` pins the column to it. Use these; do not invent
      a parallel vocabulary.
-   - `backend/src/mnemos/flows/rag/` (`A2`) — the flow shape to mirror: a `domain/` of pure
-     functions, an `application/` that streams, reusing `A1`'s `ChatModel` port and the
-     `AssistantToken`/`AssistantDone`/`AssistantError` events unchanged.
+   - `backend/src/mnemos/flows/rag/` (`A2`) — the flow shape to mirror for deliverable 4: a
+     `domain/` of pure functions, an `application/` that streams, reusing `A1`'s `ChatModel`
+     port and the `AssistantToken`/`AssistantDone`/`AssistantError` events unchanged. This
+     likely becomes `flows/nl2sql/`, sibling to `flows/rag/`, for the same layering reason
+     (`flows` may depend on multiple `features`; `features` never depends on `flows`).
    - `backend/src/mnemos/entrypoints/api/routers/chat.py` — where `use_documents` selects a
      flow today. `A3` adds a second selector in the same provisional shape; `A4` replaces
      both with a classifier.
@@ -1592,31 +1735,34 @@ None of that is provisional; it was built at `M1` for this milestone.
      deliberately named (`{kind: "citation", ...}`) so `A3` can add `{kind: "sql_run", ...}`
      without reshaping it.
 
-**Scope — five deliverables, one commit each.**
+**Scope — deliverables 2-5, one commit each. (1 is done — see above.)**
 
-1. **Schema introspection.** `features/datasources/`: connect to `analytics_database_url`
-   as `mnemos_ro`, read `information_schema` for tables, columns and types, and cache the
-   result in `sql_schema_object`. This is the schema *context* the generator is given —
-   the model cannot be trusted to guess table names, and a hallucinated table is the
-   commonest NL2SQL failure. Refresh is an explicit action, not a per-query cost.
 2. **The business glossary.** `glossary_term` rows — "revenue means `sales_order.total_amount`
    summed", "active customer means one with an order in the last 90 days" — fed into the
-   same schema context. Seed a handful for the demo warehouse; a CRUD surface for them is
-   `C2`-adjacent and out of scope unless the UI slice needs one to be demonstrable.
+   same schema context deliverable 1 built. Seed a handful for the demo warehouse; a CRUD
+   surface for them is `C2`-adjacent and out of scope unless the UI slice needs one to be
+   demonstrable. Suggested shape: a pure `domain` function that renders `SqlSchemaObject` +
+   `GlossaryTerm` rows into the text block deliverable 3's prompt will use — this was
+   deliberately *not* built in deliverable 1 (it needs the glossary to have any rows to
+   render), so it belongs here, not as a deliverable-1 leftover.
 3. **Generation and the AST guard.** Generate SQL through the `ChatModel` port, then parse
-   it with **`sqlglot`** (a new dependency — free, pure-Python, and the alternative is
-   hand-rolling a SQL parser, which is the actual security-critical mistake here) and walk
-   the AST. Reject anything that is not a single read: `INSERT`/`UPDATE`/`DELETE`/`MERGE`/
-   `TRUNCATE`/`DROP`/`ALTER`/`CREATE`/`GRANT`, and reject them **wherever they appear** —
-   inside a CTE, inside a `UNION` arm, inside a subquery. Unparseable SQL is rejected
-   **fail-closed**, never passed through on the theory that the role will catch it. Every
-   attempt writes a `sql_run` row with its `SqlVerdict` and the tables it touched.
+   it with **`sqlglot`** (already a declared dependency, per the original brief — nothing
+   imports it yet; free, pure-Python, and the alternative is hand-rolling a SQL parser,
+   which is the actual security-critical mistake here) and walk the AST. Reject anything
+   that is not a single read: `INSERT`/`UPDATE`/`DELETE`/`MERGE`/`TRUNCATE`/`DROP`/`ALTER`/
+   `CREATE`/`GRANT`, and reject them **wherever they appear** — inside a CTE, inside a
+   `UNION` arm, inside a subquery. Unparseable SQL is rejected **fail-closed**, never passed
+   through on the theory that the role will catch it. Every attempt writes a `sql_run` row
+   with its `SqlVerdict` and the tables it touched.
 4. **Execution and narration.** Execute the allowed statement as `mnemos_ro` with
    `sql_statement_timeout_ms` and a `sql_max_rows` cap, then narrate the result set through
    the model. Persist the assistant message with `flow="nl2sql"` and the `sql_run` id, so a
    later reader can open the answer and find the exact statement that produced it.
    `sql_repair_attempts` exists for the "the model wrote invalid SQL, tell it the error and
    let it try once more" loop — bounded, and every attempt gets its own `sql_run` row.
+   **Use a short-lived `create_async_engine(dsn, pool_size=1, ...)` the way
+   `PostgresIntrospector` does** (`adapters/introspection.py`) — deliverable 1 already
+   established the pattern of not holding a persistent pool open for the analytics side.
 5. **The SQL panel.** In the chat surface: the generated SQL (monospace, syntax-plain is
    fine), the result grid, and the narration. **And the refusal**, as a real state: when
    the guard rejects, the screen shows the SQL it refused and the verdict in plain words —
@@ -1646,7 +1792,7 @@ None of that is provisional; it was built at `M1` for this milestone.
   40), ask "what was revenue by region last quarter", see SQL + grid + narration. Then
   provoke a refusal and see it named on screen. Skips loudly with the stack down; cleans up
   after itself like `knowledge.spec.ts` does.
-- **Gates:** `make test` above 278 · `make lint` · `make types` clean · `make check` clean
+- **Gates:** `make test` above 298 · `make lint` · `make types` clean · `make check` clean
   (**a migration may genuinely be needed here** if `sql_run` lacks a column the flow wants
   — unlike `A1` and `A2`, that would be legitimate; say so in §4 and write a reversible
   revision) · frontend `lint`, `tsc --noEmit`, `test`, `build` · **CI green, all jobs.**
