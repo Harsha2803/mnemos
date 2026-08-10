@@ -31,6 +31,10 @@ dependencies = [
   # auth
   "pyjwt[crypto]>=2.9",
   "argon2-cffi>=23.1",
+  # Already present transitively via `pyjwt[crypto]`, but `core.crypto` imports
+  # `cryptography.fernet` directly to encrypt datasource DSNs at rest, and a
+  # direct import deserves a direct declaration.
+  "cryptography>=43.0",
   # Already present transitively via Starlette, but `core.security` imports it
   # directly to push argon2 onto a worker thread, and a direct import deserves a
   # direct declaration — otherwise the hasher breaks the day Starlette drops it.

@@ -30,6 +30,10 @@ x-backend-env: &backend-env
   MNEMOS_OLLAMA_BASE_URL: http://ollama:11434
   MNEMOS_OLLAMA_MODEL: qwen2.5:3b-instruct
   MNEMOS_EMBEDDER: hashing
+  # Same Postgres instance, second database (deploy/postgres/init/02-analytics-seed.sql),
+  # `mnemos_ro` — a role that physically cannot write, the second of NL2SQL's two
+  # independent read-only defences.
+  MNEMOS_ANALYTICS_DATABASE_URL: postgresql+asyncpg://mnemos_ro:mnemos_ro_dev@postgres:5432/mnemos_analytics
   # Split-horizon OIDC: the browser must reach Keycloak on a public URL while the
   # API resolves it over the compose network. Using one URL for both is the classic
   # "issuer mismatch" failure in containerised OIDC.

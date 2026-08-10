@@ -26,12 +26,21 @@ import getpass
 import os
 import sys
 
-from sqlalchemy import text
+from sqlalchemy import select, text
 
 from mnemos.core.config import Settings, get_settings
-from mnemos.core.errors import MnemosError, ValidationError
+from mnemos.core.crypto import DsnCipher
+from mnemos.core.errors import MnemosError, NotFoundError, ValidationError
+from mnemos.core.ids import DEFAULT_ID_GENERATOR
 from mnemos.core.security import PasswordHasher
+from mnemos.features.datasources.adapters.introspection import PostgresIntrospector
+from mnemos.features.datasources.adapters.repository import (
+    DatasourceRepository,
+    SchemaObjectRepository,
+)
+from mnemos.features.datasources.application.service import DatasourceService
 from mnemos.features.identity.adapters.bootstrap_store import SqlBootstrapStore
+from mnemos.features.identity.adapters.models import Org
 from mnemos.features.identity.application.bootstrap import (
     INTERNAL_PROVIDER_SLUG,
     OIDC_PROVIDER_SLUG,
@@ -40,7 +49,19 @@ from mnemos.features.identity.application.bootstrap import (
     BootstrapRequest,
     OidcSettings,
 )
+from mnemos.features.identity.domain import OrgId
 from mnemos.platform.db import Database
+
+#: The one warehouse this build ships. A datasource registry UI is out of
+#: scope for `A3` (TRACKER §5) — registration is this CLI command, same shape
+#: as `bootstrap` creating the one org an operator needs to get started.
+DEMO_DATASOURCE_SLUG = "sales-warehouse"
+DEMO_DATASOURCE_NAME = "Sales Warehouse (demo)"
+DEMO_DATASOURCE_DESCRIPTION = (
+    "The seeded analytics.* schema (deploy/postgres/init/02-analytics-seed.sql): "
+    "region, product, customer, sales_order."
+)
+DEMO_DATASOURCE_SCHEMAS = ["analytics"]
 
 #: Where the admin password may be read from. It is an environment variable or an
 #: interactive prompt and **never a command-line argument**: `argv` is readable by
@@ -240,6 +261,48 @@ async def _bootstrap(args: argparse.Namespace, password: str) -> int:
     return 0
 
 
+async def _resolve_org_id(db: Database, org_slug: str) -> OrgId:
+    """`org` carries no RLS policy (migration 0004's own docstring explains
+    why), so this is a plain lookup — no GUC to set, nothing to scope."""
+    async with db.session() as session:
+        org = await session.scalar(select(Org).where(Org.slug == org_slug))
+    if org is None:
+        raise NotFoundError(f"no org with slug {org_slug!r}")
+    return OrgId(org.id)
+
+
+async def _datasource_introspect(args: argparse.Namespace) -> int:
+    settings = get_settings()
+    db = Database(settings)
+    try:
+        org_id = await _resolve_org_id(db, args.org_slug)
+
+        cipher = DsnCipher(settings.dsn_encryption_key.get_secret_value())
+        service = DatasourceService(
+            datasources=DatasourceRepository(db, DEFAULT_ID_GENERATOR),
+            schema_objects=SchemaObjectRepository(db, DEFAULT_ID_GENERATOR),
+            introspector=PostgresIntrospector(),
+            cipher=cipher,
+        )
+        datasource = await service.register(
+            org_id=org_id,
+            slug=args.slug,
+            name=DEMO_DATASOURCE_NAME,
+            description=DEMO_DATASOURCE_DESCRIPTION,
+            dsn=settings.analytics_database_url,
+            read_only_role="mnemos_ro",
+            allowed_schemas=DEMO_DATASOURCE_SCHEMAS,
+        )
+        rows_written = await service.refresh_schema(org_id=org_id, slug=args.slug)
+    finally:
+        await db.dispose()
+
+    print(f"datasource       : {datasource.slug}  ({datasource.name})")
+    print(f"allowed schemas  : {', '.join(datasource.allowed_schemas)}")
+    print(f"schema objects   : {rows_written} rows cached in sql_schema_object")
+    return 0
+
+
 def main() -> int:
     parser = argparse.ArgumentParser(prog="mnemosctl", description="Mnemos operations")
     sub = parser.add_subparsers(dest="group", required=True)
@@ -271,6 +334,27 @@ def main() -> int:
     boot.add_argument("--oidc-issuer-internal", default=None, help="Issuer the API validates over")
     boot.add_argument("--oidc-client-id", default=None, help="OIDC client id, e.g. 'mnemos-web'")
 
+    ds_parser = sub.add_parser("datasource", help="NL2SQL warehouse registration and introspection")
+    ds_sub = ds_parser.add_subparsers(dest="command", required=True)
+    introspect = ds_sub.add_parser(
+        "introspect",
+        help="register the demo warehouse (idempotent) and refresh its cached schema",
+        description=(
+            "Registers the seeded analytics.* warehouse for one org if it is not already "
+            "registered, then reads information_schema through the mnemos_ro role and "
+            "replaces the org's cached sql_schema_object rows. Explicit and on-demand — "
+            "never run implicitly on the query path."
+        ),
+    )
+    introspect.add_argument(
+        "--org-slug", required=True, help="Org to register the datasource under"
+    )
+    introspect.add_argument(
+        "--slug",
+        default=DEMO_DATASOURCE_SLUG,
+        help=f"Datasource slug (default: {DEMO_DATASOURCE_SLUG})",
+    )
+
     args = parser.parse_args()
 
     if args.group == "bootstrap":
@@ -288,6 +372,13 @@ def main() -> int:
 
     if args.group == "db" and args.command == "doctor":
         return asyncio.run(_doctor())
+
+    if args.group == "datasource" and args.command == "introspect":
+        try:
+            return asyncio.run(_datasource_introspect(args))
+        except MnemosError as exc:
+            print(f"datasource introspect failed: {exc.message}", file=sys.stderr)
+            return 2
 
     parser.print_help()
     return 1
