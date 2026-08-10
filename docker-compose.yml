@@ -196,6 +196,7 @@ services:
       postgres: {condition: service_healthy}
       redis: {condition: service_healthy}
       minio: {condition: service_healthy}
+      minio-init: {condition: service_completed_successfully}
       migrate: {condition: service_completed_successfully}
     command: ["uvicorn", "mnemos.entrypoints.api.main:app",
               "--host", "0.0.0.0", "--port", "8000", "--proxy-headers"]
