@@ -6,23 +6,48 @@
 > **and [`docs/ADAPTATION.md`](docs/ADAPTATION.md)** *in the same commit* — a stale
 > tracker is worse than none.
 
-**Last updated:** 2026-08-15 (`A3` deliverables 4-5 — execution, narration, the repair loop,
-and the SQL panel including the denial screen — done, verified end to end in a real browser
-against the real stack, all five deliverables now on `feat/a3-nl2sql`; PR #15 ready to merge)
-**Phase:** **A — make it a chatbot.** `A0` ✅, `A1` ✅, `A2` ✅ merged. `A3` **done, all 5/5**
-(schema introspection, business glossary, generation + the AST guard, execution + narration
-+ repair loop, the SQL panel + denial screen) — pending merge to `main`.
-**Next task:** `B1` — connect a source and watch it ingest. Not specified in detail yet;
-write its full brief in §5 before starting it, the same way `A3`'s brief was written when
-`A2` finished. This session stops at the working `A3` vertical slice, per the explicit
-instruction that started it — feature richness and the next milestone are later sessions'
-work, not a reason to keep going here.
-**After `A3` is fully testable:** the plan is re-sequenced, effective 2026-08-15 — `B1`/`B2`
-(ingestion) are next, pulled ahead of `A4` (the router). See the note below and §3.0.
-**Branch right now:** `feat/a3-nl2sql`, pushed, PR #15 — all five deliverables committed,
-CI green, real-browser evidence recorded below and in §3. Ready to come out of draft and
-merge. `main`'s tip is still the squashed `A2` commit (PR #14) until this merges.
+**Last updated:** 2026-08-15 (later) — `A3` is merged to `main` (PR #15, squashed). This
+session wrote the full `B1` brief in §5 — five deliverables, in build order, grounded in
+what the current code and docs actually contain rather than guessed — and did not start
+building it, per §0 rule 9.
+**Phase:** **A — make it a chatbot.** `A0` ✅, `A1` ✅, `A2` ✅, `A3` ✅ — all merged to
+`main`. Phase A is complete. Build order deviates from phase order once: `B1`/`B2` come
+next, before `A4` (2026-08-15 evening re-sequencing note below).
+**Next task:** `B1` — connect a source and watch it ingest. **Fully specified in §5** —
+five deliverables (the `SourceConnector` port + factory, the Redis Streams event bus, the
+realtime gateway's auth gap, the worker's first real job-processing path, and the sources
+UI), a "first Alembic migration since `M2`" flag, an explicit not-in-scope list, and the
+evidence bar to close it. A future session builds it from that brief; this session only
+wrote it.
+**Branch right now:** none open. `main`'s tip is the squashed `A3` merge plus this session's
+docs-only commit (no code changed).
 
+> ### 2026-08-15 (later) — the `B1` brief written, nothing built
+>
+> A fresh session, picking up right after `A3`'s merge to `main`. §0 rule 9 (one task per
+> session) is explicitly back in force, and §5 as this session found it said `B1` was "not
+> specified in detail yet — write its full brief before starting it." This session took that
+> literally: it read ADAPTATION §3's `connectors` row, §4/§6/§7, `docs/ThreatModel.md`'s
+> connector/SSRF and trust-tier rows, and the actual current code (`features/connectors/` is
+> three empty `__init__.py` files; `platform/events/` does not exist yet;
+> `entrypoints/worker/main.py`'s stuck-job reaper already exists and already works against
+> real `ingest_job` columns, but nothing has ever inserted a *real* job for it to claim;
+> `entrypoints/realtime/main.py` is a working Redis pub/sub → WebSocket relay that is,
+> **by its own docstring, still completely unauthenticated** — a real gap, not a hypothetical
+> one, that `B1` is the first feature to actually need closed). §5 now holds five deliverables
+> in build order, an explicit "not `B1`" boundary list (so `B2`'s heartbeat/backoff/progress
+> depth doesn't get built early), a flag that `B1` needs the **first Alembic migration since
+> `M2`** (a new `content_source` table), and the evidence bar to close it — the same level of
+> detail `A3`'s deliverable briefs were written at.
+>
+> **No code changed.** `features/connectors/`, `platform/events/`, the worker, the realtime
+> gateway and the frontend are exactly as `A3` left them. This is deliberate, not a stall:
+> writing a five-deliverable brief and then starting deliverable 1 in the same sitting is the
+> "roll on to the next thing" pattern rule 9 exists to prevent, and the project's own history
+> already has a clean example of *not* doing that (deliverable 3's session stopped with
+> deliverable 4 fully specified in front of it rather than starting it). The next session
+> should read §5 and begin at deliverable 1.
+>
 > ### 2026-08-15 — `A3` deliverables 4-5 done: execution, narration, the SQL panel, the
 > denial screen — the full vertical slice verified end to end in a real browser
 >
@@ -2134,20 +2159,148 @@ Recorded so they are not rediscovered as surprises:
 
 `A3` — ask about your data — is **done, all 5/5 deliverables**, verified end to end in a
 real browser against the real stack. Full evidence is in the dated note near the top of
-this file ("`A3` deliverables 4-5 done") and in §3's `A3` entry. Do not re-read an older
-version of this section looking for an A3 brief — there isn't one anymore; the milestone is
-closed.
+this file ("`A3` deliverables 4-5 done") and in §3's `A3` entry.
 
-**Next: `B1` — connect a source and watch it ingest.** Not specified in detail yet. Before
-starting it, a future session should write its full brief here, at the same level of detail
-the `A3` brief this section used to hold was written at — read ADAPTATION §3's `connectors`
-capability row and §7's milestone table first, then write the brief the same way the `A3`
-brief was written the session `A2` finished.
+**This session's task was to write the `B1` brief below, not to build `B1`.** §0 rule 9 is
+back in force and TRACKER's own next-task note asked explicitly for the brief to be written
+"before starting it" — the same shape as every other milestone's boundary in this project
+(deliverable 3's session, for instance, stopped with deliverable 4 already fully specified in
+front of it, rather than rolling on). This session read ADAPTATION §3's `connectors` row, §4
+(service topology), §6 (schema), §7's `B1` row, `docs/ThreatModel.md`'s connector/SSRF and
+trust-tier rows, and the current code in `features/connectors/` (three empty `__init__.py`
+files — nothing built yet), `platform/cache.py`, `entrypoints/worker/main.py` (the
+stuck-job reaper already exists and already touches `ingest_job`/`ingest_job_event` — see
+below), and `entrypoints/realtime/main.py` (a generic Redis pub/sub → WebSocket relay,
+**explicitly unauthenticated** — its own docstring says so). The brief below is grounded in
+what that reading found, not guessed. **A future session builds `B1` from this; this
+session does not touch `features/connectors/`, `platform/events/`, the worker, the realtime
+gateway, or the frontend.**
 
-**This session stops here, deliberately.** The project owner's instruction that started this
-session was explicit: get `A3` to a genuinely working, browser-verified state, then stop —
-"feature richness, optimization, additional capabilities, and polish can be done in later
-sessions." `B1` is exactly that kind of later-session work, not a continuation of this one.
+### `B1` — connect a source and watch it ingest
+
+**The sentence (C14):** connect a source — a MinIO/S3 bucket+prefix, a local filesystem
+directory, or an operator-curated list of HTTP URLs — browse what it contains, pick items to
+ingest, and watch each one move through `queued → running → done`/`failed` **live**, pushed
+over an authenticated WebSocket, while `ingest_job`/`ingest_job_event` (schema since `M2`,
+untouched by any real ingestion path until now) finally carry real rows for the first time.
+
+**What already exists and must be reused, not rebuilt:**
+- `platform/objectstore/port.py` + `s3.py` — the `ObjectStore` port and its MinIO adapter
+  from `A2`. The S3 connector adapter should sit on top of this port (list/get by
+  prefix), not open a second, parallel MinIO client.
+- `entrypoints/worker/main.py`'s `reap_stuck_jobs` — the lease/heartbeat/reclaim shape for
+  `ingest_job` already exists and already works (`status`, `attempts`, `max_attempts`,
+  `owner_id`, `heartbeat_at`, `lease_expires_at`, `error_code`, `error_detail` are all real
+  columns, exercised today). **`B1`'s worker loop claims a `queued` job and actually
+  processes it** — extract/chunk/embed — for the first time; it does not redesign the
+  reaper. Backoff strategy, retry depth beyond one immediate failure, and a per-job
+  *progress* UI (percentage, partial chunk counts) are `B2`, not `B1` — don't build them
+  here even though they'd be tempting to add while already in this code.
+- `features/knowledge/application/service.py`'s `upload_document` — extract → chunk → embed
+  is already written, synchronously, for the manual-upload path (its own docstring says this
+  is deliberate through `B2`). `B1` needs that same extract/chunk/embed body reachable from
+  the worker too, for connector-sourced items — factor it out of `upload_document` into a
+  function both the HTTP handler and the worker call, rather than duplicating the pipeline.
+  **The manual upload path itself does not change** — it stays synchronous; `B1` adds a
+  second, job-queued path alongside it, it does not migrate the first one onto the queue.
+- `core/crypto.py`'s `DsnCipher` (Fernet) — the encrypted-config-at-rest pattern `A3`'s
+  datasource DSNs use. A connector's config (bucket/credentials, or a filesystem root, or a
+  URL allowlist) is exactly this shape again; reuse the pattern (a new cipher instance/key,
+  `MNEMOS_SOURCE_ENCRYPTION_KEY`, not `MNEMOS_DSN_ENCRYPTION_KEY` itself — different secret,
+  same rotation story).
+
+**A real gap this session found, which `B1` must close before the sources UI can use it:**
+`entrypoints/realtime/main.py`'s `/ws/{channel}` accepts any connection and relays anything
+published to `mnemos:{channel}` — no JWT check, no org scoping. Its own docstring says this
+is deliberate "until M3" (identity), which is now done (`A0`). **This is the first feature
+that actually needs the realtime gateway**, so `B1` is where its auth debt gets paid: the
+WebSocket handshake must validate the platform JWT (as a query parameter or subprotocol,
+since browsers cannot set an `Authorization` header on a WS upgrade — decide which, and say
+which in the eventual done-note) the same way the HTTP fail-closed guard does, and the
+channel a caller subscribes to must be derived from their own org, never taken from the
+client-supplied `channel` path segment as-is (a `mnemos:org:{other_org_id}:ingestion`
+channel string typed into the WS URL by hand must be refused, not relayed) — this is a
+STRIDE-E "forged header" cousin (ThreatModel.md §3⑤): identity for a channel subscription
+must come from the validated token, never from client-supplied path/query data.
+
+**Deliverables, in build order — one commit (or a small adjacent group) per numbered item,
+matching how `A3`'s deliverables were committed:**
+
+1. **`SourceConnector` port + factory, `features/connectors/`.** `domain/port.py`: a
+   `SourceItem` value (uri, name, size_bytes, content_type, modified_at) and a
+   `SourceConnector` protocol — `list_items() -> Sequence[SourceItem]`,
+   `fetch(uri: str) -> bytes`. Three adapters: an S3 connector wrapping the existing
+   `ObjectStore` port (bucket + prefix), a local-filesystem connector scoped to an
+   **operator-configured allowlisted root** (default-deny outside it — the same discipline
+   `A3`'s `allowed_schemas` enforces, and `test_register_rejects_an_empty_allowlist` is the
+   pattern to copy for "reject an unconfigured root"), and an HTTP connector that fetches
+   only from an **operator-curated list of URLs**, never a crawl and never an
+   arbitrary user-supplied URL — apply the SSRF deny-list ThreatModel.md §3⑥ already commits
+   to (link-local/loopback/private ranges, DNS-rebinding guard) to every URL before fetching,
+   the same control `A3`/MCP already promise and none of them have had to implement yet
+   (`B1` is the first consumer). A new `content_source` table (org-scoped, encrypted config,
+   `kind` discriminator) is needed — **this is the first Alembic migration since `M2`**;
+   write it carefully and run `alembic check` before assuming the schema is already there,
+   unlike every `A3` deliverable which got to skip this step. `mnemosctl connector register
+   --org-slug X --kind {s3,local,http} ...` and `mnemosctl connector list-items --slug Y`
+   mirror `datasource introspect`'s CLI pattern.
+2. **The event bus, `platform/events/`.** An `EventBus` port + a Redis Streams adapter
+   (`XADD`/consumer-group `XREADGROUP`, not the pub/sub `platform/cache.py` already has for
+   the realtime gateway's existing channels — Streams give replay/durability pub/sub does
+   not, which is exactly why ADAPTATION §3 specifies Streams here and not a second pub/sub
+   channel). Every `ingest_job` transition the worker makes (deliverable 4) both appends to
+   `ingest_job_event` (durable, queryable) **and** publishes to the org's ingestion stream
+   (live). Decide, and document the decision, how the realtime gateway gets from "a Streams
+   entry landed" to "a browser's WebSocket receives it" — the two live options are (a) the
+   worker publishes to both the Stream and the existing pub/sub channel the gateway already
+   relays, or (b) the realtime gateway itself runs a consumer-group reader per active
+   subscription. (a) is far less new code and matches what the gateway already does; (b) is
+   what "Streams" is really for (replay after a reconnect) but is real new work in a service
+   that currently has none. A reasonable default is (a) for `B1` with a note that replay-on-
+   reconnect is exactly the kind of depth `B2`'s "watch every job's progress" sentence would
+   want — but this is a real judgment call for whoever builds it, not settled here.
+3. **Close the realtime auth gap** (see above) — JWT-validated WS handshake, org-derived
+   channel scoping, a test that proves a token for org A cannot subscribe to org B's
+   ingestion channel even by typing the channel name directly into the WS URL.
+4. **The worker claims and processes a real job.** Extend `entrypoints/worker/main.py`'s
+   poll loop: claim one `queued` `ingest_job` (`FOR UPDATE SKIP LOCKED`, mirroring the
+   reaper's own claim style) → `running` + heartbeat → call the factored-out extract/chunk/
+   embed body (deliverable 1's note above) against the connector-fetched bytes → `done`, or
+   `failed` with `error_code`/`error_detail` on the first exception (no retry-with-backoff
+   yet — that is `B2`) → an `ingest_job_event` row and a live publish at every transition.
+   Connector-sourced documents get a `trust_tier` **assigned per ThreatModel.md §4's "layer
+   1" rule — external connectors ≥ 4** — not `knowledge/application/service.py`'s
+   `DEFAULT_TRUST_TIER = 10` reused unexamined; read that table before picking the number,
+   since it is a security-relevant constant, not a cosmetic one.
+5. **The sources UI, `frontend/src/app/(app)/sources/`.** Connect a source (a form per
+   connector kind), browse its listed items in a table, select some and ingest them, then
+   watch a live event feed of `queued`/`running`/`done`/`failed` transitions arrive over the
+   now-authenticated WebSocket with no page refresh. Each state pairs an icon with a
+   plain-word label, never colour alone — the same accessible-state discipline
+   `SqlPanel.tsx` already established and `test_no_component_hardcodes_a_colour` already
+   enforces (DesignSystem tokens only). New Playwright coverage: register the local-
+   filesystem connector against a small fixture directory (no real S3 bucket or live URL
+   needed in CI — the point of doing local filesystem first in this deliverable list is that
+   it is the one connector kind a CI runner can exercise for free), ingest one file, and
+   observe its job reach `done` live.
+
+**Explicitly NOT `B1`, so nobody drifts into building it early:** heartbeat/backoff retry
+depth beyond one immediate failure, a per-job progress percentage or partial-chunk count,
+more than one adapter per connector kind, crawling or discovering URLs (the HTTP connector
+only ever fetches an operator-supplied list), and migrating `A2`'s manual-upload path onto
+the job queue. All of that is `B2` or later — see §5's "Then, in order" list below.
+
+**Evidence bar to close `B1`,** matching every prior milestone's bar: `make test` green with
+new coverage for each connector adapter (including the SSRF deny-list actually refusing a
+loopback/link-local URL, not just asserting it exists), the event bus round-trip, the
+worker's claim-and-process path end to end against real Postgres + Redis, and the WS
+cross-org channel refusal; `make lint` / `make types` / `make check` (including a clean
+`alembic check` against the new migration) all clean; `frontend`'s lint/tsc/test/build
+clean; the new Playwright sources flow green; **real browser verification** before calling
+it done (C12/C14) — connect the local filesystem connector against real seeded fixture
+files, in a real browser, and watch the live feed move, the same bar `A3`'s browser
+verification set; TRACKER and `docs/ADAPTATION.md` updated in the same commit as each
+deliverable, not batched at the end.
 
 ### Then, in order — this list is the plan, and it no longer matches phase order exactly
 
@@ -2158,12 +2311,13 @@ why `B1`/`B2` now sit before `A4`. The phase tables still group work by kind; th
 promise strict A-then-B-then-C-then-D order.
 
 - **`A3` — ask about your data.** ✅ Done, all 5/5 deliverables, verified 2026-08-15.
-- **`B1` — connect a source and watch it ingest.** ⬅ **next.** Object storage port +
-  `S3ObjectStore` already exist from `A2` (MinIO); `B1` adds the `SourceConnector`
-  abstraction (MinIO/S3, local filesystem, HTTP URL) and a Redis Streams event bus, so a
-  source is *connected and browsed* rather than only uploaded file-by-file, with ingestion
-  events visible live in a new sources UI. Not specified in detail yet — write its full
-  brief in §5 before starting it, the same way `A3`'s brief was written when `A2` finished.
+- **`B1` — connect a source and watch it ingest.** ⬅ **next, fully specified above.**
+  Object storage port + `S3ObjectStore` already exist from `A2` (MinIO); `B1` adds the
+  `SourceConnector` abstraction (MinIO/S3, local filesystem, HTTP URL), a Redis Streams
+  event bus, an authenticated realtime channel, and the worker's first real job-processing
+  path, so a source is *connected and browsed* rather than only uploaded file-by-file, with
+  ingestion events visible live in a new sources UI. Five deliverables, in build order,
+  above — read them before starting rather than re-deriving the design.
 - **`B2` — ingestion at scale.** Heartbeat, retries, status history, and a stuck-job reaper
   over the job machinery `B1` introduces, with a per-job progress UI. Depends on `B1`
   existing first.

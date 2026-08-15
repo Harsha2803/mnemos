@@ -247,7 +247,7 @@ authoritative for sequencing, not these tables' phase grouping.
 
 | ID | What it builds | You can now… | Status |
 |---|---|---|---|
-| **B1** | Object storage · source connectors (MinIO/S3, local FS, HTTP) · Redis Streams event bus · sources UI | **connect a source, browse it, and watch ingestion events arrive live** | ⬜ **next after `A3`** |
+| **B1** | Object storage · source connectors (MinIO/S3, local FS, HTTP) · Redis Streams event bus · sources UI | **connect a source, browse it, and watch ingestion events arrive live** | ⬜ **next — brief written 2026-08-15, [TRACKER §5](../TRACKER.md#5-next-task)** |
 | **B2** | Ingestion jobs at scale: heartbeat, retries, status history, stuck-job reaper · per-job progress UI | **ingest a folder and watch every job's progress — including one that dies, surfaced as stuck rather than silently lost** | ⬜ **after `B1`** |
 | **B3** | MCP tool runtime: registry, per-user credentials, trust tiers, approval gates · tool console | **register a tool, have the assistant call it, and approve a gated call** — with a denial that names the offending source on screen | ⬜ |
 | **B4** | Agent flow: bounded state machine over tools, checkpoints, step trace | **give it a multi-step task and watch it plan, call tools and finish — with every step inspectable** | ⬜ |
@@ -1042,22 +1042,30 @@ here on signs in as `analyst@mnemos.local` instead.
 
 ### Not started
 
-**Phase A3 onward, and all of B, C and D** — §7. Concretely, and stated plainly because the
-gap between what `docs/` describes and what runs is the thing this file exists to keep
-honest:
+**All of B, C and D** — §7. Phase A is complete as of `A3` (2026-08-15). Concretely, and
+stated plainly because the gap between what `docs/` describes and what runs is the thing
+this file exists to keep honest:
 
-- **There is no NL2SQL.** The `mnemos_analytics` warehouse is seeded and the `mnemos_ro`
-  role is proven read-only (below), but nothing generates SQL against them. `A3`, and it
-  is next.
-- **There is no router.** A person still has to tick "Use documents" to get a grounded
-  answer; nothing classifies a message to a flow on its own. `A4` — and both provisional
-  selectors are written down as provisional so `A4` knows what to remove.
+- **There is no source connector, event bus, or sources UI.** Documents still arrive only
+  through `A2`'s manual upload form; `features/connectors/` is three empty `__init__.py`
+  files and `platform/events/` does not exist. `B1` — its full five-deliverable brief is in
+  [TRACKER §5](../TRACKER.md#5-next-task), written 2026-08-15 (later), not yet built.
+- **The realtime WebSocket gateway is unauthenticated.** It relays any channel to any
+  connection; nothing has needed it enough to close that gap yet. `B1` is the first feature
+  that does, and its brief calls this out explicitly.
+- **There is no router.** A person still has to tick "Use documents" or "Ask your data" to
+  get a grounded answer; nothing classifies a message to a flow on its own. `A4` — moved
+  after `B1`/`B2` in the 2026-08-15 (evening) re-sequencing — and both provisional selectors
+  are written down as provisional so `A4` knows what to remove.
 - **There is no tool runtime, no agent flow, no prompt store and no cost ledger.** `B3`,
   `B4`, `C2`.
 - **The context inspector shows a cited passage, not a context bundle.** `A2` gave it its
   first real content; what was admitted, what was excluded and why, and the token spend
   against budget, are `C4`. So is bitemporal memory, and so is re-running the benchmark on
   Postgres — until then the README's numbers stay labelled as measured on SQLite.
+- ~~**There is no NL2SQL.**~~ **Built in `A3`.** Introspection, business glossary,
+  generation behind an AST read-only guard, execution as `mnemos_ro`, narration, the repair
+  loop, and the SQL panel with its denial screen — verified end to end in a real browser.
 - ~~**There is no RAG in this stack.**~~ **Built in `A2`.** Upload, extract, chunk, embed
   onto pgvector HNSW, retrieve with the ACL predicate inside the scan, cite.
 - ~~**There is no conversation surface.**~~ **Built in `A1`.**
