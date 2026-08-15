@@ -4,8 +4,9 @@
 > self-contained: architecture, the capability inventory, schema, milestones, and current
 > state. [`TRACKER.md`](../TRACKER.md) holds live task status; this holds the design.
 
-**Last updated:** 2026-08-10 — `A2` shipped (ask about your documents: upload, extract,
-chunk, embed onto pgvector, retrieve with the ACL predicate in the scan, cite); `A3` is next
+**Last updated:** 2026-08-15 — `A3` in progress on `feat/a3-nl2sql` (PR #15, draft):
+deliverables 1-3 of 5 done (schema introspection, business glossary, generation + the AST
+read-only guard); execution/narration and the SQL panel UI (4-5) remain — see §7/§8
 
 ---
 
@@ -232,17 +233,22 @@ Two rules govern every row.
 | **A0** | Sign-in screen + browser session handling (`M3.4`'s UI half) + the fail-closed route guard (deny by default) | **sign in through Keycloak, stay signed in across a reload, and sign out** — and no route added after this is reachable unauthenticated | ✅ 2026-08-03 |
 | **A1** | LLM gateway (Ollama) · chat sessions + messages · SSE streaming · the chat surface | **talk to it** — ask a question and watch the answer stream in token by token | ✅ 2026-08-08 |
 | **A2** | Upload → extract → chunk → embed (pgvector HNSW) · retrieval ported from `_v1` · RAG flow · citations · knowledge library | **upload a document and ask questions about it**, with citations you click into | ✅ 2026-08-11 (PR #14) |
-| **A3** | NL2SQL: introspection · glossary · generate · AST read-only guard · `mnemos_ro` execution · narration · SQL panel | **ask a question about your data in English** and see the SQL, the rows and the narration — and see the guard visibly refuse a write | ⬜ **next** |
-| **A4** | Router: classify a message → chat / RAG / NL2SQL · flow indicator | **ask anything without choosing a mode**, and see which flow answered and why | ⬜ |
+| **A3** | NL2SQL: introspection · glossary · generate · AST read-only guard · `mnemos_ro` execution · narration · SQL panel | **ask a question about your data in English** and see the SQL, the rows and the narration — and see the guard visibly refuse a write | ✅ 2026-08-15 (PR #15) — verified end to end in a real browser |
+| **A4** | Router: classify a message → chat / RAG / NL2SQL · flow indicator | **ask anything without choosing a mode**, and see which flow answered and why | ⬜ — built **after** `B1`/`B2` |
 
 **At the end of Phase A the thing this project is for exists.** Everything after deepens it.
+
+**Build order deviates from phase order once, starting 2026-08-15: `B1`/`B2` come right
+after `A3`, before `A4`.** [TRACKER's 2026-08-15 (evening) note](../TRACKER.md#5-next-task)
+has the reasoning; [TRACKER §5's "Then, in order" list](../TRACKER.md#5-next-task) is
+authoritative for sequencing, not these tables' phase grouping.
 
 **Phase B — make it a platform.**
 
 | ID | What it builds | You can now… | Status |
 |---|---|---|---|
-| **B1** | Object storage · source connectors (MinIO/S3, local FS, HTTP) · Redis Streams event bus · sources UI | **connect a source, browse it, and watch ingestion events arrive live** | ⬜ |
-| **B2** | Ingestion jobs at scale: heartbeat, retries, status history, stuck-job reaper · per-job progress UI | **ingest a folder and watch every job's progress — including one that dies, surfaced as stuck rather than silently lost** | ⬜ |
+| **B1** | Object storage · source connectors (MinIO/S3, local FS, HTTP) · Redis Streams event bus · sources UI | **connect a source, browse it, and watch ingestion events arrive live** | ⬜ **next after `A3`** |
+| **B2** | Ingestion jobs at scale: heartbeat, retries, status history, stuck-job reaper · per-job progress UI | **ingest a folder and watch every job's progress — including one that dies, surfaced as stuck rather than silently lost** | ⬜ **after `B1`** |
 | **B3** | MCP tool runtime: registry, per-user credentials, trust tiers, approval gates · tool console | **register a tool, have the assistant call it, and approve a gated call** — with a denial that names the offending source on screen | ⬜ |
 | **B4** | Agent flow: bounded state machine over tools, checkpoints, step trace | **give it a multi-step task and watch it plan, call tools and finish — with every step inspectable** | ⬜ |
 
@@ -304,11 +310,31 @@ merged. `docker compose up -d` brings up nine services with upload → ask → c
 to end; verified against the merged image, not just the branch, via the real
 `frontend/e2e/knowledge.spec.ts` Playwright suite.
 
-**The next task is `A3`** — natural language over the `mnemos_analytics` warehouse:
-introspection, a business glossary, generated SQL behind **two independent read-only
-defences** (an AST guard and the `mnemos_ro` role), execution, and narration, fully
-specified in [TRACKER §5](../TRACKER.md#5-next-task). The router that stops the user having
-to choose a flow is `A4`.
+**`A3` is in progress on `feat/a3-nl2sql`, PR #15 (draft, CI green, not merged).**
+Deliverables 1-3 of 5 are done: `mnemosctl datasource introspect` registers the seeded
+`mnemos_analytics` warehouse per org and caches its schema, connecting as `mnemos_ro` (the
+same role generated SQL executes as); `mnemosctl datasource seed-glossary` writes four
+curated business-vocabulary terms; `DatasourceService.render_context` renders the cached
+schema plus glossary into the text block the generation prompt uses; and
+`SqlGenerationService.generate()` calls the model once, parses the result with `sqlglot`,
+walks the whole AST for anything that is not a single read (`guard_sql`,
+`features/datasources/domain/guard.py`), and records every attempt — allowed or refused —
+as a `sql_run` row, demonstrable now via `mnemosctl datasource generate`. **Both of `A3`'s
+two independent read-only defences are now built and proven independently of each other**:
+the guard, and `mnemos_ro`'s inability to write at all
+(`test_the_readonly_role_refuses_a_write_the_guard_somehow_allowed`, which bypasses the
+guard entirely). Live evidence against a real local model is in
+[TRACKER §3](../TRACKER.md#-a3--ask-about-your-data-in-progress-35-pr-15-draft-2026-08-15):
+`qwen2.5:3b-instruct`, asked an adversarial question, complied and emitted a real `DELETE`
+— the guard, not the system prompt's wording, is what actually stopped it. Nothing about
+`A3` is visible in the *product* yet — no execution, no narration, no SQL panel — so the PR
+stays draft per C12 until deliverable 5 lands. Remaining scope: execution as `mnemos_ro`
+with the timeout/row-cap, narration, the repair loop, and the SQL panel UI, fully specified
+in [TRACKER §5](../TRACKER.md#5-next-task). **After `A3` is fully testable, the next
+milestone is `B1` (ingestion), not `A4`** — the plan was re-sequenced 2026-08-15 so
+ingestion, a materially new capability, lands before the router, which mostly changes how
+existing flows are triggered rather than adding one. See TRACKER's 2026-08-15 (evening)
+note for the full reasoning.
 
 `M3`'s exit criterion "RLS blocks cross-org" turned out to be unmet by `M2` rather than
 merely untested; that is written up in §8 and in
@@ -806,6 +832,152 @@ existed because `./frontend` had no Dockerfile and an unresolvable build context
 the whole `up`. It does now, so plain `docker compose up -d` brings the frontend up with
 everything else and `web` has a healthcheck of its own — a stack whose UI needs a
 remembered extra flag is a stack whose UI does not get looked at.
+
+### A3 — ask about your data ✅ verified end to end 2026-08-15
+
+All five deliverables done and, as of 2026-08-15, verified in a real browser against the
+real stack (Postgres, Ollama, the rebuilt `api`/`web` containers) — not merely against
+`pytest`. Deliverable 1 (schema introspection) landed 2026-08-11; deliverables 2 (business
+glossary) and 3 (generation + the AST read-only guard) landed 2026-08-15 morning;
+deliverables 4 (execution, narration, the repair loop) and 5 (the SQL panel, the denial
+screen) landed 2026-08-15 in the same session that did the browser verification, all on
+branch `feat/a3-nl2sql` (PR #15). Full evidence is in
+[TRACKER §3](../TRACKER.md#-a3--ask-about-your-data-verified-end-to-end-2026-08-15-pr-15)
+and the dated note near the top of that file.
+
+**Introspection connects with the datasource's own DSN, never through `Database`.**
+`Database` (`platform/db.py`) is the application's own Postgres, connected as `mnemos_app`
+with RLS-scoped sessions. `mnemos_analytics` is a second, unrelated Postgres database on
+the same server, connected as `mnemos_ro` — a role that is unprivileged in a completely
+different sense (it cannot write *anywhere*, not "cannot write outside its tenant"). A
+short-lived `create_async_engine(dsn, pool_size=1, ...)` per introspection call
+(`adapters/introspection.py`), disposed after — refresh is explicit and rare, not a
+connection the flow holds open.
+
+**The registry's DSN is encrypted at rest even though the demo DSN is not itself secret.**
+`SqlDatasource.dsn_encrypted` existed as a `LargeBinary` column since `M2` with no adapter
+that used it correctly; this deliverable added `core/crypto.py`'s `DsnCipher` (Fernet) and
+a `MNEMOS_DSN_ENCRYPTION_KEY` setting rather than leaving the column meaningfully unused —
+a registry that only sometimes encrypts is one an operator cannot reason about, and a real
+deployment's warehouse credentials are exactly the case this column exists for.
+
+**Test infrastructure now spans two databases on one container.** `conftest.py`'s
+`postgres` fixture creates `mnemos_analytics` alongside the existing `mnemos` database and
+seeds it by executing the real `deploy/postgres/init/02-analytics-seed.sql` — the same file
+`docker-compose.yml` runs — rather than a hand-written substitute. This is what let
+deliverable 1's tests prove the `mnemos_ro` role's can't-write guarantee directly
+(`INSERT ... -> asyncpg.exceptions.InsufficientPrivilegeError`) a session before deliverable
+3 (the AST guard) exists to depend on it.
+
+**Deliverable 2 (business glossary), done 2026-08-15.** `render_schema_context`
+(`domain/context.py`) is the one function this deliverable exists to build — pure,
+grouping `sql_schema_object` rows by table and listing `glossary_term` rows after them —
+and it is deliberately the thing `A3`'s eventual prompt assembly will call rather than
+re-deriving. `GlossaryRepository.ensure_terms` is idempotent by matching on `term` text
+rather than a synthetic key, and specifically **non-destructive**: re-running the seed
+after an operator has hand-edited a term's definition must not overwrite it, which is why
+the acceptance test checks that a re-seed with different content leaves the original in
+place, not merely that row counts stay stable. `mnemosctl datasource show-context` is new
+and not in the original deliverable text, but it is the real consumer that keeps
+`render_schema_context` from being a function nothing calls until deliverable 3 exists —
+consistent with TRACKER §0 rule 5 (no placeholders).
+
+**Deliverable 3 (generation + the AST read-only guard), done 2026-08-15.** `guard_sql`
+(`domain/guard.py`) is an **allowlist**, not a blocklist: the parsed statement must be
+`sqlglot.exp.Query`, and every node in the tree is walked for anything that writes, changes
+privileges, or is a shape `sqlglot` falls back to a generic `Command` for. A blocklist
+scoped to `INSERT`/`UPDATE`/`DELETE`/DDL was prototyped first and found to miss
+`SELECT ... INTO` (creates a table), `FOR UPDATE` (takes a write lock), and
+`EXPLAIN`/`VACUUM`/`CALL`/`COPY`/`SET` (none of which is a DML/DDL node at all) — requiring
+the positive case closes all of these by construction rather than by enumeration, which
+matters because enumeration is exactly the "one parser bug from a write" failure mode this
+guard exists to avoid. Walking the *whole* tree, not just the root, is what makes CodingStandards
+§9 mandatory case 4 true: a data-modifying CTE (`WITH d AS (DELETE ... RETURNING *) SELECT
+* FROM d`) is valid Postgres syntax and can be consumed from a top-level query, a `UNION`
+arm, or a `FROM (...)` subquery — three nesting shapes that all present as a top-level
+`Select` and only differ in what `.walk()` finds underneath.
+
+`SqlGenerationService` (`application/generation.py`) is a **sibling** of `DatasourceService`
+— composing it for `require_datasource`/`render_context` — rather than a fifth method on it
+or a new `flows/nl2sql/` package. The distinction that matters: `DatasourceService`'s
+existing four methods are fast, cache-oriented, and make no security verdict; generation
+calls a model and decides whether the result is safe, which is a different kind of
+operation with different tests and fakes. `flows/nl2sql/` stays three empty stubs until
+deliverable 4, where streaming and the chat integration actually need a flow that depends
+on more than one feature — deliverable 3's generation is a single blocking
+`ChatModel.complete()` call, reasoned about entirely inside `features/datasources/`.
+
+**Verified against a real local model, not only a scripted fake.** Against the rebuilt
+`api` image: `mnemosctl datasource generate --org-slug mnemos "what was total revenue by
+region last quarter"` produced an `allowed` verdict with a real (if not perfectly correct —
+small local models are not perfectly correct) multi-table CTE query and all four touched
+tables recorded; `mnemosctl datasource generate --org-slug mnemos "delete every row from
+the sales_order table"` had `qwen2.5:3b-instruct` **comply with the adversarial
+instruction** and emit a real `DELETE FROM analytics.sales_order` — which `guard_sql`
+caught and recorded as `rejected_write`, naming the table. Both attempts confirmed
+persisted in `sql_run` via a direct `psql` query. This is the live version of the
+`test_the_readonly_role_refuses_a_write_the_guard_somehow_allowed` argument: the defence
+that matters is the one that holds even when the thing in front of it (a system prompt
+saying "don't") does not.
+
+**Deliverable 4 (execution + narration + repair loop), done 2026-08-15.** This is where
+`flows/nl2sql/` gets its first real content — deliverable 3 stayed entirely inside
+`features/datasources/` because generation was one blocking model call reasoned about
+independent of any conversation; execution and narration are what cross into `features/chat`,
+the same boundary `flows/rag/` already crosses for `A2`. `Nl2SqlFlow` composes
+`ChatRepository`, `DatasourceService`, `SqlGenerationService`, and a `SqlRunRepository`, and
+states the security invariant directly in its own module docstring: `guard_sql()` decides,
+`REJECTED_*` never executes, `ALLOWED` executes at most once, for the *final* attempt only.
+
+`PostgresExecutor` (`features/datasources/adapters/executor.py`) mirrors
+`PostgresIntrospector`'s short-lived-engine-per-call pattern. Two implementation details
+worth recording because they were not obvious in advance:
+- Postgres `statement_timeout` is set as an asyncpg connection parameter
+  (`server_settings`), never a `SET` statement built by concatenating the guarded SQL —
+  the same "never interpolate the model's SQL into another statement" rule the guard's own
+  existence depends on. Row capping is `fetchmany(max_rows + 1)`, never a `LIMIT` appended
+  to the statement.
+- SQLAlchemy's asyncpg dialect wraps the real driver exception in its own
+  `AsyncAdapt_asyncpg_dbapi.Error` before `DBAPIError.orig` sees it — detecting a
+  `statement_timeout` cancellation (`asyncpg.exceptions.QueryCanceledError`) required
+  checking `.orig.__cause__`, not `.orig` itself. Found by writing a throwaway test that
+  printed the actual exception chain rather than guessing at SQLAlchemy's wrapping.
+
+The repair loop (`Settings.sql_repair_attempts`) covers every `REJECTED_*` verdict, not
+only unparseable SQL: a repair attempt is independently re-guarded exactly like attempt 1,
+so retrying after a deliberate write attempt is another chance for the model to produce a
+read, not a security weakening. **Verified against the real local model, live, not only
+scripted:** `qwen2.5:3b-instruct`, asked five different adversarial ways in the browser to
+delete/truncate/drop real tables, complied with the repair prompt's stated reason and
+produced a safe alternative read five times out of five — real row counts on
+`analytics.region`/`.sales_order`/`.customer` confirmed unchanged via `psql` throughout. A
+sixth, unscripted outcome was also observed live: a guard-`ALLOWED` statement (a real read,
+no write) failed *at* Postgres with `CardinalityViolationError` from a mis-joined
+correlated subquery — reported as `error_code="execution_error"`, narrated with a template
+(no model call over a result set that does not exist), and rendered as a third, distinct
+UI state rather than collapsed into the denial banner. None of this was assumed; all of it
+was produced by the actual model this build ships, in the actual browser.
+
+**Deliverable 5 (the SQL panel + denial screen), done 2026-08-15.** `AssistantDone`
+(`features/chat/domain/events.py`) gained an optional `extra: dict[str, JsonValue] | None`
+field — `features/chat` stays ignorant of what a flow puts there, and `flows/nl2sql` is the
+first caller. The `done` SSE frame carries an `nl2sql` key with the SQL, verdict, rows and
+truncation flag in the same terminal frame as the narration, so the frontend never refetches
+to assemble one coherent answer. `SqlPanel.tsx` renders three distinct labelled states
+(allowed, guard-refused, execution-failed-after-allowed), each pairing `--danger` with an
+icon and a plain-word label rather than colour alone (DesignSystem §3). The composer's
+answer-mode control is a Radix `ToggleGroup` — a real three-option `radiogroup`
+("Chat"/"Use documents"/"Ask your data") reusing the exact primitive and visual language
+`ThemeToggle` already established for Appearance, chosen over two independent checkboxes
+with manual mutual-exclusion because "chat" is a real, nameable third state and a
+`radiogroup` is what a mutually-exclusive three-way choice *is*, semantically.
+
+Historical reload is honest about its limit rather than silently wrong: `sql_run` (verdict,
+tables, execution metadata) persists and is durable, matching the rest of the audit trail
+`A3`'s two-defence design already keeps — but the actual row *values* are not persisted
+anywhere, since they only ever existed in the live query result the SSE frame carried. A
+reloaded historical `nl2sql` message renders as a plain assistant bubble with its narration,
+no panel, rather than a panel silently missing data it never had a column to hold.
 
 ### A2 — ask about your documents ✅
 

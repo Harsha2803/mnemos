@@ -26,12 +26,34 @@ import getpass
 import os
 import sys
 
-from sqlalchemy import text
+import httpx
+from sqlalchemy import select, text
 
+# Every model module, imported for its side effect on `Base.metadata` before
+# any ORM operation runs — the same reason `entrypoints/api/main.py` imports
+# this (see its own comment). `datasource generate` is the first CLI command
+# to write a row with a foreign key crossing a feature boundary
+# (`sql_run.message_id -> chat_message.id`), and nothing about importing
+# `datasources`' own adapter module implies that `chat`'s will also have run.
+import mnemos.platform.models  # noqa: F401
 from mnemos.core.config import Settings, get_settings
-from mnemos.core.errors import MnemosError, ValidationError
+from mnemos.core.crypto import DsnCipher
+from mnemos.core.errors import MnemosError, NotFoundError, ValidationError
+from mnemos.core.ids import DEFAULT_ID_GENERATOR
 from mnemos.core.security import PasswordHasher
+from mnemos.features.datasources.adapters.executor import PostgresExecutor
+from mnemos.features.datasources.adapters.introspection import PostgresIntrospector
+from mnemos.features.datasources.adapters.repository import (
+    DatasourceRepository,
+    GlossaryRepository,
+    SchemaObjectRepository,
+    SqlRunRepository,
+)
+from mnemos.features.datasources.application.generation import SqlGenerationService
+from mnemos.features.datasources.application.service import DatasourceService
+from mnemos.features.datasources.domain import DEFAULT_DATASOURCE_SLUG, GlossaryTermRow
 from mnemos.features.identity.adapters.bootstrap_store import SqlBootstrapStore
+from mnemos.features.identity.adapters.models import Org
 from mnemos.features.identity.application.bootstrap import (
     INTERNAL_PROVIDER_SLUG,
     OIDC_PROVIDER_SLUG,
@@ -40,7 +62,57 @@ from mnemos.features.identity.application.bootstrap import (
     BootstrapRequest,
     OidcSettings,
 )
+from mnemos.features.identity.domain import OrgId
+from mnemos.features.llm.adapters.ollama import OllamaChatModel
 from mnemos.platform.db import Database
+
+#: The one warehouse this build ships. A datasource registry UI is out of
+#: scope for `A3` (TRACKER §5) — registration is this CLI command, same shape
+#: as `bootstrap` creating the one org an operator needs to get started.
+#: Shared with `entrypoints/api/main.py`'s `Nl2SqlFlow` via `features.
+#: datasources.domain.DEFAULT_DATASOURCE_SLUG` — one definition, not two
+#: string literals that can drift.
+DEMO_DATASOURCE_SLUG = DEFAULT_DATASOURCE_SLUG
+DEMO_DATASOURCE_NAME = "Sales Warehouse (demo)"
+DEMO_DATASOURCE_DESCRIPTION = (
+    "The seeded analytics.* schema (deploy/postgres/init/02-analytics-seed.sql): "
+    "region, product, customer, sales_order."
+)
+DEMO_DATASOURCE_SCHEMAS = ["analytics"]
+
+#: The demo warehouse's business vocabulary (TRACKER §5 deliverable 2). Curated
+#: by hand, the way a real deployment's glossary would be — these are facts
+#: about what "revenue" means *here*, not something introspection could ever
+#: infer from `information_schema`.
+DEMO_GLOSSARY_TERMS = [
+    GlossaryTermRow(
+        term="revenue",
+        definition="The net amount collected across completed sales orders.",
+        sql_expression="SUM(analytics.sales_order.net_amount) WHERE status = 'completed'",
+        synonyms=["sales", "total sales", "income"],
+    ),
+    GlossaryTermRow(
+        term="active customer",
+        definition="A customer with at least one sales order placed in the last 90 days.",
+        sql_expression=(
+            "EXISTS (SELECT 1 FROM analytics.sales_order so WHERE so.customer_id = "
+            "analytics.customer.customer_id AND so.ordered_on >= CURRENT_DATE - INTERVAL '90 days')"
+        ),
+        synonyms=["engaged customer"],
+    ),
+    GlossaryTermRow(
+        term="order volume",
+        definition="The count of sales orders placed, regardless of status.",
+        sql_expression="COUNT(*) FROM analytics.sales_order",
+        synonyms=["order count", "number of orders"],
+    ),
+    GlossaryTermRow(
+        term="segment",
+        definition="A customer's commercial tier: enterprise, mid-market, or smb.",
+        sql_expression="analytics.customer.segment",
+        synonyms=["customer tier", "tier"],
+    ),
+]
 
 #: Where the admin password may be read from. It is an environment variable or an
 #: interactive prompt and **never a command-line argument**: `argv` is readable by
@@ -240,6 +312,127 @@ async def _bootstrap(args: argparse.Namespace, password: str) -> int:
     return 0
 
 
+async def _resolve_org_id(db: Database, org_slug: str) -> OrgId:
+    """`org` carries no RLS policy (migration 0004's own docstring explains
+    why), so this is a plain lookup — no GUC to set, nothing to scope."""
+    async with db.session() as session:
+        org = await session.scalar(select(Org).where(Org.slug == org_slug))
+    if org is None:
+        raise NotFoundError(f"no org with slug {org_slug!r}")
+    return OrgId(org.id)
+
+
+def _datasource_service(db: Database, settings: Settings) -> DatasourceService:
+    return DatasourceService(
+        datasources=DatasourceRepository(db, DEFAULT_ID_GENERATOR),
+        schema_objects=SchemaObjectRepository(db, DEFAULT_ID_GENERATOR),
+        introspector=PostgresIntrospector(),
+        cipher=DsnCipher(settings.dsn_encryption_key.get_secret_value()),
+        glossary=GlossaryRepository(db, DEFAULT_ID_GENERATOR),
+        executor=PostgresExecutor(),
+    )
+
+
+async def _datasource_introspect(args: argparse.Namespace) -> int:
+    settings = get_settings()
+    db = Database(settings)
+    try:
+        org_id = await _resolve_org_id(db, args.org_slug)
+        service = _datasource_service(db, settings)
+        datasource = await service.register(
+            org_id=org_id,
+            slug=args.slug,
+            name=DEMO_DATASOURCE_NAME,
+            description=DEMO_DATASOURCE_DESCRIPTION,
+            dsn=settings.analytics_database_url,
+            read_only_role="mnemos_ro",
+            allowed_schemas=DEMO_DATASOURCE_SCHEMAS,
+        )
+        rows_written = await service.refresh_schema(org_id=org_id, slug=args.slug)
+    finally:
+        await db.dispose()
+
+    print(f"datasource       : {datasource.slug}  ({datasource.name})")
+    print(f"allowed schemas  : {', '.join(datasource.allowed_schemas)}")
+    print(f"schema objects   : {rows_written} rows cached in sql_schema_object")
+    return 0
+
+
+async def _datasource_seed_glossary(args: argparse.Namespace) -> int:
+    settings = get_settings()
+    db = Database(settings)
+    try:
+        org_id = await _resolve_org_id(db, args.org_slug)
+        service = _datasource_service(db, settings)
+        written = await service.seed_glossary(
+            org_id=org_id, slug=args.slug, terms=DEMO_GLOSSARY_TERMS
+        )
+    finally:
+        await db.dispose()
+
+    print(f"glossary terms   : {written} newly written, {len(DEMO_GLOSSARY_TERMS)} total seeded")
+    return 0
+
+
+async def _datasource_show_context(args: argparse.Namespace) -> int:
+    settings = get_settings()
+    db = Database(settings)
+    try:
+        org_id = await _resolve_org_id(db, args.org_slug)
+        service = _datasource_service(db, settings)
+        context = await service.render_context(org_id=org_id, slug=args.slug)
+    finally:
+        await db.dispose()
+
+    print(context if context else "(no cached schema or glossary yet)")
+    return 0
+
+
+async def _datasource_generate(args: argparse.Namespace) -> int:
+    """Generate, guard and record one attempt. Never executes the statement —
+    that is deliverable 4. This is deliverable 3's real, demonstrable
+    consumer of `guard_sql`/`SqlGenerationService`, the same reasoning
+    `show-context` was for `render_schema_context` in deliverable 2."""
+    settings = get_settings()
+    db = Database(settings)
+    # A separate client from the one the API process reuses per-request
+    # (`entrypoints/api/main.py`'s `app.state.ollama_http`) — this is a
+    # one-shot CLI invocation, not a long-lived server, so it opens and
+    # closes its own.
+    http_client = httpx.AsyncClient()
+    try:
+        org_id = await _resolve_org_id(db, args.org_slug)
+        model = OllamaChatModel(
+            client=http_client,
+            base_url=settings.ollama_base_url,
+            model=settings.ollama_model,
+            timeout_s=float(settings.ollama_timeout_s),
+        )
+        generation = SqlGenerationService(
+            datasources=_datasource_service(db, settings),
+            model=model,
+            sql_runs=SqlRunRepository(db, DEFAULT_ID_GENERATOR),
+        )
+        run = await generation.generate(org_id=org_id, slug=args.slug, question=args.question)
+    finally:
+        await http_client.aclose()
+        await db.dispose()
+
+    print(f"datasource       : {args.slug}")
+    print(f"question         : {run.question}")
+    print(f"verdict          : {run.verdict.value}")
+    if run.verdict_detail:
+        print(f"detail           : {run.verdict_detail}")
+    print("sql              :")
+    for line in run.generated_sql.splitlines() or [""]:
+        print(f"  {line}")
+    if run.authorized_tables:
+        print(f"tables read      : {', '.join(run.authorized_tables)}")
+    if run.denied_tables:
+        print(f"tables refused   : {', '.join(run.denied_tables)}")
+    return 0
+
+
 def main() -> int:
     parser = argparse.ArgumentParser(prog="mnemosctl", description="Mnemos operations")
     sub = parser.add_subparsers(dest="group", required=True)
@@ -271,6 +464,85 @@ def main() -> int:
     boot.add_argument("--oidc-issuer-internal", default=None, help="Issuer the API validates over")
     boot.add_argument("--oidc-client-id", default=None, help="OIDC client id, e.g. 'mnemos-web'")
 
+    ds_parser = sub.add_parser(
+        "datasource", help="NL2SQL warehouse registration, introspection, and glossary"
+    )
+    ds_sub = ds_parser.add_subparsers(dest="command", required=True)
+    introspect = ds_sub.add_parser(
+        "introspect",
+        help="register the demo warehouse (idempotent) and refresh its cached schema",
+        description=(
+            "Registers the seeded analytics.* warehouse for one org if it is not already "
+            "registered, then reads information_schema through the mnemos_ro role and "
+            "replaces the org's cached sql_schema_object rows. Explicit and on-demand — "
+            "never run implicitly on the query path."
+        ),
+    )
+    introspect.add_argument(
+        "--org-slug", required=True, help="Org to register the datasource under"
+    )
+    introspect.add_argument(
+        "--slug",
+        default=DEMO_DATASOURCE_SLUG,
+        help=f"Datasource slug (default: {DEMO_DATASOURCE_SLUG})",
+    )
+
+    seed_glossary = ds_sub.add_parser(
+        "seed-glossary",
+        help="seed the demo warehouse's business glossary (idempotent)",
+        description=(
+            "Writes the curated glossary terms in entrypoints/cli.py's "
+            "DEMO_GLOSSARY_TERMS for one org's datasource. A term already present, "
+            "matched by its term text, is left untouched — re-running never overwrites "
+            "an edit made since. Requires the datasource to already be registered "
+            "('datasource introspect' first)."
+        ),
+    )
+    seed_glossary.add_argument(
+        "--org-slug", required=True, help="Org whose datasource gets the glossary"
+    )
+    seed_glossary.add_argument(
+        "--slug",
+        default=DEMO_DATASOURCE_SLUG,
+        help=f"Datasource slug (default: {DEMO_DATASOURCE_SLUG})",
+    )
+
+    show_context = ds_sub.add_parser(
+        "show-context",
+        help="print the schema + glossary text block the NL2SQL prompt will use",
+        description=(
+            "Renders the datasource's cached sql_schema_object rows and glossary_term "
+            "rows into the same text block deliverable 3's prompt assembles from — a "
+            "read-only view for inspecting what the model will see, useful once "
+            "'introspect' and 'seed-glossary' have both been run."
+        ),
+    )
+    show_context.add_argument("--org-slug", required=True, help="Org whose datasource to render")
+    show_context.add_argument(
+        "--slug",
+        default=DEMO_DATASOURCE_SLUG,
+        help=f"Datasource slug (default: {DEMO_DATASOURCE_SLUG})",
+    )
+
+    generate = ds_sub.add_parser(
+        "generate",
+        help="generate SQL for a question, guard it, and record the attempt (never executes)",
+        description=(
+            "Renders the datasource's schema and glossary (the same block 'show-context' "
+            "prints), asks the configured Ollama model for one read-only SELECT, parses it "
+            "with sqlglot and rejects anything that is not a single read wherever it "
+            "appears in the statement, and writes a sql_run row with the verdict either "
+            "way. Never executes the statement — that is deliverable 4."
+        ),
+    )
+    generate.add_argument("--org-slug", required=True, help="Org whose datasource to query")
+    generate.add_argument(
+        "--slug",
+        default=DEMO_DATASOURCE_SLUG,
+        help=f"Datasource slug (default: {DEMO_DATASOURCE_SLUG})",
+    )
+    generate.add_argument("question", help="The question to translate into SQL")
+
     args = parser.parse_args()
 
     if args.group == "bootstrap":
@@ -288,6 +560,34 @@ def main() -> int:
 
     if args.group == "db" and args.command == "doctor":
         return asyncio.run(_doctor())
+
+    if args.group == "datasource" and args.command == "introspect":
+        try:
+            return asyncio.run(_datasource_introspect(args))
+        except MnemosError as exc:
+            print(f"datasource introspect failed: {exc.message}", file=sys.stderr)
+            return 2
+
+    if args.group == "datasource" and args.command == "seed-glossary":
+        try:
+            return asyncio.run(_datasource_seed_glossary(args))
+        except (MnemosError, LookupError) as exc:
+            print(f"datasource seed-glossary failed: {exc}", file=sys.stderr)
+            return 2
+
+    if args.group == "datasource" and args.command == "show-context":
+        try:
+            return asyncio.run(_datasource_show_context(args))
+        except (MnemosError, LookupError) as exc:
+            print(f"datasource show-context failed: {exc}", file=sys.stderr)
+            return 2
+
+    if args.group == "datasource" and args.command == "generate":
+        try:
+            return asyncio.run(_datasource_generate(args))
+        except (MnemosError, LookupError) as exc:
+            print(f"datasource generate failed: {exc}", file=sys.stderr)
+            return 2
 
     parser.print_help()
     return 1

@@ -136,3 +136,11 @@ def check_in(column: str, enum: type[StrEnum]) -> str:
     """
     values = ", ".join(f"'{member.value}'" for member in enum)
     return f"{column} IN ({values})"
+
+
+#: A value that survives a JSON round trip. Used where a payload's *shape* is
+#: owned by a flow the reader (a shared domain type, an SSE frame) must stay
+#: ignorant of — `AssistantDone.extra` (`features/chat/domain/events.py`) is
+#: the first caller: `flows/nl2sql` attaches its result here without
+#: `features/chat` ever importing `features/datasources`.
+JsonValue = str | int | float | bool | None | list["JsonValue"] | dict[str, "JsonValue"]

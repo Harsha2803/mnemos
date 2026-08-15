@@ -25,9 +25,49 @@ import type { components } from "@/lib/api/schema";
 
 export type ChatMessage = components["schemas"]["ChatMessageResponse"];
 
+/**
+ * The read-only AST guard's five outcomes (`SqlVerdict` on the backend,
+ * `core/types.py`). Only `"allowed"` ever executes — every other value means
+ * the statement was refused before it touched `mnemos_analytics`.
+ */
+export type Nl2SqlVerdict =
+  | "allowed"
+  | "rejected_write"
+  | "rejected_unauthorized_table"
+  | "rejected_unparseable"
+  | "rejected_too_complex";
+
+/** One result-grid cell, exactly as JSON can carry a Postgres value. */
+export type SqlCellValue = string | number | boolean | null;
+
+/**
+ * The `nl2sql` key on the `done` SSE frame (see `AssistantDone.extra` on the
+ * backend). Not part of the generated OpenAPI schema — it rides the
+ * hand-parsed SSE payload, not a typed response model — so it is hand-typed
+ * here, matching `flows/nl2sql/application/service.py::Nl2SqlFlow._finish`'s
+ * `extra` dict field for field.
+ */
+export type Nl2SqlResult = {
+  sql: string;
+  verdict: Nl2SqlVerdict;
+  verdict_detail: string | null;
+  attempt: number;
+  authorized_tables: string[];
+  denied_tables: string[];
+  executed: boolean;
+  row_count: number | null;
+  truncated: boolean;
+  duration_ms: number | null;
+  error_code: string | null;
+  error_detail: string | null;
+  columns: string[];
+  rows: SqlCellValue[][];
+};
+
 export type ChatStreamHandlers = {
   onToken: (text: string) => void;
-  onDone: (message: ChatMessage) => void;
+  /** `nl2sql` is present only when the answer came from the NL2SQL flow. */
+  onDone: (message: ChatMessage, nl2sql?: Nl2SqlResult) => void;
   onError: (message: string) => void;
 };
 
@@ -38,6 +78,12 @@ export type ChatStreamOptions = {
    * says the same thing in `SendMessageRequest`.
    */
   useDocuments?: boolean;
+  /**
+   * Answer by generating and running SQL against the registered datasource.
+   * Same provisionality as `useDocuments`, and mutually exclusive with it —
+   * the backend 422s if both are `true`.
+   */
+  useDatasource?: boolean;
 };
 
 /**
@@ -55,6 +101,7 @@ export async function streamChatReply(
   const body = JSON.stringify({
     content,
     use_documents: options.useDocuments ?? false,
+    use_datasource: options.useDatasource ?? false,
   });
 
   let response = await send(url, body, getAccessToken(), signal);
@@ -122,7 +169,7 @@ function dispatch(frame: string, handlers: ChatStreamHandlers): void {
   if (name === "token" && typeof record.text === "string") {
     handlers.onToken(record.text);
   } else if (name === "done" && isChatMessage(record.message)) {
-    handlers.onDone(record.message);
+    handlers.onDone(record.message, isNl2SqlResult(record.nl2sql) ? record.nl2sql : undefined);
   } else if (name === "error" && typeof record.message === "string") {
     handlers.onError(record.message);
   }
@@ -130,4 +177,8 @@ function dispatch(frame: string, handlers: ChatStreamHandlers): void {
 
 function isChatMessage(value: unknown): value is ChatMessage {
   return typeof value === "object" && value !== null && "id" in value && "role" in value;
+}
+
+function isNl2SqlResult(value: unknown): value is Nl2SqlResult {
+  return typeof value === "object" && value !== null && "sql" in value && "verdict" in value;
 }

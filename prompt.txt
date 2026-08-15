@@ -1,18 +1,26 @@
 You are picking up an in-progress project called Mnemos, at
 /home/shreeharsha/Personal/Projects/Resume_001/mnemos
 
-This file was rewritten on 2026-08-10, mid-marathon-run, when a session was stopped by the
-user before finishing. It replaces an older version of itself that described the state as
-of M3.7/F0 — that version is gone; trust this one and TRACKER.md, not your memory of any
-prior prompt.txt.
+This file was rewritten on 2026-08-15, at the end of a session that did exactly one task —
+A3 deliverable 3, generation and the AST read-only guard — under the ordinary
+one-task-per-session rule, which was back in force at the start of this session and remains
+so now. It replaces the 2026-08-15 version of itself that handed off after deliverable 2
+(the business glossary). Nothing in this file's structure changed; every fact in it was
+re-verified against the branch as it now stands. Trust this file and TRACKER.md over any
+memory of a prior prompt.txt.
 
 ------------------------------------------------------------------------------
 READ FIRST, IN THIS ORDER
 
-  1. TRACKER.md            — read section 0, the ⚠️ warning block near the top, and
-                              section 3's A0/A1/A2 entries in full. Then section 5.
-  2. docs/ADAPTATION.md    — architecture, capability map, schema, milestone ledger
-  3. README.md             — public framing and the benchmark numbers
+  1. TRACKER.md            — read section 0, the header, the "2026-08-15 — A3 deliverable 3"
+                              note near the top, and section 3's A3 entry in full.
+                              Then section 5 (deliverables 4-5, fully specified).
+  2. docs/ADAPTATION.md    — architecture, capability map, schema, milestone ledger,
+                              §7/§8 for A3's current position
+  3. README.md             — public framing and the benchmark numbers (unchanged by A3 so
+                              far — nothing in A3 touches the retrieval/compile path README
+                              measures, and no A3 deliverable has updated it; that is
+                              consistent with A0/A1's own in-progress commits, not a gap)
   4. docs/CodingStandards.md / docs/DesignSystem.md — before writing backend / frontend code
 
 TRACKER.md is authoritative over this file for anything the two disagree about — this file
@@ -21,114 +29,254 @@ is a pointer to it, not a duplicate of it.
 ------------------------------------------------------------------------------
 EXACTLY WHERE THIS WAS LEFT — read this before touching anything
 
-A prior session (2026-08-08 through 2026-08-10) was explicitly told by the project owner to
-finish the ENTIRE remaining plan in one continuous run, suspending the normal
-one-task-per-session rule for that run only (recorded in TRACKER.md section 0, rule 9's
-note, and in the header). It built and merged:
+This session did one thing: **built A3 deliverable 3 of 5, generation and the AST
+read-only guard, completely and for real**, then stopped. TRACKER §5 (as it stood before
+this session) specified three remaining deliverables: generation + the AST guard,
+execution + narration, and the chat surface's SQL panel. This session built only the first
+of those three. It did **not** touch execution, narration, the repair loop, or any UI.
+TRACKER §5 now specifies deliverables 4-5 at full detail.
 
-  - A0 (auth surface)         — PR #11, merged, on main
-  - A1 (talk to it)           — PR #13, merged, on main
-  - A2 (RAG over documents)   — PR #14, OPEN, NOT MERGED, CI red on one job
+**Current git state:**
+  - `main`'s tip is unchanged from the last handoff — still the squashed A2 commit (PR #14)
+    plus its docs commit. No work landed on `main` this session.
+  - `feat/a3-nl2sql` is pushed, two commits ahead of where the last session left it:
+    `feat(nl2sql): generation and the AST read-only guard`, then
+    `docs: record A3 deliverable 3 (generation + the AST guard), specify 4-5`.
+  - **PR #15 is still open as a draft** — C12 still applies: deliverable 3 has no product
+    UI (it added a CLI command, not a screen), so nothing in `A3` is demonstrable in the
+    product yet. Its title and body were updated this session to say "deliverables 1-3/5"
+    accurately (they had drifted — the title said "2/5" and the body still said "1/5" from
+    an earlier session that updated one and not the other; both are now in sync). Keep it
+    draft, keep adding commits (one per deliverable), and only take it out of draft and
+    merge once deliverable 5 (the SQL panel) is on the branch and the milestone's "you can
+    now ___" sentence is true and verified in a real browser — the same bar A0/A1/A2 were
+    held to.
 
-The session was stopped by the user partway through merging PR #14. **A2's code is
-complete and was verified working in a real browser** (upload -> ask -> citation
-click-through, screenshotted, with the API traces pasted into TRACKER.md section 3's `A2`
-entry) — but the PR is not merged and main does NOT have A2 in it yet.
+**There is no unresolved blocker right now.** `make test` (342 passed), `make lint`, `make
+types`, and `make check` are all clean on `feat/a3-nl2sql` as it stands, and all three CI
+jobs (`backend`, `frontend`, `compose`) are green on the pushed commits. The work that
+remains is *scope*, not a bug: deliverables 4 and 5. Deliverable 4 (execution) is real
+work — a live connection to `mnemos_analytics`, a statement timeout, a row cap, streaming
+narration, a bounded repair loop — but it is composition over already-decided pieces
+(`SqlGenerationService`, `guard_sql`, the RAG flow's own shape to mirror) rather than one
+new irreducible security decision the way the guard itself was. Do not read that as
+license to rush the one part of it that *is* still security-adjacent: never let a
+`REJECTED_*` verdict reach execution, and never string-build around the guarded statement
+(see TRACKER §5's "Watch out for these" for exactly why).
 
-**The one concrete blocker, fully diagnosed but not yet fixed:**
-
-`docker-compose.yml`'s `api` service depends on `minio: {condition: service_healthy}` but
-NOT on `minio-init` (the one-shot container that runs `mc mb` to create the
-`mnemos-documents` bucket). MinIO reports healthy the instant the server process is up,
-which can be before `minio-init` has created the bucket. `A2`'s `S3ObjectStore.health()`
-calls `head_bucket` and fails until the bucket exists, so `/readyz` never turns fully green
-in a clean CI run, and the `compose` GitHub Actions job on PR #14 times out after 5 minutes
-waiting for it. `backend` and `frontend` CI jobs are both green; only `compose` is red.
-
-Fix (not yet applied or verified):
-
-  Add `minio-init: {condition: service_completed_successfully}` to `api`'s `depends_on:`
-  block in docker-compose.yml. Probably also worth adding to `worker` once B2 gives it
-  object-store reads, but that is not blocking A2.
-
-Verify by: `docker compose down -v && docker compose up -d --build`, then
-`curl localhost:8000/readyz` repeatedly until it shows
-`{"status":"ready","checks":{"postgres":"ok","redis":"ok","ollama":"ok","objectstore":"ok"}}`
-with NO manual `docker compose exec` intervention in between. Then commit
-(`fix(compose): api waits for the MinIO bucket, not just the MinIO server`), push to
-`feat/a2-rag`, and watch PR #14's checks go green (`gh pr checks 14 --watch`).
+**What deliverable 3 actually built, concretely, so you do not re-discover or re-build it:**
+  - `backend/src/mnemos/features/datasources/domain/guard.py` — `guard_sql(sql: str) ->
+    GuardVerdict`. Pure, synchronous, no I/O. Deliberately an **allowlist**: the parsed
+    statement must be `sqlglot.exp.Query`, and every node in the tree — not just the root —
+    is walked for anything that writes, changes privileges, or is a shape `sqlglot` falls
+    back to a generic `Command` for. A blocklist scoped to `INSERT`/`UPDATE`/`DELETE`/DDL
+    was tried first, during this session, and found to miss `SELECT ... INTO`, `FOR
+    UPDATE`, and `EXPLAIN`/`VACUUM`/`CALL`/`COPY`/`SET` entirely — none of those is a
+    DML/DDL node, so a blocklist naming only DML/DDL lets every one of them through. Do not
+    reintroduce a blocklist shape here; the allowlist is why CodingStandards §9 case 4
+    (DML nested in a CTE, a UNION arm, a subquery) is provably closed rather than merely
+    tested against the cases someone thought to name.
+  - `backend/src/mnemos/features/datasources/domain/generation.py` — `NL2SQL_SYSTEM_PROMPT`
+    and `extract_sql_statement`, pulling the candidate SQL out of a fenced ```sql block
+    with a fallback to the whole response for a model that does not comply with the fence
+    instruction.
+  - `backend/src/mnemos/features/datasources/application/generation.py` —
+    `SqlGenerationService.generate(*, org_id, slug, question) -> SqlRunRecord`. A
+    **sibling** of `DatasourceService` (composes it for
+    `require_datasource`/`render_context`), not a fifth method on it and not a new
+    `flows/nl2sql/` package. Calls `ChatModel.complete()` once — never `.stream()` — because
+    nothing can be guarded before the whole statement has arrived. **This does exactly one
+    attempt** (`attempt=1`, `message_id=None` always) — it has no repair loop; deliverable 4
+    has to decide how to drive a second attempt through the same `SqlRunRepository` (see
+    TRACKER §5's "Watch out for these", which flags this explicitly).
+  - `SqlRunRepository` (`adapters/repository.py`) — persists every attempt, allowed or
+    refused, with its verdict, detail, and `authorized_tables`/`denied_tables`. Takes
+    `message_id` and `attempt` as caller-supplied parameters specifically so deliverable 4
+    can pass real values. **No migration was needed** — `sql_run` already had every column
+    from `M2`, including the six execution columns (`executed`, `row_count`, `truncated`,
+    `duration_ms`, `error_code`, `error_detail`) deliverable 4 will fill in.
+  - `DatasourceService._require_datasource` is now public, `require_datasource` — it
+    graduated the moment `SqlGenerationService` needed the same lookup a second class had to
+    make.
+  - `mnemosctl datasource generate --org-slug X "<question>"` — generates, guards, and
+    records one attempt; **never executes**. Useful for producing a real `ALLOWED`
+    `sql_run` row to execute against by hand while building deliverable 4.
+  - Fixed a `NoReferencedTableError` from a live `mnemosctl` run — the same bug class as
+    TRACKER §4 item 41 (an unimported model module leaves a cross-feature foreign key
+    unresolved). `sql_run.message_id`'s FK to `chat_message` was the first one any CLI code
+    path had touched; `entrypoints/cli.py` now imports `mnemos.platform.models` for its side
+    effect, the same way `entrypoints/api/main.py` already did. If deliverable 4 adds
+    another CLI command or entrypoint that writes a cross-feature FK for the first time from
+    a new process, expect the same class of error and know what it is immediately rather
+    than re-diagnosing it.
+  - Verified against the **rebuilt `api` container image with a real Ollama completion**,
+    not a fake and not just pytest: asked "what was total revenue by region last quarter",
+    got a real (if imperfect — `qwen2.5:3b-instruct` is a 3B model) multi-table CTE query,
+    `allowed`, four tables recorded. Then asked "delete every row from the sales_order
+    table" — **the model complied and emitted a real `DELETE`** — and the guard caught it,
+    `rejected_write`, naming `analytics.sales_order`. Both attempts confirmed persisted in
+    `sql_run` via a direct `psql` query, not the CLI's own printout. Full transcript in
+    TRACKER §3's `A3` entry and in the dated note near the top of TRACKER.md.
 
 ------------------------------------------------------------------------------
 WHAT TO DO, IN ORDER, THE MOMENT YOU START
 
-  1. `gh auth status` — confirm `Harsha2803` is active. Stop and say so if it is not.
-  2. `git fetch && git status` — you may be on any branch. Check out `feat/a2-rag`
-     (`git checkout feat/a2-rag`) if it still exists locally, or `git checkout -b
-     feat/a2-rag origin/feat/a2-rag` if not. Confirm `git log --oneline -5` shows the A2
-     commits (they end in "docs: record A2 and specify A3 for the next agent").
-  3. `gh pr list --state open` — confirm PR #14 is what you expect (A2, open, not draft).
-  4. Apply the minio-init fix above, verify it locally exactly as described, commit, push.
-  5. `gh pr checks 14 --watch` until all three jobs are green.
-  6. `gh pr merge 14 --squash --delete-branch` (this is how #11 and #13 were merged —
-     match that convention). Confirm afterward: `git fetch && git log origin/main -3
-     --oneline` shows the squashed A2 commit at the tip, and `gh pr list --state open` is
-     empty.
-  7. From a truly clean state, prove it: `git checkout main && git pull`, then
-     `docker compose down -v && docker compose up -d --build && make bootstrap`. Sign in at
-     http://localhost:3000 as `analyst@mnemos.local` / `analyst` (NOT `admin@mnemos.local`
-     — see TRACKER section 4 item 40 for why that specific account is broken by design) and
-     re-perform the A2 sentence once against the merged image, not the branch you developed
-     against.
-  8. Update TRACKER.md: delete the ⚠️ warning block and the "Branch right now" / "Next
-     task" header lines that describe this handoff, replace them with a normal `A2 ✅`
-     entry (the write-up in section 3 already exists and is accurate — you are only fixing
-     the header and removing the warning, not rewriting the evidence). Do the same
-     s/PR #14 open, CI red/✅/ fix to the two status-table rows in TRACKER.md and
-     docs/ADAPTATION.md that currently read "PR #14 open, CI red". Commit this as its own
-     small `docs:` commit.
-  9. Only now branch `feat/a3-nl2sql` off the updated `main` and start `A3`, which is
-     already fully specified in TRACKER.md section 5 (NL2SQL: introspection, glossary,
-     generated SQL behind two independent read-only defences — an AST guard via `sqlglot`
-     and the `mnemos_ro` Postgres role — execution, and narration).
-
-Do not skip step 7. "CI is green" and "the merged stack actually starts clean and the
-feature still works" are different claims — TRACKER section 4 item 32 is the story of a
-milestone that shipped with 191 passing tests while main could not start, and the whole
-reason the compose CI job and this step 7 both exist is to not repeat that.
+  1. `gh auth status` — confirm `Harsha2803` is active. If `harshaJKT` (the work account)
+     is active instead, run `gh auth switch --user Harsha2803` before anything else. This
+     has bitten a previous session at its very start; check it before touching git.
+  2. `git fetch && git status` — check out `feat/a3-nl2sql`
+     (`git checkout feat/a3-nl2sql`) if it exists locally, or `git checkout -b
+     feat/a3-nl2sql origin/feat/a3-nl2sql` if not. Confirm `git log --oneline -5` shows
+     the deliverable-3 commits described above.
+  3. `gh pr list --state open` — confirm PR #15 is what you expect (A3, open, draft,
+     titled "deliverables 1-3/5").
+  4. Read TRACKER §5 in full — it specifies deliverables 4-5 at the same detail level the
+     original A3 brief specified all five. Deliverable 4 (execution and narration) is next.
+     It is real work, but it is composition over pieces deliverable 3 already built and
+     proved (`SqlGenerationService`, `guard_sql`) and a flow shape (`flows/rag/`) already
+     built and proved in `A2` — read "USING MULTI-AGENT WORKFLOWS TO SPEED UP" below before
+     deciding how to staff it, but do not assume it needs the same solo-session treatment
+     the guard did just because the guard did.
+  5. Bring up a stack if you need one to test against: `docker compose up -d --build`,
+     `curl localhost:8000/readyz` until fully green, `make bootstrap` (see RUNNING IT
+     below for the exact admin-password mechanics), then
+     `docker compose exec -e MNEMOS_BOOTSTRAP_ADMIN_PASSWORD=... api mnemosctl datasource
+     introspect --org-slug mnemos` followed by `... mnemosctl datasource seed-glossary
+     --org-slug mnemos` to get a cached schema and glossary. Then `... mnemosctl datasource
+     generate --org-slug mnemos "<some question>"` to get a real, `allowed` `sql_run` row —
+     query it directly with `psql` (`SELECT id, generated_sql FROM sql_run WHERE verdict =
+     'allowed' ORDER BY created_at DESC LIMIT 1`) to have something real to execute against
+     while building deliverable 4, before any flow or chat wiring exists.
+  6. Work deliverable by deliverable, one commit each, exactly as TRACKER §5's "Scope"
+     section lists them (4, 5 — 1, 2 and 3 are already done). After each: `make test` /
+     `make lint` / `make types` / `make check` clean, push, keep PR #15 updated (title and
+     body, not just commits — they drifted out of sync once already this milestone). Do
+     **not** take the PR out of draft or merge it until deliverable 5 (the SQL panel) is on
+     the branch and the milestone's "ask a question about your data in English and see the
+     SQL, the rows and the narration — and see the guard visibly refuse a write" sentence
+     is true and verified in a real browser.
+  7. Once both are done and verified: `gh pr checks 15 --watch` until green, `gh pr
+     ready 15` (turn off draft), then `gh pr merge 15 --squash --delete-branch`, matching
+     how #11/#13/#14 were merged. Then rebuild from clean `main` and re-verify the A3
+     sentence against the merged image — the same "CI green is not the same claim as the
+     feature works from a clean start" discipline TRACKER section 4 item 32 exists to
+     enforce.
+  8. Update TRACKER.md and docs/ADAPTATION.md in the same commit as the final
+     deliverable's work — mark `A3` ✅, move its evidence into §3/§8, and write §5 fresh
+     for **`B1` (ingestion), not `A4`**. The plan was re-sequenced 2026-08-15 (evening):
+     `B1`/`B2` now come before `A4` — see that date's note in TRACKER.md for why. TRACKER
+     §5's "Then, in order" list already names `B1` next and sketches its scope (source
+     connectors, event bus, sources UI); ADAPTATION §7 has its one-line description. Write
+     `B1`'s full brief the way this session and the ones before it wrote A3's remaining
+     deliverables' briefs.
 
 ------------------------------------------------------------------------------
-THE RULE THAT WAS SUSPENDED, AND WHETHER IT STILL IS
+THE RULE ABOUT HOW MUCH TO DO IN ONE SESSION
 
-The user's original instruction for the 2026-08-08 run said: finish the WHOLE remaining
-plan (A2 through D1, thirteen milestones) in one continuous run, not one task per session.
-That instruction technically still stands unless whoever is reading this has been told
-otherwise — but the session that received it was explicitly stopped by the user mid-task
-("Stop for now. Enough of implementation.") on 2026-08-10, before A2 even finished merging.
+No marathon instruction is active. TRACKER §0 rule 9 (one task per session, then stop) is
+the standing rule and this session followed it exactly: it did deliverable 3 alone, verified
+it end to end — including against a real local model, not only fakes — updated both tracker
+files and this one, updated PR #15's title and body, and stopped rather than starting
+deliverable 4.
 
-**Read this as: do NOT assume you should silently plow through A3, A4, B1...D1 the moment
-you sit down.** Finish merging PR #14 (steps 1-8 above), and then use your judgment based
-on how you were actually invoked this session:
-  - If invoked with an explicit instruction to keep going through the whole plan, keep
-    going, milestone by milestone, exactly as TRACKER section 0's suspended-rule note
-    describes (own branch, own PR, own commits per milestone, CI green and merged before
-    moving on — do not repeat the mistake of moving to A3 with A2 still unmerged).
-  - If invoked normally (one task per session, the ordinary rule), stop after step 8
-    above — that is a complete, coherent unit of work — and let the next session decide
-    whether to start A3.
+**Default to the ordinary rule: one deliverable (or a small, coherent group) per session,
+then stop and update this file**, unless whoever invokes you says otherwise. A3 has two
+deliverables left. Deliverable 4 does not carry the same "one rushed decision is the actual
+security defect" weight the guard did — the guard is already built and proven — but it is
+still not a five-minute task: a live connection to a second database, a timeout, a row cap,
+streaming, a bounded retry loop, and a new persisted-message shape are each their own way to
+get something subtly wrong. Give it a real session rather than folding it into whatever
+comes before or after it.
 
-Either way: never leave a PR open and unmerged at the end of a session if it is genuinely
-finished and green. The user has said directly, more than once, that they want everything
-merged to main with no PRs left open.
+Either way: never leave a PR open and stale — every session that touches `feat/a3-nl2sql`
+should end with the branch pushed, `make test`/`lint`/`types`/`check` clean, and this file
+and TRACKER.md updated to say exactly what is true, not what was hoped for.
+
+**"One task per session" is about pacing across sessions, not about how many agents work
+within one.** The rule exists to spend usage budget on fresh context per deliverable rather
+than one long session. It says nothing about whether the session that owns a deliverable
+may use subagents internally to move faster on it — see the next section for where that
+does and does not make sense in this repo.
+
+------------------------------------------------------------------------------
+USING MULTI-AGENT WORKFLOWS TO SPEED UP
+
+The project owner asked (2026-08-15) to use multiple agents to move faster. This helps in
+some parts of this repo and works against its own rules in others — read this before
+spawning anything, and re-read it every session; it is not a one-time decision.
+
+**Where it helps — independent chunks with a settled interface boundary:**
+  - Research that does not write code: reading a library's API or surveying how an existing
+    pattern is used elsewhere in the repo, before the lead session decides a shape. Fan
+    these out, read the results yourself, decide yourself — a subagent's exploration must
+    never become the design decision by default. (Deliverable 3 did exactly this kind of
+    research itself, in-session, by writing small standalone scripts against `sqlglot`
+    directly rather than guessing at its AST shapes — that is the model to follow, whether
+    it is the lead session or a subagent doing the probing.)
+  - Adapters that each implement one already-decided `Protocol`, independently of each
+    other. `B1` (the milestone after `A3`) is still the clean example: once
+    `SourceConnector` is defined, its three adapters — MinIO/S3, local filesystem, HTTP
+    URL — share no state and can be built by three subagents in parallel, each handed the
+    Protocol, one adapter's scope, and `features/knowledge/adapters/`'s tests as the
+    pattern to follow.
+  - Frontend work once a backend API contract is stable and merged — a subagent building a
+    screen against an already-shipped endpoint is a different kind of parallel work than a
+    subagent guessing at an endpoint's shape.
+  - Additional test coverage against an interface that already exists and is not changing
+    underneath it.
+
+**Where it does not help — keep these single-threaded, in the lead session itself:**
+  - `A3` deliverable 4's core wiring — the `flows/nl2sql/` flow class, the repair loop's
+    attempt bookkeeping, and anywhere the guarded statement is one string-concatenation away
+    from becoming an unguarded one. Not because it is a single irreducible security decision
+    the way the guard was (that decision is made; deliverable 4 has to *respect* it, not
+    re-derive it), but because it is one deliverable's worth of interdependent plumbing —
+    splitting "execute" from "narrate" from "persist the message" across agents would just
+    recreate the coordination cost the next bullet describes, for no real parallelism gained.
+  - Anything two agents would edit in the same file or module at once. This repo's workflow
+    has no tolerance for merge conflicts built in (small scoped commits, one branch, one PR
+    at a time) — simultaneous edits to the same file are a coordination cost, not a
+    speedup.
+  - The final integration and verification gate: `make test`/`lint`/`types`/`check`,
+    updating TRACKER.md and ADAPTATION.md, committing, and pushing. One agent owns git for
+    this repo at any moment — subagents report diffs back to the lead session, which
+    reviews, integrates, and runs the gate as a single coherent pass. Do not let multiple
+    agents commit or push independently; that is the "invisible branch" / "unscoped
+    commit" failure TRACKER §0 rules 6-7 exist to prevent, just multiplied.
+
+**How to run it, concretely, in this repo:**
+  1. The lead session decides the interface boundary first — the `Protocol`, the shape of
+     the pure domain function, the test names the acceptance criteria already specify
+     (TRACKER §5's "Acceptance" list is usually that boundary already written down). Do not
+     fan out before this decision is made.
+  2. Spawn subagents with a **self-contained prompt**: the file paths it owns, the
+     Protocol/interface it implements, the specific TRACKER §5 acceptance tests it is
+     responsible for, and the relevant HARD RULES below inlined — a subagent has no memory
+     of this file and must never be assumed to have read TRACKER.md or ADAPTATION.md on its
+     own. State plainly whether it should write code or only research.
+  3. Prefer running non-blocking subagents in the background so the lead session can keep
+     working rather than stalling, and never fabricate a subagent's result before it
+     reports back.
+  4. Review every subagent's diff yourself before integrating it — a subagent's summary
+     describes what it intended to do, not necessarily what it did.
+  5. Integrate all diffs into one working tree, run the full gate once (backend's four
+     checks, plus frontend's if touched), then commit — one commit per deliverable still
+     applies (TRACKER §5's "Commit shape"), even if several subagents contributed to it.
+
+Every HARD RULE below applies to every subagent, not only the lead session — never read
+`../jiva/`, never use the work GitHub account, no placeholders, C12's UI-in-the-same-
+milestone rule, C13's design tokens. A subagent prompt that omits these is a subagent that
+can violate them without anyone having decided it should.
 
 ------------------------------------------------------------------------------
 WHAT THIS PROJECT IS
 
 An enterprise AI assistant. One conversation surface; a router (A4, not built yet) will
-decide whether an answer needs documents (RAG, built in A2), a database (NL2SQL, next up
-as A3), a tool (MCP, B3), memory, or a combination. Underneath, every message will have an
-inspectable, budgeted context bundle (C4) and a governed memory layer distinguishing
-current facts from superseded ones (also C4) — that is the project's one deep technical
-claim, measured on the v0.1 kernel and not yet re-measured on Postgres.
+decide whether an answer needs documents (RAG, built in A2), a database (NL2SQL, in
+progress as A3), a tool (MCP, B3), memory, or a combination. Underneath, every message
+will have an inspectable, budgeted context bundle (C4) and a governed memory layer
+distinguishing current facts from superseded ones (also C4) — that is the project's one
+deep technical claim, measured on the v0.1 kernel and not yet re-measured on Postgres.
 
 It is a portfolio project. Production practices, single-node scale, zero paid dependencies
 in the default path, ever.
@@ -137,51 +285,79 @@ in the default path, ever.
 HARD RULES — violating any of these is worse than doing nothing
 
 * ZERO MONETARY COST. Every component free and self-hosted. No API key for any capability
-  in the default path. Ollama is the default model forever.
+  in the default path. Ollama is the default model forever. `sqlglot` and `cryptography`
+  are both free, pure-Python-or-widely-vendored, and self-hosted — keep it that way.
+  `sqlglot` is no longer a dependency doing nothing: deliverable 3 imports it in
+  `features/datasources/domain/guard.py`, and it is exercised by a real local model's
+  output, not only by hand-written test strings.
 
 * NEVER READ OR COPY FROM ../jiva/. That directory is the author's EMPLOYER'S proprietary
   codebase. Not a reference, not a source, not to be cited. Every file in Mnemos is written
   fresh. See ADAPTATION.md section 2 and constraint C11.
 
 * NEVER use the work GitHub account or email (harshaJKT, @jktech.com). Two accounts are
-  authenticated in `gh` on this machine. Confirm `Harsha2803` is active before any push.
+  authenticated in `gh` on this machine. Confirm `Harsha2803` is active before any push —
+  check every time, do not assume the last session left it right.
 
 * NO PLACEHOLDERS, NO TODOs, NO STUBBED RETURNS. Split a task rather than stub it.
+  Deliverable 3 built `guard_sql` and `SqlGenerationService` and gave them a real caller
+  (`mnemosctl datasource generate`) rather than leaving them uncalled until deliverable 4
+  — a function nothing calls is exactly the placeholder this rule forbids. Keep applying
+  that instinct to 4-5: build exactly what the deliverable needs, with a real caller, and
+  nothing speculative ahead of it. (One instance of restraint worth naming: deliverable 3
+  deliberately did *not* build per-table authorization checking, even though
+  `SqlVerdict.REJECTED_UNAUTHORIZED_TABLE` already exists as an enum value — nothing in the
+  deliverable's brief asked for it, and building it would have been exactly this kind of
+  unscoped, speculative work. It stays a reserved, unused verdict until something actually
+  needs it.)
 
-* EVERY FEATURE SHIPS ITS UI IN THE SAME MILESTONE (C12). Backend and frontend land
-  together.
+* EVERY FEATURE SHIPS ITS UI IN THE SAME MILESTONE (C12). Deliverables 1, 2 and 3 have no
+  product UI and that is fine — they are infrastructure the rest of `A3` needs, and their
+  CLI commands are operator tools, not the feature's UI slice. The milestone as a whole
+  does not ship, and PR #15 does not leave draft, until deliverable 5 lands.
 
 * THE UI FOLLOWS docs/DesignSystem.md (C13). Tokens are the only source of colour, type,
-  spacing and radius.
+  spacing and radius. Deliverable 5 introduces new territory — a result grid and a denial
+  state — read DesignSystem.md §3/§4 and TRACKER §5's "Read first" item 2 before building
+  either.
 
-* DO NOT re-litigate settled decisions (TRACKER section 2, ADAPTATION section 9, and now
-  also section 9's growing list of A0-A2 deviations, each argued in place). If you think
-  one is wrong, write an ADR superseding it — do not silently deviate.
+* DO NOT re-litigate settled decisions (TRACKER section 2, ADAPTATION section 9, and its
+  growing list of A0-A3 deviations, each argued in place). If you think one is wrong,
+  write an ADR superseding it — do not silently deviate.
 
 * DO NOT run `pkill -f mnemos` — it matches the agent's own shell. Kill by port or PID.
 
 * Never leave uncommitted work, and never leave a genuinely finished PR open. Push, open a
-  PR the moment a branch has its first commit (draft if unfinished), merge it the moment it
-  is actually done and green.
+  PR the moment a branch has its first commit, merge it the moment it is actually done and
+  green. "Actually done" for `A3` means all five deliverables, not just the ones that
+  happen to fit in one session.
 
 ------------------------------------------------------------------------------
 HOW TO WORK
 
 Commits: one logical change per commit, conventional format, explaining why not just what.
-Never a bulk commit of unrelated files.
+Never a bulk commit of unrelated files. TRACKER §5's "Commit shape" note: one commit per
+numbered deliverable, not one per milestone.
 
 Every change ends with ALL of:
-  - make test            (278 passed as of A2; will be higher after A3)
+  - make test            (342 passed as of A3 deliverable 3; will be higher after 4-5)
   - make lint / make types / make check
-  - frontend: npm run lint && npx tsc --noEmit && npm run test && npm run build
+  - frontend: npm run lint && npx tsc --noEmit && npm run test && npm run build (once a
+    deliverable touches the frontend — none of 1-3 did)
   - TRACKER.md updated in the same commit as the work — status, evidence, next task
   - docs/ADAPTATION.md updated in the same commit — section 7 position, section 8 state
   - README numbers updated ONLY if the retrieval or compile path moved, with the real
-    benchmark re-run
-  - the branch pushed with its PR open and CI green before you call the branch done
+    benchmark re-run (nothing in A3 touches that path)
+  - the branch pushed with its PR open and CI green before you call a deliverable done
+  - the PR's own title and body kept in sync too, not just its commits — they drifted this
+    milestone (title said one deliverable count, body said another) and had to be
+    reconciled; check both, every time, rather than assuming a past session got it right
 
 Report honestly. Claim something works only after you have run it and seen the output —
 "the endpoint returns 200" is not the same claim as "I signed in and did X in a browser".
+Deliverables 1-3 have no UI, so their evidence is test output plus a rebuilt-container CLI
+transcript against a real model, not a screenshot — say so plainly rather than implying a
+browser check happened when it did not.
 
 ------------------------------------------------------------------------------
 RUNNING IT
@@ -190,12 +366,28 @@ RUNNING IT
   docker compose up -d --build                   # nine services
   docker compose ps
   curl localhost:8000/readyz                     # postgres/redis/ollama/objectstore all "ok"
-  docker compose exec api mnemosctl bootstrap --org-slug mnemos --org-name Mnemos \
-      --admin-email admin@mnemos.local           # idempotent; MNEMOS_BOOTSTRAP_ADMIN_PASSWORD
-                                                  # or prompts
+  docker compose exec -e MNEMOS_BOOTSTRAP_ADMIN_PASSWORD=<pw> api mnemosctl bootstrap \
+      --org-slug mnemos --org-name Mnemos --admin-email admin@mnemos.local
+                                                  # idempotent; -e is required because
+                                                  # `docker compose exec` does not forward
+                                                  # host env vars into the container
+  docker compose exec -e MNEMOS_BOOTSTRAP_ADMIN_PASSWORD=<pw> api mnemosctl datasource \
+      introspect --org-slug mnemos              # registers + caches the demo warehouse
+  docker compose exec -e MNEMOS_BOOTSTRAP_ADMIN_PASSWORD=<pw> api mnemosctl datasource \
+      seed-glossary --org-slug mnemos           # seeds the four curated glossary terms
+  docker compose exec -e MNEMOS_BOOTSTRAP_ADMIN_PASSWORD=<pw> api mnemosctl datasource \
+      show-context --org-slug mnemos            # prints what the generation prompt sees
+  docker compose exec -e MNEMOS_BOOTSTRAP_ADMIN_PASSWORD=<pw> api mnemosctl datasource \
+      generate --org-slug mnemos "<question>"   # generates + guards + records; never runs
+                                                  # it — expect ~1-2 minutes on CPU for
+                                                  # qwen2.5:3b-instruct to answer
 
   cd backend && ../.venv/bin/python -m pytest -q
   make lint && make types && make check
+
+  # Code changes require a rebuild before `docker compose exec` will see them — the api
+  # image has no bind mount:
+  docker compose build api && docker compose up -d api
 
 Sign in at http://localhost:3000 as org `mnemos`, then on Keycloak's form use
 `analyst@mnemos.local` / `analyst` (or `user@mnemos.local` / `user`) — NOT
@@ -205,40 +397,57 @@ section 4 item 40. This bit every e2e spec until it was diagnosed; do not redisc
 
 Host ports (unchanged since M1): postgres 15432, redis 6380, api 8000, realtime 8001,
 keycloak 8080, minio 9000/9001, ollama 11434. Container-to-container traffic uses standard
-ports. Python venv is at .venv/ in the repo root; the package lives in backend/.
+ports — this now includes `mnemos_analytics`, reachable inside the compose network at
+`postgres:5432/mnemos_analytics` as `mnemos_ro` (see `MNEMOS_ANALYTICS_DATABASE_URL` in
+`docker-compose.yml`). Python venv is at .venv/ in the repo root; the package lives in
+backend/.
 
 ------------------------------------------------------------------------------
-WHERE THINGS ARE (current, post-A2)
+WHERE THINGS ARE (current, post-A3-deliverable-3)
 
   backend/src/mnemos/
-    core/          config, errors, logging, clock, ids, shared enums
+    core/          config, errors, logging, clock, ids, crypto (DsnCipher), shared enums
     platform/      db engine + tenant-scoped sessions, redis, objectstore (S3/MinIO), models
-    features/      identity, chat, llm (Ollama gateway), knowledge (RAG: extraction,
-                   chunking, embedding, pgvector+pg_trgm retrieval), memory, context,
-                   connectors, datasources, tools, prompts, observability
-    flows/         rag (built, A2), nl2sql (next, A3), agent, router
-    entrypoints/   api, worker, realtime, cli
-    _v1/           the SQLite kernel. Retrieval was ported OUT of it in A2 (do not import
-                   it for new retrieval work — features/knowledge/ is the real thing now).
-                   Memory + the six-phase compiler are still only in here, ported in C4.
-  backend/migrations/    alembic revisions (no new one needed since A0 — A1/A2 both used
-                          columns M2 already created)
-  backend/tests/          test_knowledge_domain.py / test_knowledge_endpoints.py are A2's;
-                          test_chat_endpoints.py / test_llm_gateway.py are A1's
+    features/      identity, chat, llm (Ollama gateway), knowledge (RAG), memory, context,
+                   connectors, datasources (NL2SQL — introspection, glossary, generation and
+                   the AST guard are built; execution is not), tools, prompts, observability
+    flows/         rag (built, A2), nl2sql (still three empty __init__.py stubs — TRACKER §5
+                   was explicit that generation/guard, deliverable 3, is "more of
+                   features/datasources/, not a new one"; this package gets its first real
+                   content in deliverable 4, once streaming and the chat integration need
+                   a flow that spans more than one feature), agent, router
+    entrypoints/   api, worker, realtime, cli (now has `datasource introspect`,
+                   `seed-glossary`, `show-context`, `generate`)
+    _v1/           the SQLite kernel. Retrieval was ported OUT of it in A2. Memory + the
+                   six-phase compiler are still only in here, ported in C4.
+  backend/migrations/    alembic revisions (no new one needed since A0 — A1/A2/A3-so-far
+                          all used columns M2 already created)
+  backend/tests/          test_datasources_domain.py (deliverable 1's pure tests plus
+                          deliverable 2's render_schema_context tests),
+                          test_datasources_introspection.py (deliverable 1's integration
+                          tests), test_datasources_glossary.py (deliverable 2's),
+                          test_datasources_guard.py (deliverable 3's, new — pure, 31 cases,
+                          no Postgres needed), test_datasources_generation.py (deliverable
+                          3's, new — extract_sql_statement plus SqlGenerationService
+                          integration tests against a real Postgres); conftest.py's
+                          `postgres` fixture seeds `mnemos_analytics`
   frontend/src/
-    app/(app)/chat/, app/(app)/knowledge/    the two built screens
+    app/(app)/chat/, app/(app)/knowledge/    the two built screens (A3 has no screen yet)
     components/chat/, components/knowledge/, lib/chat/, lib/knowledge/, lib/inspector/
-  deploy/                postgres init SQL, keycloak realm
+  deploy/                postgres init SQL (includes the analytics seed, wired into
+                          docker-compose.yml), keycloak realm
   docs/                  architecture, schema, API contract, threat model, ADRs
 
 Layering rule: domain (pure) <- application <- adapters/api. `features` must never import
-`flows`; `flows` may import multiple `features` (this is exactly how flows/rag/ is allowed
-to depend on both features/chat and features/knowledge while keeping them ignorant of each
-other).
+`flows`; `flows` may import multiple `features`. `features/datasources/` follows this
+already (`domain/{schema,glossary,context,guard,generation}.py` have zero SQLAlchemy
+imports) — keep deliverable 4's execution adapter the same shape, and expect deliverable 4
+to be where `flows/nl2sql/` finally gets real content (see the `flows/` line above).
 
 ------------------------------------------------------------------------------
 START HERE
 
-Read TRACKER.md now — the ⚠️ warning block near the top first, then section 3's A2 entry,
-then section 5. Do steps 1-8 under "WHAT TO DO, IN ORDER" above before writing any new
-feature code. Tell me what you're about to do before you start.
+Read TRACKER.md now — the header, the "2026-08-15 — A3 deliverable 3" note, section 3's A3
+entry, then section 5 (deliverables 4-5, fully specified). Do steps 1-6 under "WHAT TO DO,
+IN ORDER" above before writing any new feature code. Tell me what you're about to do
+before you start.

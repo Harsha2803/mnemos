@@ -27,6 +27,11 @@ class Environment(StrEnum):
 #: has read this repository can forge, and it would do so silently.
 DEV_JWT_SECRET: Final = "dev-only-change-me-not-for-production-use"
 
+#: A valid Fernet key (32 url-safe base64 bytes) so the development default
+#: works out of the box, generated once and pinned here rather than derived —
+#: `_reject_the_dev_secret_in_production` needs a literal to compare against.
+DEV_DSN_ENCRYPTION_KEY: Final = "zqQeIteGh6YP2kybnsto8GE8W38N_u9yJhINMNKDpMg="
+
 
 class Settings(BaseSettings):
     model_config = SettingsConfigDict(
@@ -147,11 +152,17 @@ class Settings(BaseSettings):
     # Separate database, read-only role. The AST guard is the second line of
     # defence, not the only one.
     analytics_database_url: str = (
-        "postgresql://mnemos_ro:mnemos_ro_dev@localhost:5432/mnemos_analytics"
+        "postgresql+asyncpg://mnemos_ro:mnemos_ro_dev@localhost:5432/mnemos_analytics"
     )
     sql_statement_timeout_ms: int = 15_000
     sql_max_rows: int = 5_000
     sql_repair_attempts: int = 2
+    # Fernet (`cryptography`). A registered datasource's DSN is stored encrypted
+    # at rest (`sql_datasource.dsn_encrypted`) even though the demo warehouse's
+    # DSN is itself non-secret — the column exists for a real deployment's
+    # credentials, and a registry that only sometimes encrypts is one an
+    # operator cannot reason about.
+    dsn_encryption_key: SecretStr = SecretStr(DEV_DSN_ENCRYPTION_KEY)
 
     # -- limits -----------------------------------------------------------
     max_upload_bytes: int = 25 * 1024 * 1024
@@ -159,12 +170,12 @@ class Settings(BaseSettings):
 
     cors_origins: list[str] = ["http://localhost:3000", "http://127.0.0.1:3000"]
 
-    @field_validator("database_url")
+    @field_validator("database_url", "analytics_database_url")
     @classmethod
     def _require_async_driver(cls, v: str) -> str:
         if not v.startswith("postgresql+asyncpg://"):
             raise ValueError(
-                "database_url must use the asyncpg driver "
+                "must use the asyncpg driver "
                 "(postgresql+asyncpg://). A sync driver silently blocks the event loop."
             )
         return v
@@ -182,6 +193,11 @@ class Settings(BaseSettings):
             self.jwt_secret.get_secret_value() == DEV_JWT_SECRET
         ):
             msg = "MNEMOS_JWT_SECRET is still the development default; set a real secret"
+            raise ValueError(msg)
+        if self.env is Environment.PRODUCTION and (
+            self.dsn_encryption_key.get_secret_value() == DEV_DSN_ENCRYPTION_KEY
+        ):
+            msg = "MNEMOS_DSN_ENCRYPTION_KEY is still the development default; set a real key"
             raise ValueError(msg)
         return self
 

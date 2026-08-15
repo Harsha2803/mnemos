@@ -39,6 +39,14 @@ OWNER_PASSWORD = "mnemos"
 DATABASE = "mnemos"
 APP_PASSWORD = "app-role-test-only"
 
+# The NL2SQL warehouse: a second database on the same container, seeded from the
+# same SQL the compose stack runs at `deploy/postgres/init/02-analytics-seed.sql`
+# — a fake warehouse would only prove the fake is introspectable, and the point
+# of `mnemos_ro` is that it is a real Postgres role that physically cannot write.
+ANALYTICS_DATABASE = "mnemos_analytics"
+ANALYTICS_RO_USER = "mnemos_ro"
+ANALYTICS_RO_PASSWORD = "mnemos_ro_dev"
+
 
 @dataclass(frozen=True)
 class Postgres:
@@ -72,6 +80,22 @@ class Postgres:
     def app_dsn(self) -> str:
         return self._url("mnemos_app", APP_PASSWORD, driver="")
 
+    def _analytics_url(self, user: str, password: str, *, driver: str) -> str:
+        sep = "+" + driver if driver else ""
+        return f"postgresql{sep}://{user}:{password}@{self.host}:{self.port}/{ANALYTICS_DATABASE}"
+
+    @property
+    def analytics_owner_dsn(self) -> str:
+        return self._analytics_url(OWNER_USER, OWNER_PASSWORD, driver="")
+
+    @property
+    def analytics_ro_url(self) -> str:
+        return self._analytics_url(ANALYTICS_RO_USER, ANALYTICS_RO_PASSWORD, driver="asyncpg")
+
+    @property
+    def analytics_ro_dsn(self) -> str:
+        return self._analytics_url(ANALYTICS_RO_USER, ANALYTICS_RO_PASSWORD, driver="")
+
 
 async def _create_extensions(dsn: str) -> None:
     conn = await asyncpg.connect(dsn)
@@ -80,6 +104,34 @@ async def _create_extensions(dsn: str) -> None:
             await conn.execute(f"CREATE EXTENSION IF NOT EXISTS {extension}")
     finally:
         await conn.close()
+
+
+async def _seed_analytics_warehouse(pg: Postgres) -> None:
+    """Create `mnemos_analytics` and run the real seed script against it.
+
+    The seed script is written for `psql` (it opens with `\\connect
+    mnemos_analytics`, a client meta-command asyncpg does not understand)
+    against a database that does not exist yet — `CREATE DATABASE` cannot run
+    inside the transaction `execute()` would otherwise wrap it in, so it is a
+    separate connection and a separate statement, and only then does the seed
+    script run against the database it just created.
+    """
+    owner_conn = await asyncpg.connect(pg.owner_dsn)
+    try:
+        await owner_conn.execute(f"CREATE DATABASE {ANALYTICS_DATABASE}")
+    finally:
+        await owner_conn.close()
+
+    sql_path = BACKEND_ROOT.parent / "deploy" / "postgres" / "init" / "02-analytics-seed.sql"
+    statements = "\n".join(
+        line for line in sql_path.read_text().splitlines() if not line.strip().startswith("\\")
+    )
+
+    analytics_conn = await asyncpg.connect(pg.analytics_owner_dsn)
+    try:
+        await analytics_conn.execute(statements)
+    finally:
+        await analytics_conn.close()
 
 
 def _run_migrations(owner_url: str) -> None:
@@ -125,4 +177,5 @@ def postgres() -> Iterator[Postgres]:
         )
         asyncio.run(_create_extensions(pg.owner_dsn))
         _run_migrations(pg.owner_url)
+        asyncio.run(_seed_analytics_warehouse(pg))
         yield pg

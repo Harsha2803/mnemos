@@ -120,7 +120,7 @@ test("test_you_can_upload_a_document_ask_about_it_and_click_the_citation", async
   await page.getByRole("main").getByRole("button", { name: "New chat" }).click();
   await page.waitForURL(new RegExp(`^${WEB}/chat/`));
 
-  await page.getByRole("checkbox", { name: "Use documents" }).check();
+  await page.getByRole("radio", { name: "Use documents" }).click();
   const composer = page.getByRole("textbox", { name: "Message" });
   await composer.fill("How many days of unused leave can I carry over?");
   await composer.press("Enter");
