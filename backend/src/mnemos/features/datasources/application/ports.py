@@ -4,16 +4,19 @@
 
 from __future__ import annotations
 
+import uuid
 from dataclasses import dataclass
 from datetime import datetime
 from typing import Protocol
 
+from mnemos.core.types import SqlVerdict
 from mnemos.features.datasources.domain import (
     DatasourceId,
     GlossaryTermRow,
     IntrospectedColumn,
     IntrospectedTable,
     SchemaObjectDraft,
+    SqlRunId,
 )
 from mnemos.features.identity.domain import OrgId
 
@@ -94,3 +97,45 @@ class GlossaryRepository(Protocol):
     async def list_terms(
         self, *, org_id: OrgId, datasource_id: DatasourceId
     ) -> list[GlossaryTermRow]: ...
+
+
+@dataclass(frozen=True, slots=True)
+class SqlRunRecord:
+    id: SqlRunId
+    org_id: OrgId
+    datasource_id: DatasourceId
+    attempt: int
+    question: str
+    generated_sql: str
+    verdict: SqlVerdict
+    verdict_detail: str | None
+    authorized_tables: list[str]
+    denied_tables: list[str]
+
+
+class SqlRunRepository(Protocol):
+    async def record_attempt(
+        self,
+        *,
+        org_id: OrgId,
+        datasource_id: DatasourceId,
+        message_id: uuid.UUID | None,
+        attempt: int,
+        question: str,
+        generated_sql: str,
+        verdict: SqlVerdict,
+        verdict_detail: str | None,
+        authorized_tables: list[str],
+        denied_tables: list[str],
+    ) -> SqlRunRecord:
+        """Persist one generation attempt and its verdict, successful or not.
+
+        `message_id` is nullable because deliverable 3 has no chat message to
+        attach to yet (`flows/nl2sql/`, deliverable 4, is what will pass a
+        real one) — every attempt is still recorded, just not yet linked to a
+        conversation turn. `attempt` is supplied by the caller rather than
+        computed here, so a future repair loop (deliverable 4,
+        `Settings.sql_repair_attempts`) can record attempt 2, 3, ... against
+        the same question without this port changing shape.
+        """
+        ...

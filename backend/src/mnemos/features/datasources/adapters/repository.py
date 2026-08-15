@@ -7,16 +7,25 @@ explicit `org_id` predicate (CodingStandards §6) — the same discipline
 
 from __future__ import annotations
 
+import uuid
+
 from sqlalchemy import delete, func, select
 
 from mnemos.core.ids import IdGenerator
+from mnemos.core.types import SqlVerdict
 from mnemos.features.datasources.adapters.models import (
     GlossaryTerm,
     SqlDatasource,
+    SqlRun,
     SqlSchemaObject,
 )
-from mnemos.features.datasources.application.ports import DatasourceRecord
-from mnemos.features.datasources.domain import DatasourceId, GlossaryTermRow, SchemaObjectDraft
+from mnemos.features.datasources.application.ports import DatasourceRecord, SqlRunRecord
+from mnemos.features.datasources.domain import (
+    DatasourceId,
+    GlossaryTermRow,
+    SchemaObjectDraft,
+    SqlRunId,
+)
 from mnemos.features.identity.domain import OrgId
 from mnemos.platform.db import Database
 
@@ -219,3 +228,57 @@ class GlossaryRepository:
             )
             for r in rows
         ]
+
+
+def _to_sql_run_record(row: SqlRun) -> SqlRunRecord:
+    return SqlRunRecord(
+        id=SqlRunId(row.id),
+        org_id=OrgId(row.org_id),
+        datasource_id=DatasourceId(row.datasource_id),
+        attempt=row.attempt,
+        question=row.question,
+        generated_sql=row.generated_sql,
+        verdict=SqlVerdict(row.verdict),
+        verdict_detail=row.verdict_detail,
+        authorized_tables=list(row.authorized_tables),
+        denied_tables=list(row.denied_tables),
+    )
+
+
+class SqlRunRepository:
+    def __init__(self, db: Database, ids: IdGenerator) -> None:
+        self._db = db
+        self._ids = ids
+
+    async def record_attempt(
+        self,
+        *,
+        org_id: OrgId,
+        datasource_id: DatasourceId,
+        message_id: uuid.UUID | None,
+        attempt: int,
+        question: str,
+        generated_sql: str,
+        verdict: SqlVerdict,
+        verdict_detail: str | None,
+        authorized_tables: list[str],
+        denied_tables: list[str],
+    ) -> SqlRunRecord:
+        async with self._db.session(org_id=org_id) as session:
+            row = SqlRun(
+                id=self._ids.new(),
+                org_id=org_id,
+                datasource_id=datasource_id,
+                message_id=message_id,
+                attempt=attempt,
+                question=question,
+                generated_sql=generated_sql,
+                verdict=verdict.value,
+                verdict_detail=verdict_detail,
+                authorized_tables=authorized_tables,
+                denied_tables=denied_tables,
+            )
+            session.add(row)
+            await session.flush()
+            await session.refresh(row)
+            return _to_sql_run_record(row)

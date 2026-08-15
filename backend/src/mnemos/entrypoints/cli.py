@@ -26,8 +26,16 @@ import getpass
 import os
 import sys
 
+import httpx
 from sqlalchemy import select, text
 
+# Every model module, imported for its side effect on `Base.metadata` before
+# any ORM operation runs — the same reason `entrypoints/api/main.py` imports
+# this (see its own comment). `datasource generate` is the first CLI command
+# to write a row with a foreign key crossing a feature boundary
+# (`sql_run.message_id -> chat_message.id`), and nothing about importing
+# `datasources`' own adapter module implies that `chat`'s will also have run.
+import mnemos.platform.models  # noqa: F401
 from mnemos.core.config import Settings, get_settings
 from mnemos.core.crypto import DsnCipher
 from mnemos.core.errors import MnemosError, NotFoundError, ValidationError
@@ -38,7 +46,9 @@ from mnemos.features.datasources.adapters.repository import (
     DatasourceRepository,
     GlossaryRepository,
     SchemaObjectRepository,
+    SqlRunRepository,
 )
+from mnemos.features.datasources.application.generation import SqlGenerationService
 from mnemos.features.datasources.application.service import DatasourceService
 from mnemos.features.datasources.domain import GlossaryTermRow
 from mnemos.features.identity.adapters.bootstrap_store import SqlBootstrapStore
@@ -52,6 +62,7 @@ from mnemos.features.identity.application.bootstrap import (
     OidcSettings,
 )
 from mnemos.features.identity.domain import OrgId
+from mnemos.features.llm.adapters.ollama import OllamaChatModel
 from mnemos.platform.db import Database
 
 #: The one warehouse this build ships. A datasource registry UI is out of
@@ -372,6 +383,51 @@ async def _datasource_show_context(args: argparse.Namespace) -> int:
     return 0
 
 
+async def _datasource_generate(args: argparse.Namespace) -> int:
+    """Generate, guard and record one attempt. Never executes the statement —
+    that is deliverable 4. This is deliverable 3's real, demonstrable
+    consumer of `guard_sql`/`SqlGenerationService`, the same reasoning
+    `show-context` was for `render_schema_context` in deliverable 2."""
+    settings = get_settings()
+    db = Database(settings)
+    # A separate client from the one the API process reuses per-request
+    # (`entrypoints/api/main.py`'s `app.state.ollama_http`) — this is a
+    # one-shot CLI invocation, not a long-lived server, so it opens and
+    # closes its own.
+    http_client = httpx.AsyncClient()
+    try:
+        org_id = await _resolve_org_id(db, args.org_slug)
+        model = OllamaChatModel(
+            client=http_client,
+            base_url=settings.ollama_base_url,
+            model=settings.ollama_model,
+            timeout_s=float(settings.ollama_timeout_s),
+        )
+        generation = SqlGenerationService(
+            datasources=_datasource_service(db, settings),
+            model=model,
+            sql_runs=SqlRunRepository(db, DEFAULT_ID_GENERATOR),
+        )
+        run = await generation.generate(org_id=org_id, slug=args.slug, question=args.question)
+    finally:
+        await http_client.aclose()
+        await db.dispose()
+
+    print(f"datasource       : {args.slug}")
+    print(f"question         : {run.question}")
+    print(f"verdict          : {run.verdict.value}")
+    if run.verdict_detail:
+        print(f"detail           : {run.verdict_detail}")
+    print("sql              :")
+    for line in run.generated_sql.splitlines() or [""]:
+        print(f"  {line}")
+    if run.authorized_tables:
+        print(f"tables read      : {', '.join(run.authorized_tables)}")
+    if run.denied_tables:
+        print(f"tables refused   : {', '.join(run.denied_tables)}")
+    return 0
+
+
 def main() -> int:
     parser = argparse.ArgumentParser(prog="mnemosctl", description="Mnemos operations")
     sub = parser.add_subparsers(dest="group", required=True)
@@ -463,6 +519,25 @@ def main() -> int:
         help=f"Datasource slug (default: {DEMO_DATASOURCE_SLUG})",
     )
 
+    generate = ds_sub.add_parser(
+        "generate",
+        help="generate SQL for a question, guard it, and record the attempt (never executes)",
+        description=(
+            "Renders the datasource's schema and glossary (the same block 'show-context' "
+            "prints), asks the configured Ollama model for one read-only SELECT, parses it "
+            "with sqlglot and rejects anything that is not a single read wherever it "
+            "appears in the statement, and writes a sql_run row with the verdict either "
+            "way. Never executes the statement — that is deliverable 4."
+        ),
+    )
+    generate.add_argument("--org-slug", required=True, help="Org whose datasource to query")
+    generate.add_argument(
+        "--slug",
+        default=DEMO_DATASOURCE_SLUG,
+        help=f"Datasource slug (default: {DEMO_DATASOURCE_SLUG})",
+    )
+    generate.add_argument("question", help="The question to translate into SQL")
+
     args = parser.parse_args()
 
     if args.group == "bootstrap":
@@ -500,6 +575,13 @@ def main() -> int:
             return asyncio.run(_datasource_show_context(args))
         except (MnemosError, LookupError) as exc:
             print(f"datasource show-context failed: {exc}", file=sys.stderr)
+            return 2
+
+    if args.group == "datasource" and args.command == "generate":
+        try:
+            return asyncio.run(_datasource_generate(args))
+        except (MnemosError, LookupError) as exc:
+            print(f"datasource generate failed: {exc}", file=sys.stderr)
             return 2
 
     parser.print_help()

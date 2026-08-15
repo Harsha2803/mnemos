@@ -72,7 +72,11 @@ class DatasourceService:
             allowed_schemas=allowed_schemas,
         )
 
-    async def _require_datasource(self, *, org_id: OrgId, slug: str) -> DatasourceRecord:
+    async def require_datasource(self, *, org_id: OrgId, slug: str) -> DatasourceRecord:
+        """Public: deliverable 3's `SqlGenerationService` needs the full
+        record (specifically `.id`, for `sql_run.datasource_id`), not just
+        the rendered text `render_context` returns — this graduated from a
+        private helper the moment a second class needed the same lookup."""
         datasource = await self._datasources.get_by_slug(org_id=org_id, slug=slug)
         if datasource is None:
             raise LookupError(f"no datasource registered for org {org_id} with slug {slug!r}")
@@ -84,7 +88,7 @@ class DatasourceService:
         Returns the number of `sql_schema_object` rows written, so the CLI has
         something concrete to print rather than a bare "done".
         """
-        datasource = await self._require_datasource(org_id=org_id, slug=slug)
+        datasource = await self.require_datasource(org_id=org_id, slug=slug)
 
         dsn = self._cipher.decrypt(datasource.dsn_encrypted)
         tables, columns = await self._introspector.introspect(
@@ -109,7 +113,7 @@ class DatasourceService:
         """Idempotent: a term already present (matched by its `term` text) is
         left untouched. Returns how many were newly written, mirroring
         `refresh_schema`'s "something concrete to print" reasoning."""
-        datasource = await self._require_datasource(org_id=org_id, slug=slug)
+        datasource = await self.require_datasource(org_id=org_id, slug=slug)
         written = await self._glossary.ensure_terms(
             org_id=org_id, datasource_id=datasource.id, terms=terms
         )
@@ -125,7 +129,7 @@ class DatasourceService:
         """The schema-plus-glossary text block deliverable 3's prompt uses.
         Reads the caches deliverable 1 and `seed_glossary` write; introspects
         and seeds nothing itself."""
-        datasource = await self._require_datasource(org_id=org_id, slug=slug)
+        datasource = await self.require_datasource(org_id=org_id, slug=slug)
         schema_objects = await self._schema_objects.list_all(
             org_id=org_id, datasource_id=datasource.id
         )
