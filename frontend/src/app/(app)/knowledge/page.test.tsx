@@ -77,7 +77,7 @@ describe("the knowledge library", () => {
 
     renderWithProviders(<KnowledgePage />);
 
-    const input = await screen.findByLabelText("Upload a document");
+    const input = await screen.findByLabelText("Upload documents");
     await userEvent.upload(
       input,
       new File(["some document text"], "policy.txt", { type: "text/plain" }),
@@ -115,7 +115,7 @@ describe("the knowledge library", () => {
     // so the server's refusal is the control being tested here and the client
     // hint is not a substitute for it.
     await userEvent.upload(
-      await screen.findByLabelText("Upload a document"),
+      await screen.findByLabelText("Upload documents"),
       new File(["PK"], "archive.zip", { type: "application/zip" }),
       { applyAccept: false },
     );
