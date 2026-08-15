@@ -6,21 +6,117 @@
 > **and [`docs/ADAPTATION.md`](docs/ADAPTATION.md)** *in the same commit* — a stale
 > tracker is worse than none.
 
-**Last updated:** 2026-08-15 (night) — `B1` deliverable 2 built: the `EventBus` port and
-its Redis Streams adapter (`platform/events/`). Deliverables 3-5 (realtime auth, the
-worker's real job-processing path, the sources UI) remain — see §5.
+**Last updated:** 2026-08-16 — `B1` deliverable 3 built: the realtime gateway's
+JWT-validated WS handshake and org-derived channel scoping (`entrypoints/realtime/
+main.py`). Deliverables 4-5 (the worker's real job-processing path, the sources UI)
+remain — see §5.
 **Phase:** **A — make it a chatbot.** `A0` ✅, `A1` ✅, `A2` ✅, `A3` ✅ — all merged to
 `main`. Phase A is complete. Build order deviates from phase order once: `B1`/`B2` come
 next, before `A4` (2026-08-15 evening re-sequencing note below).
-**Next task:** `B1` deliverable 3 — close the realtime gateway's auth gap (JWT-validated
-WS handshake, org-derived channel scoping). Deliverables 1-2 are done and on the branch
-(evidence below and in §3). Deliverables 3-5 are **fully specified in §5**, unchanged from
-the original brief except deliverables 1-2's own entries, which now record what was
-actually built rather than what was planned.
+**Next task:** `B1` deliverable 4 — the worker claims and processes a real `ingest_job`
+(extract/chunk/embed, reusing the factored-out body from `upload_document`), publishing to
+both the event bus and the now-authenticated realtime channel deliverable 3 built.
+Deliverables 1-3 are done and on the branch (evidence below and in §3). Deliverables 4-5
+are **fully specified in §5**, unchanged from the original brief except deliverables 1-3's
+own entries, which now record what was actually built rather than what was planned.
 **Branch right now:** `feat/b1-connectors`, PR open (draft — `B1`'s PR stays in draft
-until deliverable 5's sources UI exists, per C12). Deliverables 1-2's commits are on it;
+until deliverable 5's sources UI exists, per C12). Deliverables 1-3's commits are on it;
 `main` is unchanged.
 
+> ### 2026-08-16 — `B1` deliverable 3 built: the realtime gateway's JWT-validated WS
+> handshake and org-derived channel scoping
+>
+> Picked up right where deliverable 2 left off, on the same branch. Closed the gap this
+> file flagged when deliverable 1 landed: `entrypoints/realtime/main.py`'s `/ws/{channel}`
+> accepted any connection and relayed anything published to `mnemos:{channel}` — no JWT
+> check, no org scoping, its own docstring calling this deliberate "until M3" (which has
+> been done since `A0`).
+>
+> **What's built:** the gateway now builds the identical `PlatformTokenCodec` +
+> `PrincipalResolver` pair `entrypoints/api/main.py`'s lifespan builds, from the same
+> `Settings` fields (one signing secret, one issuer, one algorithm allow-list — `api`,
+> `worker` and `realtime` stay one trust domain, ThreatModel.md §5.1), which meant giving
+> the gateway a `Database` for the first time (mirroring how `entrypoints/worker/main.py`
+> already wires one into a non-API entrypoint). `PrincipalResolver.resolve()` is the full
+> HTTP-guard-equivalent check — signature, issuer, expiry against the injected clock, the
+> user still active, the session (`sid` claim) still live in Postgres — not just a
+> signature check, so a revoked session or deactivated user is refused over the WS the same
+> as over HTTP. The route factory is now `create_app()` (mirroring the API entrypoint's own
+> shape) rather than a module-level `FastAPI()` plus decorators, so the gateway is
+> constructible with fixtures the same way `test_route_guard.py`/`test_chat_endpoints.py`
+> already construct the API.
+>
+> **The two judgment calls the brief flagged as open, made and recorded here since nothing
+> else will remember them:**
+>
+> 1. **The token travels as a `Sec-WebSocket-Protocol` offer, not a query parameter.** A
+>    browser cannot set an `Authorization` header on a WS upgrade, so it had to be one or
+>    the other. `core/config.py`'s `web_signin_complete_url` docstring already states the
+>    rule a query parameter would have broken: no credential ever appears in a URL, an
+>    access log, a proxy log or browser history. The client offers exactly two subprotocol
+>    values, `["bearer", "<token>"]`; the server echoes back only `"bearer"` on `accept()`,
+>    so the token does not appear a second time in a response header either. JWTs are safe
+>    to carry verbatim as a subprotocol value — the base64url alphabet plus `.` is entirely
+>    inside RFC 7230's `token` grammar, so no encoding step was needed.
+> 2. **The channel naming scheme is `mnemos:org:{org_id}:{kind}`, and `kind` is drawn from
+>    a closed allow-list (`ALLOWED_CHANNEL_KINDS`, currently just `{"ingestion"}`) — never
+>    from anything else in the URL.** The `channel` path segment names *what kind* of
+>    channel, never *whose*; the org half of the topic is always `caller.principal.org_id`,
+>    read off the resolved token, and is never accepted as client input at all. This is
+>    deliverable 4's contract to match: the worker's `Cache.client.publish` calls must
+>    target exactly `f"mnemos:org:{org_id}:ingestion"` for the gateway to relay them, and
+>    deliverable 5's frontend WS client connects to `/ws/ingestion` offering
+>    `["bearer", token]` — it never constructs or sends an org id itself.
+>
+> **The attack the brief named, closed and proved against a real route, not a call site
+> that merely looks like it enforces it (`ThreatModel.md` §3⑤, "never ship a second
+> defence as if it were the first"):** hand-typing another org's id into the WS URL cannot
+> reach that org's channel, because the URL was never able to name an org to begin with —
+> only a channel *kind*, checked against a closed set. `tests/test_realtime_auth.py`'s
+> `test_a_channel_kind_that_embeds_another_orgs_id_is_refused` is that exact attack
+> (`/ws/org:{other_org_id}:ingestion` with org A's own genuine token), refused before
+> `accept()` with the same uniform close code (`1008`, no reason on the wire) every other
+> handshake denial gets — one answer for "no valid token" and "not a real channel kind",
+> the same "every denial reads the same" discipline `providers/base.py`'s `denied()`
+> already established for the HTTP guard, extended to a transport that has no JSON body to
+> render it in.
+>
+> **A real property, proved against a real Redis, not asserted:** `test_a_token_for_org_a_
+> never_receives_what_is_published_on_org_bs_channel` publishes to org B's real derived
+> topic *first*, then org A's, over the same `redis_url` testcontainers fixture deliverable
+> 2's tests use, and asserts org A's socket receives org A's payload — a fake pub/sub would
+> only prove the fake isolates, and Redis's own exact-topic delivery means there is no
+> timing race to arbitrate: if the gateway had derived org A's topic from anything the
+> client controls, org B's message — published first — would have arrived first. Also
+> covered: a genuine token succeeds and is relayed (the control every denial test is one
+> mutation away from), every malformed handshake shape (no subprotocol offered, the token
+> half missing, the wrong first subprotocol, a non-JWT token), a token signed with a
+> different secret, an expired token (against the injected clock, not the wall clock, same
+> as `test_platform_tokens.py`), a revoked session, and a deactivated user's token — 12
+> tests total, hermetic identity (a fake `PrincipalRepository`, same reasoning
+> `test_route_guard.py` gives) over real Redis.
+>
+> **Live-verified against the running compose stack, not just the test suite:** rebuilt and
+> restarted the `realtime` container; it now depends on Postgres at boot (a
+> `ConfigurationError` on a bad `MNEMOS_JWT_SECRET` would fail startup, same as the API) and
+> came up clean (`realtime.startup` logged, no error). Minted a genuine access token for a
+> real, live, non-revoked session already in the running database (`analyst@mnemos.local` /
+> org `mnemos`), connected over a real WebSocket client, received the `subscribed` ack,
+> published to `mnemos:org:{org_id}:ingestion` on the compose stack's real Redis and watched
+> it relay through; a hand-typed `/ws/org:{other_org_id}:ingestion` with the same genuine
+> token was refused with an HTTP `403` at the handshake (uvicorn's translation of a
+> pre-`accept()` `websocket.close()`) before ever reaching Redis.
+>
+> **Evidence:** `make test` — 403 passed (391 prior + 12 new, `tests/test_realtime_auth.py`,
+> against real Redis via testcontainers). `make lint` / `make types` clean. `make check`
+> (`alembic check`) clean — no migration touched, no schema change. No frontend change;
+> deliverable 3 has no UI surface of its own, same as deliverables 1-2.
+>
+> **Not done, deliberately — deliverables 4-5, exactly as `B1`'s original brief specifies
+> them.** No worker changes, no frontend. The worker's real job-processing path
+> (deliverable 4) is next — it is what will make the now-authenticated channel carry a real
+> event for the first time.
+>
 > ### 2026-08-15 (night) — `B1` deliverable 2 built: the `EventBus` port and its Redis
 > Streams adapter
 >
@@ -799,7 +895,7 @@ order" list is the authoritative next-up sequence; the note above it explains wh
 
 | ID | What it builds | You can now… | Status |
 |---|---|---|---|
-| **B1** | Object storage · source connectors (MinIO/S3, local FS, HTTP) · Redis Streams event bus · sources UI | **connect a source, browse it, and watch ingestion events arrive live** | 🟡 **deliverable 1/5 done** — connectors + migration + CLI; event bus, realtime auth, worker, UI remain |
+| **B1** | Object storage · source connectors (MinIO/S3, local FS, HTTP) · Redis Streams event bus · sources UI | **connect a source, browse it, and watch ingestion events arrive live** | 🟡 **deliverable 3/5 done** — connectors, event bus, realtime auth; worker, UI remain |
 | **B2** | Ingestion jobs at scale: heartbeat, retries, status history, stuck-job reaper · per-job progress UI | **ingest a folder and watch every job's progress — including one that dies, surfaced as stuck rather than silently lost** | ⬜ **after `B1`** |
 | **B3** | MCP tool runtime: registry, per-user credentials, trust tiers, approval gates · tool console | **register a tool, have the assistant call it, and approve a gated call** — with a denial that names the offending source on screen | ⬜ |
 | **B4** | Agent flow: bounded state machine over tools, checkpoints, step trace | **give it a multi-step task and watch it plan, call tools and finish — with every step inspectable** | ⬜ |
@@ -851,12 +947,13 @@ discarded. If you find a reference to an old ID anywhere, this is the translatio
 | `M13` frontend | dissolved into `F0` + a UI slice per milestone | Unchanged by this re-plan |
 | `M14` realtime + e2e + docs | `D1` | |
 
-### 🟡 B1 — connect a source and watch it ingest, deliverable 2/5 done 2026-08-15 (night)
+### 🟡 B1 — connect a source and watch it ingest, deliverable 3/5 done 2026-08-16
 
-**Deliverables 1-2 — the `SourceConnector` port + factory, and the `EventBus` port + Redis
-Streams adapter — are done; deliverables 3-5 are not.** Branch `feat/b1-connectors`, PR
-open in draft (stays draft until deliverable 5's sources UI exists, per C12 — deliverables
-1-4 have no product UI by design).
+**Deliverables 1-3 — the `SourceConnector` port + factory, the `EventBus` port + Redis
+Streams adapter, and the realtime gateway's JWT-validated WS handshake — are done;
+deliverables 4-5 are not.** Branch `feat/b1-connectors`, PR open in draft (stays draft
+until deliverable 5's sources UI exists, per C12 — deliverables 1-4 have no product UI by
+design).
 
 What's built (deliverable 1): `features/connectors/domain/port.py` (`SourceItem`,
 `SourceConnector` protocol), three adapters (`s3.py` over the extended `ObjectStore` port,
@@ -878,20 +975,27 @@ consumer-group reader. Full detail, including the six real-Redis tests that prov
 durability/idempotence/competing-consumer semantics rather than assert them, is in the
 dated note near the top of this file ("`B1` deliverable 2 built").
 
-**Evidence:** `make test` — 391 passed (384 prior + 7 new: the SSRF deny-list and
-local-fs traversal refusals from deliverable 1, plus deliverable 2's event-bus round trip
-against a real Redis via testcontainers — group-created-after-publish backlog delivery,
-idempotent group creation, no redelivery of an already-delivered message, competing
-consumers, `ack` clearing `XPENDING`, and an unreachable-Redis error translation). `make
-lint` / `make types` clean. A real Postgres (`pgvector/pgvector:pg16`) confirms `alembic
-upgrade head`, `alembic check` (clean — no drift between the migration and the models,
-and no new migration in deliverable 2), a full upgrade→downgrade→upgrade round trip, and
-`content_source`'s `FORCE ROW LEVEL SECURITY` + `org_isolation` policy live via `\d+
-content_source`. No frontend change; not claimed as done.
+What's built (deliverable 3): `entrypoints/realtime/main.py`'s `/ws/{channel}` now
+validates the platform JWT through the same `PlatformTokenCodec` + `PrincipalResolver` the
+HTTP API uses (the gateway gained its own `Database` to do this), over a
+`Sec-WebSocket-Protocol` handshake (`["bearer", token]`, never a query parameter — no
+credential in a URL, a log or browser history). The channel a caller reaches is always
+`mnemos:org:{org_id}:{kind}`, with `org_id` read only from the resolved token and `kind`
+checked against a closed allow-list (`{"ingestion"}` today) — the URL was never able to
+name an org, genuine or forged. Full detail, including the two judgment calls the original
+brief left open (subprotocol vs. query parameter; the channel naming scheme deliverables
+4-5 must match) and the live verification against the running compose stack, is in the
+dated note near the top of this file ("`B1` deliverable 3 built").
 
-**Not done:** the realtime gateway's auth fix, the worker's real job-processing path, and
-the sources UI — deliverables 3-5, fully specified in §5, unstarted. `entrypoints/
-realtime/main.py` is still unauthenticated.
+**Evidence:** `make test` — 403 passed (391 prior + 12 new: deliverable 3's WS handshake
+tests against a real Redis via testcontainers, including a token for org A never receiving
+what is published on org B's real derived channel, and the hand-typed-channel attack the
+brief named refused before `accept()`). `make lint` / `make types` clean. `make check`
+(`alembic check`) clean — no migration touched. No frontend change; not claimed as done.
+
+**Not done:** the worker's real job-processing path and the sources UI — deliverables 4-5,
+fully specified in §5, unstarted. `entrypoints/worker/main.py`'s stuck-job reaper still has
+nothing real to claim.
 
 ### ✅ A3 — ask about your data, verified end to end 2026-08-15, PR #15
 
@@ -2344,16 +2448,27 @@ transition, in addition to — not instead of — the existing `Cache.client.pub
 `mnemos:{channel}` pub/sub topic the realtime gateway already relays**; that "both, not
 either" split is the design decision deliverable 2's dated note records as settled.
 
-**Deliverables 3-5 below are unchanged from the original brief** — they were written
-before deliverables 1-2 existed, but nothing in them assumed a shape for
-`SourceConnector`/`ConnectorFactory`/`EventBus` beyond what got built, so they still apply
-as written.
+**`B1` deliverable 3 is done.** Full evidence in the "2026-08-16" dated note near the top
+of this file and in §3's `B1` entry. `entrypoints/realtime/main.py`'s `/ws/{channel}` now
+validates the platform JWT (through the same `PlatformTokenCodec` + `PrincipalResolver`
+the HTTP API uses) offered as a `Sec-WebSocket-Protocol` value, and the channel a caller
+reaches is always `mnemos:org:{org_id}:{kind}` with `org_id` read only from the resolved
+token. **Two things deliverable 4 must match exactly, decided in deliverable 3 and
+recorded nowhere else:** the worker's `Cache.client.publish` calls must target
+`f"mnemos:org:{org_id}:ingestion"` (that literal `kind` string — the gateway's
+`ALLOWED_CHANNEL_KINDS` allow-list in `entrypoints/realtime/main.py` refuses anything
+else), and nothing about deliverable 4 touches the WS handshake itself — the worker only
+ever publishes to Redis, it never opens a socket.
 
-**The worker, the realtime gateway and the frontend are still exactly as `A3` left
-them** — neither deliverable touched them. `entrypoints/worker/main.py`'s stuck-job
-reaper still has nothing to claim; `entrypoints/realtime/main.py` is still the generic,
-**unauthenticated** Redis pub/sub → WebSocket relay its own docstring already flagged.
-Both are exactly what deliverables 3-4 below fix.
+**Deliverables 4-5 below are unchanged from the original brief** — they were written
+before deliverables 1-3 existed, but nothing in them assumed a shape for
+`SourceConnector`/`ConnectorFactory`/`EventBus`/the realtime handshake beyond what got
+built, so they still apply as written.
+
+**The worker and the frontend are still exactly as `A3` left them** — deliverable 3 did
+not touch either. `entrypoints/worker/main.py`'s stuck-job reaper still has nothing real
+to claim. `entrypoints/realtime/main.py` is authenticated now; deliverable 4 is what will
+make it carry a real event for the first time.
 
 ### `B1` — connect a source and watch it ingest
 
@@ -2395,19 +2510,16 @@ untouched by any real ingestion path until now) finally carry real rows for the 
   `MNEMOS_SOURCE_ENCRYPTION_KEY`, not `MNEMOS_DSN_ENCRYPTION_KEY` itself — different secret,
   same rotation story).
 
-**A real gap this session found, which `B1` must close before the sources UI can use it:**
-`entrypoints/realtime/main.py`'s `/ws/{channel}` accepts any connection and relays anything
-published to `mnemos:{channel}` — no JWT check, no org scoping. Its own docstring says this
-is deliberate "until M3" (identity), which is now done (`A0`). **This is the first feature
-that actually needs the realtime gateway**, so `B1` is where its auth debt gets paid: the
-WebSocket handshake must validate the platform JWT (as a query parameter or subprotocol,
-since browsers cannot set an `Authorization` header on a WS upgrade — decide which, and say
-which in the eventual done-note) the same way the HTTP fail-closed guard does, and the
-channel a caller subscribes to must be derived from their own org, never taken from the
-client-supplied `channel` path segment as-is (a `mnemos:org:{other_org_id}:ingestion`
-channel string typed into the WS URL by hand must be refused, not relayed) — this is a
-STRIDE-E "forged header" cousin (ThreatModel.md §3⑤): identity for a channel subscription
-must come from the validated token, never from client-supplied path/query data.
+**A real gap deliverable 1's session found, closed by deliverable 3 (2026-08-16):**
+`entrypoints/realtime/main.py`'s `/ws/{channel}` used to accept any connection and relay
+anything published to `mnemos:{channel}` — no JWT check, no org scoping. Its own docstring
+said this was deliberate "until M3" (identity), which had been done since `A0`. It now
+validates the platform JWT the same way the HTTP fail-closed guard does (offered as a
+`Sec-WebSocket-Protocol` value, since browsers cannot set an `Authorization` header on a WS
+upgrade), and the channel a caller subscribes to is derived from their own org, never taken
+from the client-supplied `channel` path segment — a channel string that tries to name
+another org, typed into the WS URL by hand, is refused before the URL is even capable of
+naming an org at all. Full detail in the "2026-08-16" dated note near the top of this file.
 
 **Deliverables, in build order — one commit (or a small adjacent group) per numbered item,
 matching how `A3`'s deliverables were committed:**
@@ -2444,9 +2556,20 @@ matching how `A3`'s deliverables were committed:**
    backlog delivery to a group created after publish, idempotent group creation, no
    redelivery of an already-delivered message, competing-consumer semantics, `ack` clearing
    `XPENDING`, and unreachable-Redis error translation; `make lint`/`make types` clean.
-3. **Close the realtime auth gap** (see above) — JWT-validated WS handshake, org-derived
-   channel scoping, a test that proves a token for org A cannot subscribe to org B's
-   ingestion channel even by typing the channel name directly into the WS URL.
+3. ✅ **Done (2026-08-16). Close the realtime auth gap** (see above) — JWT-validated WS
+   handshake, org-derived channel scoping, a test that proves a token for org A cannot
+   subscribe to org B's ingestion channel even by typing the channel name directly into the
+   WS URL. Built exactly as specified: the gateway gained a `Database` and the same
+   `PlatformTokenCodec`/`PrincipalResolver` pair the API builds; the token travels as a
+   `Sec-WebSocket-Protocol` offer (`["bearer", token]`), not a query parameter, so it never
+   appears in a URL, an access log or browser history; the channel a caller reaches is
+   always `mnemos:org:{org_id}:{kind}` with `org_id` read only from the resolved token and
+   `kind` checked against a closed allow-list (`ALLOWED_CHANNEL_KINDS = {"ingestion"}`).
+   Evidence: 12 new tests (`tests/test_realtime_auth.py`) against a real Redis via
+   testcontainers, including the exact cross-org attack named above and a genuine live
+   verification against the running compose stack (rebuilt container, real session, real
+   Redis publish/relay, real refusal of a hand-typed cross-org channel). `make
+   lint`/`make types` clean; `make check` clean (no migration touched).
 4. **The worker claims and processes a real job.** Extend `entrypoints/worker/main.py`'s
    poll loop: claim one `queued` `ingest_job` (`FOR UPDATE SKIP LOCKED`, mirroring the
    reaper's own claim style) → `running` + heartbeat → call the factored-out extract/chunk/

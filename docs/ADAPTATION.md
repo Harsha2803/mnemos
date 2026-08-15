@@ -247,7 +247,7 @@ authoritative for sequencing, not these tables' phase grouping.
 
 | ID | What it builds | You can now… | Status |
 |---|---|---|---|
-| **B1** | Object storage · source connectors (MinIO/S3, local FS, HTTP) · Redis Streams event bus · sources UI | **connect a source, browse it, and watch ingestion events arrive live** | 🟡 **deliverable 2/5 done 2026-08-15 (night)** — connectors + migration + CLI + event bus built; realtime auth, worker, UI remain, [TRACKER §5](../TRACKER.md#5-next-task) |
+| **B1** | Object storage · source connectors (MinIO/S3, local FS, HTTP) · Redis Streams event bus · sources UI | **connect a source, browse it, and watch ingestion events arrive live** | 🟡 **deliverable 3/5 done 2026-08-16** — connectors + migration + CLI + event bus + realtime auth built; worker, UI remain, [TRACKER §5](../TRACKER.md#5-next-task) |
 | **B2** | Ingestion jobs at scale: heartbeat, retries, status history, stuck-job reaper · per-job progress UI | **ingest a folder and watch every job's progress — including one that dies, surfaced as stuck rather than silently lost** | ⬜ **after `B1`** |
 | **B3** | MCP tool runtime: registry, per-user credentials, trust tiers, approval gates · tool console | **register a tool, have the assistant call it, and approve a gated call** — with a denial that names the offending source on screen | ⬜ |
 | **B4** | Agent flow: bounded state machine over tools, checkpoints, step trace | **give it a multi-step task and watch it plan, call tools and finish — with every step inspectable** | ⬜ |
@@ -833,7 +833,7 @@ the whole `up`. It does now, so plain `docker compose up -d` brings the frontend
 everything else and `web` has a healthcheck of its own — a stack whose UI needs a
 remembered extra flag is a stack whose UI does not get looked at.
 
-### B1 — connect a source and watch it ingest 🟡 deliverable 2/5 done 2026-08-15 (night)
+### B1 — connect a source and watch it ingest 🟡 deliverable 3/5 done 2026-08-16
 
 Deliverable 1, the `SourceConnector` port + factory, is built and on `feat/b1-connectors`
 (PR open, draft). `features/connectors/` now has real `domain`/`adapters`/`application`
@@ -863,9 +863,25 @@ so the gateway needs no new code for `B1`; a consumer-group reader inside the ga
 itself (replay-on-reconnect) is left for `B2`. Full detail is in
 [TRACKER's dated note](../TRACKER.md) for 2026-08-15 (night).
 
-Deliverables 3-5 — the realtime gateway's authentication fix, the worker's first real
-job-processing path, and the sources UI — are not built. No frontend change; C12's UI
-requirement is deliverable 5's, and the PR stays draft until it lands.
+Deliverable 3, the realtime gateway's JWT-validated WS handshake and org-derived channel
+scoping, is also built, same branch. `entrypoints/realtime/main.py`'s `/ws/{channel}` now
+resolves the caller through the identical `PlatformTokenCodec` + `PrincipalResolver`
+`entrypoints/api/main.py` builds (the gateway gained its own `Database` to do this), with
+the token offered as a `Sec-WebSocket-Protocol` value (`["bearer", token]`) rather than a
+query parameter — no credential ever appears in a URL, an access log or browser history,
+the same discipline `web_signin_complete_url` already enforces for the refresh cookie
+exchange. The channel a caller reaches is always `mnemos:org:{org_id}:{kind}`, with
+`org_id` read only from the resolved token and `kind` checked against a closed allow-list
+(`{"ingestion"}` today) — a channel string that tries to name another org, typed directly
+into the WS URL, is refused before `accept()`, proved against a real Redis
+(`tests/test_realtime_auth.py`, 12 tests) and live-verified against the running compose
+stack. Deliverable 4's worker must publish to exactly `f"mnemos:org:{org_id}:ingestion"`
+for the gateway to relay it — that channel-naming contract is deliverable 3's, recorded in
+[TRACKER's dated note](../TRACKER.md) for 2026-08-16, which has the full detail.
+
+Deliverables 4-5 — the worker's first real job-processing path and the sources UI — are
+not built. No frontend change; C12's UI requirement is deliverable 5's, and the PR stays
+draft until it lands.
 
 ### A3 — ask about your data ✅ verified end to end 2026-08-15
 
@@ -1089,9 +1105,9 @@ this file exists to keep honest:
   `A2`'s manual upload form: nothing publishes to the event bus yet, the worker still has
   nothing to claim, and there is no screen for any of this yet. Deliverables 3-5 are in
   [TRACKER §5](../TRACKER.md#5-next-task), fully specified, not yet built.
-- **The realtime WebSocket gateway is unauthenticated.** It relays any channel to any
-  connection; nothing has needed it enough to close that gap yet. `B1` deliverable 3 is
-  the first thing that does, and its brief calls this out explicitly.
+- ~~The realtime WebSocket gateway is unauthenticated.~~ **Closed in `B1` deliverable 3
+  (2026-08-16):** the WS handshake now validates the platform JWT and derives the
+  subscribed channel from the caller's own org, never from client-supplied path data.
 - **There is no router.** A person still has to tick "Use documents" or "Ask your data" to
   get a grounded answer; nothing classifies a message to a flow on its own. `A4` — moved
   after `B1`/`B2` in the 2026-08-15 (evening) re-sequencing — and both provisional selectors
