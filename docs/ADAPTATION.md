@@ -233,16 +233,21 @@ Two rules govern every row.
 | **A1** | LLM gateway (Ollama) · chat sessions + messages · SSE streaming · the chat surface | **talk to it** — ask a question and watch the answer stream in token by token | ✅ 2026-08-08 |
 | **A2** | Upload → extract → chunk → embed (pgvector HNSW) · retrieval ported from `_v1` · RAG flow · citations · knowledge library | **upload a document and ask questions about it**, with citations you click into | ✅ 2026-08-11 (PR #14) |
 | **A3** | NL2SQL: introspection · glossary · generate · AST read-only guard · `mnemos_ro` execution · narration · SQL panel | **ask a question about your data in English** and see the SQL, the rows and the narration — and see the guard visibly refuse a write | 🟡 in progress — introspection + glossary done (PR #15 draft), generation/execution/UI remain |
-| **A4** | Router: classify a message → chat / RAG / NL2SQL · flow indicator | **ask anything without choosing a mode**, and see which flow answered and why | ⬜ |
+| **A4** | Router: classify a message → chat / RAG / NL2SQL · flow indicator | **ask anything without choosing a mode**, and see which flow answered and why | ⬜ — built **after** `B1`/`B2` |
 
 **At the end of Phase A the thing this project is for exists.** Everything after deepens it.
+
+**Build order deviates from phase order once, starting 2026-08-15: `B1`/`B2` come right
+after `A3`, before `A4`.** [TRACKER's 2026-08-15 (evening) note](../TRACKER.md#5-next-task)
+has the reasoning; [TRACKER §5's "Then, in order" list](../TRACKER.md#5-next-task) is
+authoritative for sequencing, not these tables' phase grouping.
 
 **Phase B — make it a platform.**
 
 | ID | What it builds | You can now… | Status |
 |---|---|---|---|
-| **B1** | Object storage · source connectors (MinIO/S3, local FS, HTTP) · Redis Streams event bus · sources UI | **connect a source, browse it, and watch ingestion events arrive live** | ⬜ |
-| **B2** | Ingestion jobs at scale: heartbeat, retries, status history, stuck-job reaper · per-job progress UI | **ingest a folder and watch every job's progress — including one that dies, surfaced as stuck rather than silently lost** | ⬜ |
+| **B1** | Object storage · source connectors (MinIO/S3, local FS, HTTP) · Redis Streams event bus · sources UI | **connect a source, browse it, and watch ingestion events arrive live** | ⬜ **next after `A3`** |
+| **B2** | Ingestion jobs at scale: heartbeat, retries, status history, stuck-job reaper · per-job progress UI | **ingest a folder and watch every job's progress — including one that dies, surfaced as stuck rather than silently lost** | ⬜ **after `B1`** |
 | **B3** | MCP tool runtime: registry, per-user credentials, trust tiers, approval gates · tool console | **register a tool, have the assistant call it, and approve a gated call** — with a denial that names the offending source on screen | ⬜ |
 | **B4** | Agent flow: bounded state machine over tools, checkpoints, step trace | **give it a multi-step task and watch it plan, call tools and finish — with every step inspectable** | ⬜ |
 
@@ -315,8 +320,11 @@ Nothing about `A3` is visible in the *product* yet — no generation, no AST gua
 execution, no SQL panel — so the PR stays draft per C12 until deliverable 5 lands.
 Remaining scope: generated SQL behind **two independent read-only defences** (an AST guard
 via `sqlglot` and the `mnemos_ro` role), execution, narration, and the SQL panel UI, fully
-specified in [TRACKER §5](../TRACKER.md#5-next-task). The router that stops the user having
-to choose a flow is `A4`.
+specified in [TRACKER §5](../TRACKER.md#5-next-task). **After `A3` is fully testable, the
+next milestone is `B1` (ingestion), not `A4`** — the plan was re-sequenced 2026-08-15 so
+ingestion, a materially new capability, lands before the router, which mostly changes how
+existing flows are triggered rather than adding one. See TRACKER's 2026-08-15 (evening)
+note for the full reasoning.
 
 `M3`'s exit criterion "RLS blocks cross-org" turned out to be unmet by `M2` rather than
 merely untested; that is written up in §8 and in

@@ -114,9 +114,12 @@ WHAT TO DO, IN ORDER, THE MOMENT YOU START
      enforce.
   8. Update TRACKER.md and docs/ADAPTATION.md in the same commit as the final
      deliverable's work — mark `A3` ✅, move its evidence into §3/§8, and write §5 fresh
-     for `A4` (the router — TRACKER §5's "Then, in order" section already names it and
-     ADAPTATION §7 has its one-line description; write the full brief the way this session
-     and the last one wrote A3's remaining deliverables' briefs).
+     for **`B1` (ingestion), not `A4`**. The plan was re-sequenced 2026-08-15 (evening):
+     `B1`/`B2` now come before `A4` — see that date's note near the top of TRACKER.md for
+     why. TRACKER §5's "Then, in order" list already names `B1` next and sketches its scope
+     (source connectors, event bus, sources UI); ADAPTATION §7 has its one-line description.
+     Write `B1`'s full brief the way this session and the last one wrote A3's remaining
+     deliverables' briefs.
 
 ------------------------------------------------------------------------------
 THE RULE ABOUT HOW MUCH TO DO IN ONE SESSION

@@ -15,11 +15,40 @@ fully specified in §5.
 **Next task:** `A3` deliverable 3 — generation and the AST guard, the security-critical
 center of this milestone. §5 has the complete brief for 3-5, written at the same level of
 detail as the original A3 brief it replaces.
+**After `A3` is fully testable:** the plan is re-sequenced, effective 2026-08-15 — `B1`/`B2`
+(ingestion) are next, pulled ahead of `A4` (the router). See the note directly below and
+§3.0.
 **Branch right now:** `feat/a3-nl2sql`, pushed, PR #15 open as **draft** (draft is
 deliberate — C12/§0 rule 7 says every branch gets a PR immediately, but this one only
 becomes a real merge candidate once the UI slice in deliverable 5 lands; see §0 rule 8).
 CI is green on the branch as it stands (deliverables 1-2 only). `main`'s tip is still the
 squashed `A2` commit (PR #14) — `A3` is not in `main` yet, not even partially.
+
+> ### 2026-08-15 (evening) — the plan re-sequenced: ingestion pulled ahead of the router
+>
+> The project owner asked, after deliverable 2 landed and with no more testing possible
+> that night, for two things: fold ingestion into the near-term plan, and shape whatever
+> gets built next so there is always at least one complete, testable flow rather than
+> several half-built ones. Asked to choose between finishing `A3` first versus dropping it
+> to start ingestion immediately, the answer was to finish `A3` first — it is already 2/5
+> done and is the closer target for "one complete flow." So the sequence changes only
+> **after** `A3`: `B1`/`B2` (ingestion — connect a source, browse it, ingest it at scale)
+> now come before `A4` (the router), reversing their phase order.
+>
+> **Why ingestion over the router specifically.** `A4` mostly changes *how* existing flows
+> are triggered — a classifier picks chat/RAG/NL2SQL instead of the user picking a mode via
+> `use_documents`/its NL2SQL sibling. It is real work but not a new capability a stranger
+> hasn't already seen once `A3` ships. `B1` is a new capability: connecting a source
+> (S3/local/HTTP) instead of only a manual upload, with ingestion events visible live. That
+> is a bigger step toward the "platform" pitch (§0.1) and closer to what "include ingestion"
+> asked for than reshuffling routing would be.
+>
+> **Nothing else changed.** The phase tables in §3.0 still group work by kind (chatbot
+> surface / platform depth / enterprise governance / ship polish) — they are not rewritten.
+> The authoritative next-up sequence is §5's "Then, in order" list, updated to read `A3` →
+> `B1` → `B2` → `A4` → `B3` → `B4` → `C1`-`C4` → `D1`. No code changed this note — it is a
+> planning-only update, and `A3` deliverable 3 (the AST guard) is still the very next task,
+> unchanged and un-rushed.
 
 > ### 2026-08-15 — `A3` deliverable 2 (business glossary) done, PR #15 still draft
 >
@@ -335,17 +364,22 @@ That right-hand column is not a summary — it is the exit criterion.
 | **A0** | Sign-in screen + browser session handling (M3.4's UI half) + the fail-closed route guard (deny by default, from old `M3.6`) | **sign in through Keycloak, stay signed in across a reload, and sign out** — and no route added after this is reachable unauthenticated | ✅ |
 | **A1** | LLM gateway (Ollama) · chat sessions + messages · SSE streaming · the chat surface | **talk to it** — ask a question and watch the answer stream in token by token | ✅ 2026-08-08 |
 | **A2** | Upload → extract → chunk → embed (pgvector HNSW) · retrieval ported from `_v1` · RAG flow · citations · knowledge library | **upload a document and ask questions about it**, with citations you click into | ✅ merged (PR #14) |
-| **A3** | NL2SQL: introspection · glossary · generate · AST read-only guard · `mnemos_ro` execution · narration · SQL panel | **ask a question about your data in English** and see the SQL, the rows and the narration — and see the guard visibly refuse a write | 🟡 **in progress** — 1/5 (introspection), PR #15 draft |
-| **A4** | Router: classify a message → chat / RAG / NL2SQL · flow indicator | **ask anything without choosing a mode**, and see which flow answered and why | ⬜ |
+| **A3** | NL2SQL: introspection · glossary · generate · AST read-only guard · `mnemos_ro` execution · narration · SQL panel | **ask a question about your data in English** and see the SQL, the rows and the narration — and see the guard visibly refuse a write | 🟡 **in progress** — 2/5 (introspection, glossary), PR #15 draft |
+| **A4** | Router: classify a message → chat / RAG / NL2SQL · flow indicator | **ask anything without choosing a mode**, and see which flow answered and why | ⬜ — built **after** `B1`/`B2`, see below |
 
 **At the end of Phase A the thing this project is for exists.** Everything after deepens it.
+
+**Build order stops following phase order once, starting 2026-08-15: `B1`/`B2` (ingestion),
+below, are built immediately after `A3` — before `A4`.** These tables still group work by
+*kind*; they no longer promise strict A-then-B-then-C-then-D sequencing. §5's "Then, in
+order" list is the authoritative next-up sequence; the note above it explains why.
 
 **Phase B — make it a platform.**
 
 | ID | What it builds | You can now… | Status |
 |---|---|---|---|
-| **B1** | Object storage · source connectors (MinIO/S3, local FS, HTTP) · Redis Streams event bus · sources UI | **connect a source, browse it, and watch ingestion events arrive live** | ⬜ |
-| **B2** | Ingestion jobs at scale: heartbeat, retries, status history, stuck-job reaper · per-job progress UI | **ingest a folder and watch every job's progress — including one that dies, surfaced as stuck rather than silently lost** | ⬜ |
+| **B1** | Object storage · source connectors (MinIO/S3, local FS, HTTP) · Redis Streams event bus · sources UI | **connect a source, browse it, and watch ingestion events arrive live** | ⬜ **next after `A3`** |
+| **B2** | Ingestion jobs at scale: heartbeat, retries, status history, stuck-job reaper · per-job progress UI | **ingest a folder and watch every job's progress — including one that dies, surfaced as stuck rather than silently lost** | ⬜ **after `B1`** |
 | **B3** | MCP tool runtime: registry, per-user credentials, trust tiers, approval gates · tool console | **register a tool, have the assistant call it, and approve a gated call** — with a denial that names the offending source on screen | ⬜ |
 | **B4** | Agent flow: bounded state machine over tools, checkpoints, step trace | **give it a multi-step task and watch it plan, call tools and finish — with every step inspectable** | ⬜ |
 
@@ -1939,18 +1973,32 @@ registry UI or a second warehouse dialect (the `SqlDialect` port makes that a co
 exercise; Postgres only, ADAPTATION §3), the cost ledger for generated queries (`C2`), and
 the context compiler (`C4`).
 
-### Then, in order — the phase tables in §3.0 are the plan
+### Then, in order — this list is the plan, and it no longer matches phase order exactly
 
-Each row there is one session, and each carries its own "you can now ___" (C14). The next
-few, so the shape is visible without scrolling back:
+Each item below is one session (or a small coherent group), and each carries its own "you
+can now ___" (C14). **As of 2026-08-15 (evening) this list, not the phase groupings in
+§3.0, is authoritative for sequencing** — see that date's note near the top of this file for
+why `B1`/`B2` now sit before `A4`. The phase tables still group work by kind; they no longer
+promise strict A-then-B-then-C-then-D order.
 
-- **`A3` — ask about your data.** Specified in full above; this is the task.
+- **`A3` — ask about your data.** Specified in full above; this is the task. Deliverables
+  1-2 done, 3-5 remain.
+- **`B1` — connect a source and watch it ingest.** Object storage port + `S3ObjectStore`
+  already exist from `A2` (MinIO); `B1` adds the `SourceConnector` abstraction (MinIO/S3,
+  local filesystem, HTTP URL) and a Redis Streams event bus, so a source is *connected and
+  browsed* rather than only uploaded file-by-file, with ingestion events visible live in a
+  new sources UI. Not specified in detail yet — write its full brief here once `A3` is done,
+  the same way `A3`'s brief was written when `A2` finished.
+- **`B2` — ingestion at scale.** Heartbeat, retries, status history, and a stuck-job reaper
+  over the job machinery `B1` introduces, with a per-job progress UI. Depends on `B1`
+  existing first.
 - **`A4` — stop choosing a mode.** Classify each message to chat / RAG / NL2SQL and show
   which flow answered and why. This is also where the two provisional selectors — `A2`'s
   `use_documents` and `A3`'s NL2SQL equivalent — are replaced by a real classifier, and
   both were written down as provisional precisely so this milestone knows what to remove.
+  Moved here, after `B1`/`B2`, from its original position immediately after `A3`.
 
-Then Phase B (`B1`–`B4`), Phase C (`C1`–`C4`), Phase D (`D1`) — §3.0.
+Then `B3`, `B4` (the rest of Phase B), Phase C (`C1`–`C4`), Phase D (`D1`) — §3.0, unchanged.
 
 **Commit shape:** one commit per numbered deliverable, not one per milestone. A backend
 deliverable and its UI slice may share a commit or be adjacent commits — never adjacent
