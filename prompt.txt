@@ -1,123 +1,117 @@
 You are picking up an in-progress project called Mnemos, at
 /home/shreeharsha/Personal/Projects/Resume_001/mnemos
 
-This file was rewritten on 2026-08-15 (later), after a short docs-only session whose entire
-job was to write the `B1` brief in TRACKER §5 and then stop, per the ordinary
-one-task-per-session rule (§0 rule 9 in TRACKER.md). It replaces the 2026-08-15 version of
-itself that handed off right after `A3` merged, with `B1` still unspecified. No feature code
-changed between that version and this one — only TRACKER.md and docs/ADAPTATION.md moved.
-**This session should start building `B1` directly, from the brief that already exists.**
-Do not write another brief, do not re-derive the design, and do not ask what to work on —
-read TRACKER §5 and begin at deliverable 1. Trust this file and TRACKER.md over any memory
-of a prior prompt.txt.
+This file was rewritten on 2026-08-15 (evening), after a session that built `B1`
+deliverable 1 — the `SourceConnector` port + factory, the `content_source` migration, and
+the CLI — on branch `feat/b1-connectors` (PR #16, **draft**, CI green: backend/frontend/
+compose all passed). It replaces the 2026-08-15 (later) version of itself, which handed off
+right after the `B1` brief was written with nothing built. No brief was rewritten this
+time — deliverables 2-5 in TRACKER §5 are unchanged from what the prior session specified.
+**This session should continue `B1` on the existing branch, starting at deliverable 2 (the
+Redis Streams event bus).** Do not create a new branch, do not re-read the deliverable 1
+brief as if it were still unbuilt, and do not start over. Trust this file and TRACKER.md
+over any memory of a prior prompt.txt.
 
 ------------------------------------------------------------------------------
 READ FIRST, IN THIS ORDER
 
-  1. TRACKER.md            — read section 0 (rule 9 is in force — one task, then stop), the
-                              header, the "2026-08-15 (later) — the B1 brief written, nothing
-                              built" note near the top, then **section 5 in full — the B1
-                              brief itself is there, five deliverables in build order**. That
-                              is today's actual task list; read it before writing any code.
-  2. docs/ADAPTATION.md    — §3's `connectors`/object-storage/event-bus capability rows, §4
-                              (service topology), §6 (schema), §7's `B1` row, §8's "Not
-                              started" list (now correctly says B1 is next, not A3)
-  3. docs/ThreatModel.md   — the connector/SSRF row (§3⑥) and the trust-tier rule for
-                              external connectors (§4, "layer 1": connector content ≥ tier 4).
-                              Both are load-bearing for deliverable 1 and are not optional
-                              background reading — they are constraints on the code you write.
-  4. README.md             — public framing and the benchmark numbers (unchanged by B1 —
-                              nothing in it touches the retrieval/compile path README measures)
+  1. TRACKER.md            — section 0 (rule 9 is in force), the "2026-08-15 (evening) —
+                              B1 deliverable 1 built" dated note near the top, the `B1`
+                              entry in section 3, then **section 5 in full** — deliverable
+                              1's entry now says what was actually built; deliverables 2-5
+                              are the original brief, unchanged, and are what you build next.
+  2. docs/ADAPTATION.md    — the new `B1` subsection in §8 (right before `A3`'s), §7's `B1`
+                              row, and the "Not started" list's `B1` bullets (now accurate:
+                              connectors exist, the event bus/worker/UI do not)
+  3. docs/ThreatModel.md   — §3⑥ (SSRF) and §4 layer 1 (trust tier). Deliverable 1's dated
+                              note in TRACKER already worked out the trust-tier number for
+                              connector-sourced documents (`TrustTier.RETRIEVED`, same as a
+                              manual upload) — read that note before re-deriving it.
+  4. README.md             — unchanged by `B1` so far; nothing in it touches what deliverable
+                              2-4 move
   5. docs/CodingStandards.md / docs/DesignSystem.md — before writing backend / frontend code
 
-TRACKER.md is authoritative over this file for anything the two disagree about — this file
-is a pointer to it, not a duplicate of it.
+TRACKER.md is authoritative over this file for anything the two disagree about.
 
 ------------------------------------------------------------------------------
 EXACTLY WHERE THIS WAS LEFT — read this before touching anything
 
-**`A3` is done and merged.** All five deliverables, verified end to end in a real browser
-against the real stack. PR #15 is merged and gone; `main`'s tip, before this session's docs
-commit, was the squashed `A3` merge. Full evidence is in TRACKER §3's `A3` entry and the
-dated notes above it — do not re-prove any of it; it already happened.
+**`A3` is done and merged.** Unchanged since the last handoff — see TRACKER §3.
 
-**`B1` — connect a source and watch it ingest — is fully specified but zero percent built.**
-The previous session (this file's author) deliberately did only the specification: it read
-the connectors capability row, the schema, ThreatModel.md's connector/SSRF rules, and the
-*actual current code* — not assumptions about it — before writing TRACKER §5. What it found,
-so you do not have to re-discover it:
+**`B1` deliverable 1 of 5 is done, on an open branch, not yet on `main`.** Branch
+`feat/b1-connectors`, PR #16, **draft** (stays draft until deliverable 5's sources UI
+exists — deliverables 1-4 have no product UI by design, C12). CI is green: backend
+(pytest/ruff/mypy --strict/alembic check), frontend (lint/tsc/test/build), and compose
+(the stack builds and starts) all passed. What is actually on that branch, so you do not
+have to re-discover it:
 
-  - `features/connectors/` is three empty `__init__.py` files. Nothing imports `sqlglot`-
-    style pattern here yet — there is no domain/application/adapters content at all.
-  - `platform/events/` does not exist. No `EventBus` port, no Redis Streams usage anywhere.
-  - `entrypoints/worker/main.py`'s stuck-job reaper **already exists and already works** —
-    it claims expired `ingest_job` leases with `FOR UPDATE SKIP LOCKED` and reclaims them.
-    But nothing has ever inserted a *real* job for it to claim; the reaper has only ever
-    exercised its own reclaim path in tests. `B1` is what finally gives it a real job to
-    process.
-  - `entrypoints/realtime/main.py` is a working Redis pub/sub → WebSocket relay — but **it is
-    completely unauthenticated**, by its own docstring ("Authentication lands in M3; until
-    then the gateway is bound to the compose network"). `M3`/`A0` shipped identity long ago;
-    this debt was simply never called due because nothing needed the gateway yet. `B1` is the
-    first feature that does, so `B1` is where this gets fixed — not deferred again.
-  - `features/knowledge/application/service.py`'s `upload_document` does extract → chunk →
-    embed **synchronously in the request handler**, by design, through `B2`. `B1` needs that
-    same logic reachable from the worker for connector-sourced items — factor it out, don't
-    duplicate it, and don't migrate the manual-upload path onto the queue (it stays
-    synchronous; `B1` adds a second, parallel path).
+  - `features/connectors/` has real content now: `domain/port.py` (`SourceItem` +
+    `SourceConnector` — `list_items`/`fetch`), `adapters/s3.py`, `adapters/local_fs.py`,
+    `adapters/http.py`, `adapters/ssrf_guard.py` (the deny-list, with the request pinned
+    to the address that was actually checked — real DNS-rebinding protection, not just a
+    check-then-hope), `adapters/crypto.py`'s `SourceConfigCipher`, `adapters/models.py`'s
+    `ContentSource` + `adapters/repository.py`, `application/factory.py`'s
+    `ConnectorFactory`, `application/service.py`'s `ConnectorService`. Call
+    `ConnectorService`, not `ConnectorFactory` directly — it is what resolves a slug to a
+    record and decrypts its config.
+  - `content_source` is a real, RLS-forced table (migration `0007` — the first since `M2`).
+    Two pre-existing bugs in migrations `0004`/`0006` (both imported the *live*
+    `ORG_SCOPED_TABLES` tuple instead of a frozen copy, which broke a fresh-database replay
+    the moment `content_source` was added to that tuple) were found via `alembic check` and
+    fixed by freezing both to a literal tuple. Full story in TRACKER's dated note.
+  - `platform/objectstore/port.py`'s `ObjectStore` protocol gained a fourth method,
+    `list(prefix) -> Sequence[ObjectMeta]`, implemented in `S3ObjectStore` via
+    `list_objects_v2`. `S3Connector` sits on top of it rather than a second MinIO client.
+  - `mnemosctl connector register --org-slug X --slug Y --name N --kind {s3,local_fs,http}
+    [--bucket/--prefix | --root | --url ...]` and `connector list-items --org-slug X --slug
+    Y` work end to end. A new setting, `MNEMOS_LOCAL_FS_ALLOWED_ROOTS` (empty by default —
+    default-deny), is a *second* boundary around the local-fs connector's root, on top of
+    the per-registration `root` itself.
+  - `platform/events/` still does not exist. No `EventBus` port, no Redis Streams usage.
+  - `entrypoints/worker/main.py`'s stuck-job reaper still has nothing real to claim.
+  - `entrypoints/realtime/main.py` is still the same working-but-**unauthenticated** Redis
+    pub/sub → WebSocket relay it has been since `M1` — deliverable 1 did not touch it.
+  - `features/knowledge/application/service.py`'s `upload_document` still does its
+    extract/chunk/embed body inline, synchronously — deliverable 1 did not touch it either.
+    Deliverable 4 still needs to factor that body out for the worker to reuse.
 
-**The full brief — five deliverables, an explicit "not `B1`" boundary list, the migration
-flag, and the evidence bar — is TRACKER §5. It will not be repeated here; read it there.** In
-one sentence: `SourceConnector` port + factory (S3/local-fs/HTTP, deliverable 1) → the Redis
-Streams event bus (deliverable 2) → close the realtime auth gap (deliverable 3) → the worker
-actually claims and processes a job for the first time (deliverable 4) → the sources UI with
-a live event feed (deliverable 5).
-
-**This session's job is to build it, deliverable by deliverable, exactly the way `A3`'s
-deliverables were each their own commit.** If it proves too big for one sitting, stop at a
-clean deliverable boundary and rewrite TRACKER §5 so the remainder is fully specified for
-whoever picks it up next — the same discipline `A3`'s deliverable-3 session used.
+**32 new tests** (`tests/test_connectors_{ssrf,local_fs,http,s3,service}.py`), 384 total.
+`make lint`/`make types` clean. Do not re-verify any of this; it already happened — start
+from deliverable 2.
 
 ------------------------------------------------------------------------------
 WHAT TO DO, IN ORDER, THE MOMENT YOU START
 
-  1. `gh auth status` — confirm `Harsha2803` is active. If `harshaJKT` (the work account)
-     is active instead, run `gh auth switch --user Harsha2803` before anything else.
-  2. `git fetch && git checkout main && git pull --ff-only` — confirm `git log --oneline -3`
-     shows this session's docs commit ("docs: write the B1 brief...") at the tip.
-  3. `gh pr list --state open` — should be empty. `A3`'s PR #15 is merged and gone, and the
-     brief-writing session made no branch (it committed docs straight to `main`, matching how
-     the `A3`-handoff `prompt.txt` rewrite was committed).
-  4. Read TRACKER §5 in full — the `B1` brief. Do not skim it; it names specific files,
-     specific existing code to reuse (the reaper, the `ObjectStore` port, `DsnCipher`), and a
-     specific security gap (the realtime gateway) that a skim would miss.
-  5. Create `feat/b1-connectors`, and open its PR (draft) the moment it has a first commit —
-     per the hard rule below, a branch without a PR is a branch that gets lost.
-  6. Start at deliverable 1 (`SourceConnector` port + factory, plus the new `content_source`
-     migration — **this is the first Alembic migration since `M2`**; run `alembic check`
-     early rather than assuming, unlike every `A3` deliverable which got to skip this step).
-  7. Bring up a stack if you need one to verify against: `docker compose up -d --build`,
-     `curl localhost:8000/readyz` until fully green. If you get a stale sign-in error for a
-     previously-working seeded user after a rebuild, see the Keycloak gotcha further below —
-     it is environmental, not a regression.
-  8. Follow the ordinary one-task-per-session rule (TRACKER §0 rule 9) for whatever comes
-     *after* `B1` — finish `B1` (all five deliverables, merged, browser-verified) before
-     starting `B2` or anything else, unless explicitly told to run a marathon the way the
-     2026-08-08 and 2026-08-15 (early) sessions were.
+  1. `gh auth status` — confirm `Harsha2803` is active. If `harshaJKT` is active instead,
+     run `gh auth switch --user Harsha2803` before anything else.
+  2. `git fetch && git checkout feat/b1-connectors && git pull --ff-only` — **not `main`**;
+     the branch with deliverable 1's work is where deliverable 2 continues. Confirm
+     `git log --oneline -3` shows deliverable 1's commit at the tip.
+  3. `gh pr view 16` — confirm it is still open, still draft, and CI is still green (a
+     rebase or a stale run is worth noticing before adding to it).
+  4. Read TRACKER §5 in full, starting at deliverable 2 (the event bus) — deliverable 1's
+     entry is marked done; do not rebuild it.
+  5. Build deliverable 2 (`platform/events/`: an `EventBus` port + a Redis Streams
+     adapter), commit it to `feat/b1-connectors` (already pushed, already has a PR — no
+     new branch, no new PR to open).
+  6. Bring up a stack if you need one to verify against: `docker compose up -d --build`,
+     `curl localhost:8000/readyz` until fully green.
+  7. Follow the ordinary one-task-per-session rule (TRACKER §0 rule 9) for whatever comes
+     *after* deliverable 2 — land it, update TRACKER §5 so deliverable 3 is ready for
+     whoever picks it up next, and stop, unless told to run a marathon.
 
 ------------------------------------------------------------------------------
 A NOTE ON MULTI-AGENT WORKFLOWS, IF YOU USE THEM HERE
 
-`A3` established the pattern worth repeating: **settle the contract before spawning a
-background agent.** For `B1`, the analogous contract is the `SourceConnector` protocol
-(deliverable 1) and the `EventBus` port shape (deliverable 2) — once those interfaces are
-committed and stable, the sources UI (deliverable 5) is genuinely independent frontend work
-a background agent could build against them, the same way deliverable 5's SQL panel was
-built against `A3`'s SSE contract once it stopped moving. Keep every git commit and every
-decision with security weight (the realtime auth fix, the SSRF deny-list, the trust-tier
-assignment for connector content) single-threaded through you; review any subagent's diff
-before trusting it, the way `A3`'s lead reviewed the SQL-panel agent's commit after the fact
-because it was narrow and did not touch security-relevant code.
+The `SourceConnector` protocol (deliverable 1, done) and the `EventBus` port shape
+(deliverable 2, next) are the two contracts the sources UI (deliverable 5) needs settled
+before it can be built independently. Once deliverable 2's `EventBus` port is committed and
+stable, deliverable 5 is genuinely independent frontend work a background agent could take
+on — but not before: the UI's live-event feed depends on deliverable 2's shape and
+deliverable 3's authenticated channel, neither of which exist yet. Keep every commit and
+every decision with security weight (the realtime auth fix, the SSRF deny-list — already
+landed — the trust-tier assignment for connector content — already decided, see TRACKER's
+dated note) single-threaded through you.
 
 ------------------------------------------------------------------------------
 WHAT THIS PROJECT IS
@@ -132,9 +126,8 @@ measured on the v0.1 kernel and not yet re-measured on Postgres.
 It is a portfolio project. Production practices, single-node scale, zero paid dependencies
 in the default path, ever.
 
-**Phase A is complete** (`A0`–`A3`, all ✅). "The thing this project is for" — sign in, talk
-to it, ask about your documents, ask about your data — exists and is demonstrable end to
-end. `B1` is the first step of Phase B: turning it from a chatbot into a platform.
+**Phase A is complete** (`A0`–`A3`, all ✅). `B1` is the first step of Phase B, turning it
+from a chatbot into a platform — deliverable 1 of 5 done, four to go.
 
 ------------------------------------------------------------------------------
 HARD RULES — violating any of these is worse than doing nothing
@@ -154,10 +147,9 @@ HARD RULES — violating any of these is worse than doing nothing
 
 * NO PLACEHOLDERS, NO TODOs, NO STUBBED RETURNS. Split a task rather than stub it.
 
-* EVERY FEATURE SHIPS ITS UI IN THE SAME MILESTONE (C12). `A3` is the model of this done
-  right. For `B1`: deliverables 1-4 have no product UI and the PR stays in draft until
-  deliverable 5's sources screen exists and the whole "connect a source, watch it ingest"
-  sentence is true in a browser.
+* EVERY FEATURE SHIPS ITS UI IN THE SAME MILESTONE (C12). For `B1`: deliverables 1-4 have
+  no product UI and PR #16 stays in draft until deliverable 5's sources screen exists and
+  "connect a source, watch it ingest" is true in a browser.
 
 * THE UI FOLLOWS docs/DesignSystem.md (C13). Tokens are the only source of colour, type,
   spacing and radius. `test_no_component_hardcodes_a_colour` enforces this in CI. The sources
@@ -169,43 +161,40 @@ HARD RULES — violating any of these is worse than doing nothing
 
 * DO NOT run `pkill -f mnemos` — it matches the agent's own shell. Kill by port or PID.
 
-* Never leave uncommitted work, and never leave a genuinely finished PR open. Push, open a
-  PR the moment a branch has its first commit, merge it the moment it is actually done and
-  green — verified in a real browser, not only CI-green, before calling anything done.
+* Never leave uncommitted work, and never leave a genuinely finished PR open. Push, add to
+  PR #16's branch (it already exists — do not open a second one for `B1`), merge only once
+  every deliverable is done, green, and browser-verified.
 
-* NEVER SHIP A SECOND DEFENCE AS IF IT WERE THE FIRST. `B1`'s realtime-auth fix is exactly
-  this shape once it exists: prove a token for org A cannot subscribe to org B's ingestion
-  channel by connecting around the code path entirely (dial the WebSocket directly with a
-  hand-typed channel name), not just by checking the one call site you think enforces it —
-  the same discipline `test_the_readonly_role_refuses_a_write_the_guard_somehow_allowed`
-  established for `A3`'s guard.
+* NEVER SHIP A SECOND DEFENCE AS IF IT WERE THE FIRST. `B1`'s realtime-auth fix (deliverable
+  3, not yet built) is exactly this shape: prove a token for org A cannot subscribe to org
+  B's ingestion channel by connecting around the code path entirely (dial the WebSocket
+  directly with a hand-typed channel name), not just by checking the one call site you think
+  enforces it.
 
 * THE HTTP SOURCE CONNECTOR NEVER CRAWLS AND NEVER FETCHES AN ARBITRARY USER-SUPPLIED URL.
-  Only an operator-curated list, and every URL is checked against the SSRF deny-list
-  (link-local/loopback/private ranges, DNS-rebinding guard — ThreatModel.md §3⑥) before
-  fetching. This is a security control, not a nice-to-have; test that a loopback URL is
-  actually refused, not merely that the deny-list function exists.
+  Already enforced in deliverable 1 (`adapters/http.py` + `adapters/ssrf_guard.py`, tested
+  against an actual loopback/link-local/metadata-IP/localhost refusal, not just an assertion
+  that the deny-list exists). Keep this property true in whatever deliverable 4/5 build on
+  top of it.
 
 ------------------------------------------------------------------------------
 HOW TO WORK
 
 Commits: one logical change per commit, conventional format, explaining why not just what.
-Never a bulk commit of unrelated files. One commit per numbered `B1` deliverable, matching
-how `A3`'s five deliverables were each their own commit(s).
+Never a bulk commit of unrelated files. One commit per numbered `B1` deliverable — all on
+`feat/b1-connectors`, all part of PR #16.
 
 Every change ends with ALL of:
-  - make test            (352 passed as of A3's completion — this will grow with B1)
-  - make lint / make types / make check       (make check must show the new migration
-                                                applying cleanly — the first since M2)
+  - make test            (384 passed as of deliverable 1 — this will grow)
+  - make lint / make types / make check
   - frontend (if touched): npm run lint && npx tsc --noEmit && npm run test && npm run build
   - TRACKER.md updated in the same commit as the work — status, evidence, next task
   - docs/ADAPTATION.md updated in the same commit — section 7 position, section 8 state
-  - README numbers updated ONLY if the retrieval or compile path moved (B1 does not touch it)
-  - the branch pushed with its PR open and CI green before you call a deliverable done
-  - real browser verification before claiming the sources UI works, not just a passing test
-    suite — connect the local-filesystem connector against real fixture files, in a real
-    browser, and watch a job move queued -> running -> done live, the same bar A3's browser
-    verification set
+  - README numbers updated ONLY if the retrieval or compile path moved (still doesn't apply)
+  - the branch pushed, PR #16 still green, before you call a deliverable done
+  - real browser verification before claiming the sources UI works (deliverable 5 only) —
+    connect the local-filesystem connector against real fixture files, in a real browser,
+    and watch a job move queued -> running -> done live
 
 Report honestly. Claim something works only after you have run it and seen the output.
 
@@ -223,6 +212,12 @@ RUNNING IT
       introspect --org-slug mnemos              # registers + caches the demo warehouse
   docker compose exec -e MNEMOS_BOOTSTRAP_ADMIN_PASSWORD=<pw> api mnemosctl datasource \
       seed-glossary --org-slug mnemos           # seeds the four curated glossary terms
+  docker compose exec -e MNEMOS_BOOTSTRAP_ADMIN_PASSWORD=<pw> api mnemosctl connector \
+      register --org-slug mnemos --slug demo-fs --name "Demo filesystem" \
+      --kind local_fs --root /some/allowlisted/path
+                                                  # needs MNEMOS_LOCAL_FS_ALLOWED_ROOTS set
+  docker compose exec -e MNEMOS_BOOTSTRAP_ADMIN_PASSWORD=<pw> api mnemosctl connector \
+      list-items --org-slug mnemos --slug demo-fs
 
   cd backend && ../.venv/bin/python -m pytest -q
   make lint && make types && make check
@@ -242,54 +237,57 @@ JIT-provisioned `app_user` row at the old one. Fix: `DELETE FROM app_user WHERE 
 AND external_subject = '<the stale one, from the failing log line>'`, then sign in again —
 disposable dev data, not a regression.
 
-To ask a question about the data in the browser: open a chat session, select "Ask your
-data" in the composer's mode control, and ask something about the seeded
-`analytics.region`/`.customer`/`.sales_order`/`.product` tables.
-
 Host ports (unchanged since M1): postgres 15432, redis 6380, api 8000, realtime 8001,
 keycloak 8080, minio 9000/9001, ollama 11434. Python venv is at .venv/ in the repo root; the
 package lives in backend/.
 
 ------------------------------------------------------------------------------
-WHERE THINGS ARE (current, post-A3, pre-B1)
+WHERE THINGS ARE (current, post-B1-deliverable-1)
 
   backend/src/mnemos/
-    core/          config, errors, logging, clock, ids, crypto (DsnCipher — the pattern B1's
-                   connector-config encryption should reuse, with its own key)
+    core/          config (now has source_encryption_key, local_fs_allowed_roots), errors
+                   (now has SsrfRejectedError), logging, clock, ids, crypto (DsnCipher — the
+                   pattern connectors/adapters/crypto.py's SourceConfigCipher already copied)
     platform/      db engine + tenant-scoped sessions, cache.py (Redis — pub/sub today;
-                   B1 adds Streams), objectstore (S3/MinIO — B1's S3 connector adapter sits
-                   on top of this port), models. `platform/events/` does NOT exist yet — B1
-                   creates it.
+                   deliverable 2 adds Streams), objectstore (S3/MinIO — `ObjectStore` now has
+                   `list()` too), models. `platform/events/` does NOT exist yet — deliverable
+                   2 creates it.
     features/      identity, chat, llm (Ollama gateway), knowledge (RAG; `upload_document`'s
-                   extract/chunk/embed body needs factoring out for B1's worker to reuse),
-                   memory, context, connectors (three empty __init__.py files — B1's main
-                   target), datasources (NL2SQL, complete since A3), tools, prompts,
-                   observability
+                   extract/chunk/embed body still needs factoring out for deliverable 4),
+                   memory, context, connectors (real content now — domain/adapters/
+                   application/api, though api/ is still three empty files; deliverable 5's
+                   UI will need routes there), datasources (NL2SQL, complete since A3),
+                   tools, prompts, observability
     flows/         rag (A2), nl2sql (A3), agent, router (both still unbuilt)
-    entrypoints/   api, worker (main.py's reaper already works; B1 adds real job claiming),
-                   realtime (main.py — working but UNAUTHENTICATED; B1 must fix this), cli
+    entrypoints/   api, worker (main.py's reaper already works; deliverable 4 adds real job
+                   claiming), realtime (main.py — working but UNAUTHENTICATED; deliverable 3
+                   must fix this), cli (now has `connector register`/`list-items`)
     _v1/           the SQLite kernel. Retrieval was ported OUT of it in A2. Memory + the
-                   six-phase compiler are still only in here, ported in C4.
-  backend/migrations/    alembic revisions — no new one since A0/M2 until B1's
-                          `content_source` table, which will be the first
+                   six-phase compiler are still only in here, ported in C4. Its own
+                   `TrustTier` (0-6, lower = more trusted) is the scale ThreatModel.md §4's
+                   "external connectors ≥ 4" was written against — `core/types.py`'s ported
+                   `TrustTier` (10/20/30/40, higher = more trusted) is the one deliverable 4
+                   actually assigns from; see TRACKER's dated note for the reconciliation.
+  backend/migrations/    0001-0006 unchanged in behaviour (0004/0006 fixed to freeze their
+                          own table list rather than import the live one — see above); 0007
+                          adds `content_source` + its RLS. No migration since.
   frontend/src/
-    app/(app)/chat/, app/(app)/knowledge/    the built screens
-    components/chat/       SqlPanel.tsx, Composer.tsx (A3's ToggleGroup + icon send button)
+    app/(app)/chat/, app/(app)/knowledge/    the built screens. No sources/ screen yet —
+                                              that is deliverable 5.
+    components/chat/       SqlPanel.tsx, Composer.tsx
     lib/chat/stream.ts
   frontend/e2e/           chat.spec.ts, knowledge.spec.ts, nl2sql.spec.ts, auth.spec.ts — all
-                          green as of A3. B1 adds a sources flow spec.
+                          green. Deliverable 5 adds a sources flow spec.
   deploy/                 postgres init SQL, keycloak realm
   docs/                   architecture, schema, API contract, threat model, ADRs
 
 Layering rule: domain (pure) <- application <- adapters/api. `features` must never import
-`flows`; `flows` may import multiple `features`. `features/connectors/` should follow this
-shape from its first real file, not grow into it the way some earlier features did.
+`flows`; `flows` may import multiple `features`.
 
 ------------------------------------------------------------------------------
 START HERE
 
-Read TRACKER.md now — the header, the "2026-08-15 (later) — the B1 brief written, nothing
-built" note, and **section 5 in full — that is the actual `B1` brief, five deliverables in
-build order, and it is what you build today.** Do steps 1-8 under "WHAT TO DO, IN ORDER"
-above, then start deliverable 1. You do not need to ask what to work on — the brief already
-answers that; begin.
+Read TRACKER.md now — the header, the "2026-08-15 (evening) — B1 deliverable 1 built" dated
+note, and **section 5 in full**, starting at deliverable 2. Do steps 1-7 under "WHAT TO DO,
+IN ORDER" above, then build deliverable 2 on `feat/b1-connectors`. You do not need to ask
+what to work on — begin.
