@@ -11,6 +11,9 @@ export type ComposerProps = {
   streaming: boolean;
   useDocuments: boolean;
   onUseDocumentsChange: (value: boolean) => void;
+  /** Answer by generating and running SQL against the datasource, rather than chat or RAG. */
+  useDatasource: boolean;
+  onUseDatasourceChange: (value: boolean) => void;
 };
 
 /**
@@ -27,6 +30,8 @@ export function Composer({
   streaming,
   useDocuments,
   onUseDocumentsChange,
+  useDatasource,
+  onUseDatasourceChange,
 }: ComposerProps) {
   const ref = useRef<HTMLTextAreaElement>(null);
 
@@ -83,20 +88,36 @@ export function Composer({
         )}
       </div>
 
-      {/* A real checkbox, not a styled div: it is reachable by keyboard and
-          announced as a checkbox without any ARIA (DesignSystem §3). The
-          manual choice is provisional — `A4` replaces it with a classifier
-          that decides per message. */}
-      <label className="hit-target inline-flex cursor-pointer items-center gap-2 self-start px-1 text-footnote text-label-secondary">
-        <input
-          type="checkbox"
-          checked={useDocuments}
-          disabled={streaming}
-          onChange={(event) => onUseDocumentsChange(event.target.checked)}
-          className="size-4 accent-accent"
-        />
-        Use documents
-      </label>
+      {/* Real checkboxes, not styled divs: reachable by keyboard and
+          announced without any ARIA (DesignSystem §3). Both provisional —
+          `A4` replaces this pair with a classifier that decides per
+          message. Mutually exclusive server-side (sending both `true` is a
+          422), enforced here by disabling the sibling rather than by
+          switching to a radio group: two checkboxes keep "neither" a valid,
+          nameable state (plain chat), which a two-option radio group cannot
+          express without an artificial third option. */}
+      <div className="flex items-center gap-4">
+        <label className="hit-target inline-flex cursor-pointer items-center gap-2 self-start px-1 text-footnote text-label-secondary has-[:disabled]:cursor-not-allowed has-[:disabled]:opacity-40">
+          <input
+            type="checkbox"
+            checked={useDocuments}
+            disabled={streaming || useDatasource}
+            onChange={(event) => onUseDocumentsChange(event.target.checked)}
+            className="size-4 accent-accent"
+          />
+          Use documents
+        </label>
+        <label className="hit-target inline-flex cursor-pointer items-center gap-2 self-start px-1 text-footnote text-label-secondary has-[:disabled]:cursor-not-allowed has-[:disabled]:opacity-40">
+          <input
+            type="checkbox"
+            checked={useDatasource}
+            disabled={streaming || useDocuments}
+            onChange={(event) => onUseDatasourceChange(event.target.checked)}
+            className="size-4 accent-accent"
+          />
+          Ask your data
+        </label>
+      </div>
     </div>
   );
 }

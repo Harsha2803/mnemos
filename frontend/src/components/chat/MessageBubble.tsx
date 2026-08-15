@@ -1,4 +1,7 @@
+import type { Nl2SqlResult } from "@/lib/chat/stream";
 import type { Citation } from "@/lib/knowledge/api";
+
+import { SqlPanel } from "./SqlPanel";
 
 export type DisplayMessage = {
   id: string;
@@ -8,6 +11,14 @@ export type DisplayMessage = {
   streaming?: boolean;
   /** Present on a RAG answer; the markers in `content` index into these. */
   citations?: Citation[];
+  /**
+   * Present on an NL2SQL answer received live in this browser session. Not
+   * reconstructed from `GET /v1/chat/sessions/{id}` after a reload — the SQL,
+   * verdict and rows exist only in the live `done` frame, by design (TRACKER
+   * §5 deliverable 5) — so a reloaded historical `nl2sql` message renders as
+   * a plain assistant bubble with no panel.
+   */
+  nl2sql?: Nl2SqlResult;
 };
 
 export type MessageBubbleProps = {
@@ -48,6 +59,11 @@ export function MessageBubble({ message, onCitationClick }: MessageBubbleProps) 
           <span className="text-label-tertiary">Thinking…</span>
         )}
       </div>
+      {/* Outside the `measure`-clamped bubble above, deliberately: tabular
+          data wants the full content column, not the 46rem prose measure
+          (DesignSystem, TRACKER §5 deliverable 5). Visible inline in the
+          conversation, not only behind an inspector click. */}
+      {message.nl2sql !== undefined && <SqlPanel result={message.nl2sql} />}
     </div>
   );
 }

@@ -40,6 +40,7 @@ export default function ChatSessionPage() {
   const [messages, setMessages] = useState<DisplayMessage[]>([]);
   const [streaming, setStreaming] = useState(false);
   const [useDocuments, setUseDocuments] = useState(false);
+  const [useDatasource, setUseDatasource] = useState(false);
   const abortRef = useRef<AbortController | null>(null);
   const loadedFor = useRef<string | null>(null);
 
@@ -89,11 +90,11 @@ export default function ChatSessionPage() {
             ),
           );
         },
-        onDone: (message) => {
+        onDone: (message, nl2sql) => {
           setMessages((prev) =>
             prev.map((m) =>
               m.id === assistantMessageId
-                ? { id: message.id, role: "assistant", content: message.content }
+                ? { id: message.id, role: "assistant", content: message.content, nl2sql }
                 : m,
             ),
           );
@@ -138,7 +139,7 @@ export default function ChatSessionPage() {
         },
       },
       controller.signal,
-      { useDocuments },
+      { useDocuments, useDatasource },
     );
   }
 
@@ -170,6 +171,8 @@ export default function ChatSessionPage() {
         streaming={streaming}
         useDocuments={useDocuments}
         onUseDocumentsChange={setUseDocuments}
+        useDatasource={useDatasource}
+        onUseDatasourceChange={setUseDatasource}
       />
     </div>
   );

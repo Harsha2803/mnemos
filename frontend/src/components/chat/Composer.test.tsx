@@ -13,6 +13,8 @@ function renderComposer(overrides: Partial<ComposerProps> = {}) {
     streaming: false,
     useDocuments: false,
     onUseDocumentsChange: vi.fn(),
+    useDatasource: false,
+    onUseDatasourceChange: vi.fn(),
     ...overrides,
   };
   return { ...render(<Composer {...props} />), props };
@@ -74,6 +76,32 @@ describe("the composer", () => {
     await userEvent.click(toggle);
 
     expect(onUseDocumentsChange).toHaveBeenCalledWith(true);
+  });
+
+  it("test_the_use_datasource_toggle_is_a_real_checkbox_and_reports_its_changes", async () => {
+    const onUseDatasourceChange = vi.fn();
+    renderComposer({ onUseDatasourceChange });
+
+    const toggle = screen.getByRole("checkbox", { name: "Ask your data" });
+    expect(toggle).not.toBeChecked();
+
+    await userEvent.click(toggle);
+
+    expect(onUseDatasourceChange).toHaveBeenCalledWith(true);
+  });
+
+  it("the two datasource toggles are mutually exclusive", () => {
+    // Reflects the backend's own rule: sending both `use_documents` and
+    // `use_datasource` as `true` is a 422. Selecting one disables the other
+    // rather than allowing an impossible combination to be built in the UI.
+    const usingDocuments = renderComposer({ useDocuments: true });
+    expect(screen.getByRole("checkbox", { name: "Ask your data" })).toBeDisabled();
+    expect(screen.getByRole("checkbox", { name: "Use documents" })).toBeEnabled();
+    usingDocuments.unmount();
+
+    renderComposer({ useDatasource: true });
+    expect(screen.getByRole("checkbox", { name: "Use documents" })).toBeDisabled();
+    expect(screen.getByRole("checkbox", { name: "Ask your data" })).toBeEnabled();
   });
 
   it("test_the_composer_has_no_axe_violations", async () => {
