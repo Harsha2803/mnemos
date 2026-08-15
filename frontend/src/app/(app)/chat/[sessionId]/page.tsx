@@ -153,7 +153,7 @@ export default function ChatSessionPage() {
   }
 
   return (
-    <div className="-mx-6 -my-8 flex h-[calc(100dvh-3.5rem)] flex-col">
+    <div className="-mx-4 -my-4 flex h-[calc(100dvh-3.5rem)] flex-col">
       <div className="min-h-0 flex-1 overflow-y-auto">
         {isPending ? (
           <div className="flex flex-col gap-4 px-4 py-6" aria-hidden="true">

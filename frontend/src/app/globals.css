@@ -179,6 +179,13 @@
   /* The measure. Past ~75 characters the eye loses its place on the return
      sweep, so this is a legibility control, not a layout preference. */
   --measure: 46rem;
+
+  /* The chat conversation column's own width — wider than the prose measure,
+     because it is chrome (the composer, its mode toggles, `SqlPanel`'s
+     tabular data) as much as it is prose. Each bubble still clamps to
+     `--measure` on its own (`MessageBubble.tsx`), so a line of text is never
+     wider even though the column around it is. */
+  --chat-measure: 64rem;
 }
 
 /* ------------------------------------------- 2.3 spacing — 8pt rhythm */
@@ -403,6 +410,11 @@
   /* The readable measure for long-form content (DesignSystem §2.2). */
   .measure {
     max-width: var(--measure);
+  }
+
+  /* The wider chat-column measure, §2.2's note above `--chat-measure`. */
+  .measure-chat {
+    max-width: var(--chat-measure);
   }
 
   /* Grouped-inset list (DesignSystem §4). The separator is a pseudo-element
