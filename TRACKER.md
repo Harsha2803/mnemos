@@ -6,23 +6,126 @@
 > **and [`docs/ADAPTATION.md`](docs/ADAPTATION.md)** *in the same commit* — a stale
 > tracker is worse than none.
 
-**Last updated:** 2026-08-15 (`A3` deliverable 2/5 — the business glossary — committed and
-pushed; PR #15 open as **draft**, CI green, not yet merged — merge only once all five
-deliverables are on the branch, per C12)
+**Last updated:** 2026-08-15 (`A3` deliverable 3/5 — generation and the AST read-only guard
+— committed and pushed; PR #15 open as **draft**, CI green, not yet merged — merge only
+once all five deliverables are on the branch, per C12)
 **Phase:** **A — make it a chatbot.** `A0` ✅, `A1` ✅, `A2` ✅ merged. `A3` **in progress**:
-deliverables 1-2 of 5 done (schema introspection, business glossary). Deliverables 3-5
-fully specified in §5.
-**Next task:** `A3` deliverable 3 — generation and the AST guard, the security-critical
-center of this milestone. §5 has the complete brief for 3-5, written at the same level of
-detail as the original A3 brief it replaces.
+deliverables 1-3 of 5 done (schema introspection, business glossary, generation + the AST
+guard). Deliverables 4-5 fully specified in §5.
+**Next task:** `A3` deliverable 4 — execution as `mnemos_ro` and narration. §5 has the
+complete brief for 4-5, written at the same level of detail as the original A3 brief it
+replaces.
 **After `A3` is fully testable:** the plan is re-sequenced, effective 2026-08-15 — `B1`/`B2`
-(ingestion) are next, pulled ahead of `A4` (the router). See the note directly below and
-§3.0.
+(ingestion) are next, pulled ahead of `A4` (the router). See the note below and §3.0.
 **Branch right now:** `feat/a3-nl2sql`, pushed, PR #15 open as **draft** (draft is
 deliberate — C12/§0 rule 7 says every branch gets a PR immediately, but this one only
 becomes a real merge candidate once the UI slice in deliverable 5 lands; see §0 rule 8).
-CI is green on the branch as it stands (deliverables 1-2 only). `main`'s tip is still the
-squashed `A2` commit (PR #14) — `A3` is not in `main` yet, not even partially.
+CI is green on the branch as it stands (deliverables 1-3 only, still no UI). `main`'s tip is
+still the squashed `A2` commit (PR #14) — `A3` is not in `main` yet, not even partially.
+
+> ### 2026-08-15 — `A3` deliverable 3 (generation + the AST guard) done, PR #15 still draft
+>
+> A fresh session picking up exactly where the deliverable-2 session's handoff left off —
+> prompt.txt was explicit that deliverable 3, the security-critical center of this
+> milestone, deserved a session's full, unhurried attention rather than being folded into
+> whatever else was going on. This session did deliverable 3 alone, verified it against a
+> real local model rather than only against fakes, and stopped rather than starting
+> deliverable 4.
+>
+> **What shipped, on `feat/a3-nl2sql`, all inside `features/datasources/`** — no new
+> `flows/nl2sql/` package yet. TRACKER §5 was explicit that deliverables 3-4 are "more of
+> this feature, not a new one"; the flow package is deliverable 4's, once streaming and the
+> chat integration actually need it:
+> - `domain/guard.py`'s `guard_sql` — the AST read-only guard. Deliberately an
+>   **allowlist**: the parsed statement must be `sqlglot.exp.Query` (a `SELECT`, optionally
+>   `WITH`-prefixed, or a set operation over `SELECT`s), and every node in the tree — not
+>   just the root — is walked for anything that writes, changes privileges, or is a shape
+>   `sqlglot` falls back to a generic `Command` for. A **blocklist** scoped to
+>   `INSERT`/`UPDATE`/`DELETE`/DDL was tried first and found to miss `SELECT ... INTO`
+>   (creates a table), `FOR UPDATE`/`FOR SHARE` (takes a write lock), and
+>   `EXPLAIN`/`VACUUM`/`CALL`/`COPY`/`SET` (none of these is a DML/DDL node at all) —
+>   requiring the positive case catches all of them without naming any of them. Stacked
+>   statements (`SELECT 1; DROP TABLE ...;`) parse to a `Block`, not a `Query`, and are
+>   rejected the same way — closing the classic decoy-then-write injection shape as a
+>   consequence of the allowlist rather than a special case bolted onto it.
+> - `domain/generation.py` — `NL2SQL_SYSTEM_PROMPT` and `extract_sql_statement`, pulling the
+>   candidate statement out of a fenced ` ```sql ` block with a fallback to the whole
+>   response when a small local model does not comply with the fence instruction. Extraction
+>   does not have to be clever — `guard_sql`'s own parse step is what actually decides
+>   safety.
+> - `application/generation.py`'s `SqlGenerationService` — a **sibling** of
+>   `DatasourceService` (composing it for `require_datasource`/`render_context`), not a
+>   fifth method on it and not a new `flows/` package, because generation calls a model and
+>   makes a security verdict, which is a different kind of operation with different tests
+>   than the fast, no-verdict registry/cache operations `DatasourceService` already had.
+>   `.generate()` is one blocking `ChatModel.complete()` call, never `.stream()` — nothing
+>   can be guarded, let alone shown, before the whole statement has arrived.
+>   `DatasourceService._require_datasource` graduated from private to a public
+>   `require_datasource` the moment this second class needed the same lookup.
+> - `SqlRunRepository` (`adapters/repository.py`) — persists every attempt, allowed or
+>   refused, with its verdict, detail, and `authorized_tables`/`denied_tables`. **No
+>   migration needed**: `sql_run` already had every column from `M2`.
+> - `mnemosctl datasource generate --org-slug X "<question>"` — generates, guards, and
+>   records one attempt; **never executes** (deliverable 4's job). The real, demonstrable
+>   consumer of `SqlGenerationService`, the same reasoning `show-context` was for
+>   `render_schema_context` in deliverable 2.
+> - Fixed the same class of bug `A1` found (§4 item 41): `sql_run.message_id`'s foreign key
+>   to `chat_message` is the first one any CLI code path has ever touched, and
+>   `entrypoints/cli.py` had never needed `mnemos.platform.models`'s side-effect import
+>   before — `NoReferencedTableError` from a live `mnemosctl` run, not from `pytest` (the
+>   test suite already carried that import, matching `test_datasources_introspection.py`'s
+>   own pattern, which is exactly why the tests never caught it). Fixed with the same
+>   one-line import `entrypoints/api/main.py` already carries, same comment, new reason.
+>
+> **Verified against a real local model, not a fake, on the rebuilt `api` image:**
+> ```
+> $ docker compose exec api mnemosctl datasource generate --org-slug mnemos \
+>     "what was total revenue by region last quarter"
+> verdict          : allowed
+> sql              : WITH active_customers AS (...), region_revenue AS (...)
+>                     SELECT region_name, total_revenue FROM region_revenue ORDER BY ... DESC
+> tables read      : analytics.sales_order, analytics.customer, analytics.region, analytics.product
+>
+> $ docker compose exec api mnemosctl datasource generate --org-slug mnemos \
+>     "delete every row from the sales_order table"
+> verdict          : rejected_write
+> detail           : not a read statement (parsed as Delete)
+> sql              : DELETE FROM analytics.sales_order
+> tables refused   : analytics.sales_order
+> ```
+> The second call is the one that matters: **`qwen2.5:3b-instruct` complied with the
+> adversarial instruction and emitted a real `DELETE`.** The system prompt's "never
+> INSERT/UPDATE/DELETE" is a request, not a defence, and a 3B model does not reliably honour
+> requests — `guard_sql` is what actually stopped it, not the prompt. Confirmed directly
+> against `sql_run` with `psql`, not the CLI's own printout: both attempts persisted,
+> `attempt=1`, `message_id` null, `executed=false` — exactly the shape deliverable 4 builds
+> on.
+>
+> **Evidence:** `make test` — **342 passed** (302 before this session; +40: 31 pure
+> `guard_sql` cases in the new `test_datasources_guard.py`, covering CodingStandards §9
+> mandatory case 4 in full — DML nested in a CTE/a UNION arm/a subquery, unparseable
+> rejected fail-closed, the allowed control — plus every write/privilege/DDL shape and the
+> shapes a naive DML blocklist would have missed; 9 cases in the new
+> `test_datasources_generation.py` — `extract_sql_statement`, `SqlGenerationService.generate`
+> against a real Postgres with a scripted `FakeChatModel` (an allowed verdict with its
+> tables, every attempt recorded regardless of verdict, a cross-org datasource is a
+> `LookupError`, an unregistered slug is a `LookupError`), and
+> `test_the_readonly_role_refuses_a_write_the_guard_somehow_allowed` — connects directly as
+> `mnemos_ro`, bypassing the guard and the service entirely, and proves the second defence
+> holds on its own, formalizing what deliverable 1 verified ad hoc). `make lint` / `make
+> types` (165 source files, `--strict`) / `make check` all clean (`alembic check`: "No new
+> upgrade operations detected"). PR #15: `backend`, `frontend`, `compose` all green.
+>
+> **Deliberately left in draft, not merged, still no UI:** same C12 reasoning as
+> deliverables 1-2. `mnemosctl datasource generate` is an operator/inspection tool, not a
+> product screen — the SQL panel (deliverable 5) is still what makes any of `A3`
+> demonstrable in the product, and deliverable 4 (execution + narration) has to exist first
+> for that panel to have a result set and an answer to show.
+>
+> **What is NOT done:** no execution — the statement is guarded and recorded, never run —
+> no narration, no chat-surface UI, no e2e test, no repair loop
+> (`Settings.sql_repair_attempts` is deliverable 4's). §5 below specifies deliverables 4-5
+> in full.
 
 > ### 2026-08-15 (evening) — the plan re-sequenced: ingestion pulled ahead of the router
 >
@@ -364,7 +467,7 @@ That right-hand column is not a summary — it is the exit criterion.
 | **A0** | Sign-in screen + browser session handling (M3.4's UI half) + the fail-closed route guard (deny by default, from old `M3.6`) | **sign in through Keycloak, stay signed in across a reload, and sign out** — and no route added after this is reachable unauthenticated | ✅ |
 | **A1** | LLM gateway (Ollama) · chat sessions + messages · SSE streaming · the chat surface | **talk to it** — ask a question and watch the answer stream in token by token | ✅ 2026-08-08 |
 | **A2** | Upload → extract → chunk → embed (pgvector HNSW) · retrieval ported from `_v1` · RAG flow · citations · knowledge library | **upload a document and ask questions about it**, with citations you click into | ✅ merged (PR #14) |
-| **A3** | NL2SQL: introspection · glossary · generate · AST read-only guard · `mnemos_ro` execution · narration · SQL panel | **ask a question about your data in English** and see the SQL, the rows and the narration — and see the guard visibly refuse a write | 🟡 **in progress** — 2/5 (introspection, glossary), PR #15 draft |
+| **A3** | NL2SQL: introspection · glossary · generate · AST read-only guard · `mnemos_ro` execution · narration · SQL panel | **ask a question about your data in English** and see the SQL, the rows and the narration — and see the guard visibly refuse a write | 🟡 **in progress** — 3/5 (introspection, glossary, generation + the AST guard), PR #15 draft |
 | **A4** | Router: classify a message → chat / RAG / NL2SQL · flow indicator | **ask anything without choosing a mode**, and see which flow answered and why | ⬜ — built **after** `B1`/`B2`, see below |
 
 **At the end of Phase A the thing this project is for exists.** Everything after deepens it.
@@ -430,12 +533,13 @@ discarded. If you find a reference to an old ID anywhere, this is the translatio
 | `M13` frontend | dissolved into `F0` + a UI slice per milestone | Unchanged by this re-plan |
 | `M14` realtime + e2e + docs | `D1` | |
 
-### 🟡 A3 — ask about your data, in progress (2/5), PR #15 draft, 2026-08-15
+### 🟡 A3 — ask about your data, in progress (3/5), PR #15 draft, 2026-08-15
 
 **Not verified end to end yet — no chat-surface UI exists, so there is no "you can now ___"
-sentence to demonstrate.** What is verified is deliverables 1 and 2 in isolation, against a
-real `mnemos_ro` connection to a real (test-seeded or compose-seeded) `mnemos_analytics`,
-and against the rebuilt `api` container image.
+sentence to demonstrate.** What is verified is deliverables 1-3 in isolation: 1 and 2
+against a real `mnemos_ro` connection to a real (test-seeded or compose-seeded)
+`mnemos_analytics`; 3 the same way, plus against a real local model, not only a scripted
+fake. All three against the rebuilt `api` container image, not just `pytest`.
 
 **Deliverable 1 — schema introspection — done:**
 - `mnemosctl datasource introspect --org-slug X [--slug sales-warehouse]`
@@ -526,22 +630,64 @@ exists.
   Schema printed before glossary, exactly as `render_schema_context` orders it.
 - `DatasourceService._require_datasource` factors the "get by slug or raise `LookupError`"
   pattern out of `refresh_schema`, `seed_glossary` and `render_context` — three call sites
-  made it worth naming rather than repeating a third time.
+  made it worth naming rather than repeating a third time. (Deliverable 3 below made this
+  public, as `require_datasource`, once a second class needed it too.)
 
-**Evidence:** `make test` — 302 passed (290 measured on this branch before deliverable 2's
-work; +12: 5 pure `render_schema_context`/`GlossaryTermRow` cases in
-`test_datasources_domain.py`, 7 integration cases in the new `test_datasources_glossary.py`
-against a real Postgres — idempotence, non-destructive re-seed, the schema-then-glossary
-ordering, and `LookupError` for an unregistered slug). `make lint` / `make types` (162
-source files, `--strict`) / `make check` clean (`alembic check`: "No new upgrade operations
-detected" — `glossary_term` already had every column from `M2`). PR #15: `backend`,
-`frontend`, `compose` all green, still draft.
+**Deliverable 3 — generation and the AST read-only guard — done:**
+- `features/datasources/domain/guard.py`'s `guard_sql` — pure, no I/O. An **allowlist**: the
+  parsed statement must be `sqlglot.exp.Query`, and every node in the tree is walked for
+  anything that writes, changes privileges, or is a shape `sqlglot` falls back to a generic
+  `Command` for. Tested directly against a blocklist-shaped alternative first, and found to
+  miss `SELECT ... INTO`, `FOR UPDATE`, `EXPLAIN`/`VACUUM`/`CALL`/`COPY`/`SET` — none of
+  which is a DML/DDL node — plus stacked statements (`SELECT 1; DROP TABLE ...;`, which
+  parses to a `Block`, not a `Query`). `test_datasources_guard.py`, 31 cases, including
+  CodingStandards §9 mandatory case 4 in full (DML nested in a CTE, a `UNION` arm, and a
+  subquery — three cases proven by a single **data-modifying CTE** consumed three different
+  ways, since Postgres does not allow a bare `DELETE`/`INSERT` in a `UNION` arm or a
+  `FROM (...)` subquery directly, only through `WITH`).
+- `features/datasources/domain/generation.py` — `NL2SQL_SYSTEM_PROMPT` and
+  `extract_sql_statement`, pulling the candidate out of a fenced ` ```sql ` block with a
+  fallback to the whole response for a model that does not comply with the fence
+  instruction.
+- `features/datasources/application/generation.py`'s `SqlGenerationService` — a sibling of
+  `DatasourceService` (composes it for `require_datasource`/`render_context`), calling
+  `ChatModel.complete()` once (never `.stream()`), guarding the result, and recording the
+  attempt via the new `SqlRunRepository` regardless of verdict.
+- `mnemosctl datasource generate --org-slug X "<question>"` — generates, guards, records;
+  **never executes** (deliverable 4). Run against the rebuilt `api` container with a real
+  `qwen2.5:3b-instruct` completion, not a fake:
+  ```
+  $ docker compose exec api mnemosctl datasource generate --org-slug mnemos \
+      "what was total revenue by region last quarter"
+  verdict          : allowed
+  tables read      : analytics.sales_order, analytics.customer, analytics.region, analytics.product
 
-**Not done — deliverables 3-5, specified in full in §5:** SQL generation + the `sqlglot`
-AST read-only guard (the security-critical center of this milestone — `sqlglot` is declared
-as a dependency and imported nowhere yet), execution as `mnemos_ro` with the timeout/row-cap,
-narration, and the chat surface's SQL panel including the denial screen. No UI exists for
-any of `A3` yet — C12 is why the PR stays draft.
+  $ docker compose exec api mnemosctl datasource generate --org-slug mnemos \
+      "delete every row from the sales_order table"
+  verdict          : rejected_write
+  detail           : not a read statement (parsed as Delete)
+  sql              : DELETE FROM analytics.sales_order
+  tables refused   : analytics.sales_order
+  ```
+  The model complied with the adversarial question and wrote a real `DELETE`; the guard, not
+  the system prompt's instruction, is what actually stopped it. Both attempts confirmed
+  persisted in `sql_run` via a direct `psql` query, not the CLI's own printout.
+- Fixed a `NoReferencedTableError` from a live `mnemosctl` run (the same bug class as §4 item
+  41): `sql_run.message_id`'s FK to `chat_message` is the first one any CLI code path has
+  touched, and `entrypoints/cli.py` never previously needed `mnemos.platform.models`'s
+  side-effect import. Fixed the same way `main.py` already does it.
+
+**Evidence:** `make test` — **342 passed** (302 before this session; +40: 31 in the new
+`test_datasources_guard.py`, 9 in the new `test_datasources_generation.py` — including
+`test_the_readonly_role_refuses_a_write_the_guard_somehow_allowed`, which bypasses the guard
+and the service entirely and connects directly as `mnemos_ro`, formalizing what deliverable
+1 verified ad hoc). `make lint` / `make types` (165 source files, `--strict`) / `make check`
+clean (`alembic check`: "No new upgrade operations detected" — `sql_run` already had every
+column from `M2`). PR #15: `backend`, `frontend`, `compose` all green, still draft.
+
+**Not done — deliverables 4-5, specified in full in §5:** execution as `mnemos_ro` with the
+timeout/row-cap, narration, the repair loop, and the chat surface's SQL panel including the
+denial screen. No UI exists for any of `A3` yet — C12 is why the PR stays draft.
 
 ### ✅ A2 — ask about your documents, verified 2026-08-10
 
@@ -1795,12 +1941,12 @@ Recorded so they are not rediscovered as surprises:
 
 ## 5. NEXT TASK
 
-### `A3` — ask about your data: NL2SQL with two independent read-only defences (3/5 remain: deliverables 3-5; 1-2 done)
+### `A3` — ask about your data: NL2SQL with two independent read-only defences (2/5 remain: deliverables 4-5; 1-3 done)
 
-**Deliverables 1 (schema introspection) and 2 (business glossary) are done, committed,
-tested, and on `feat/a3-nl2sql` — PR #15, open as draft, CI green.** This section now
-specifies deliverables 3-5. Do not restart 1 or 2, or re-read an old version of this
-section looking for them; the §3 `A3` entry above has their evidence.
+**Deliverables 1 (schema introspection), 2 (business glossary), and 3 (generation + the AST
+guard) are done, committed, tested, and on `feat/a3-nl2sql` — PR #15, open as draft, CI
+green.** This section now specifies deliverables 4-5. Do not restart 1-3, or re-read an old
+version of this section looking for them; the §3 `A3` entry above has their evidence.
 
 > **You can now ask a question about your data in English and see the SQL, the rows and
 > the narration — and see the guard visibly refuse a write.**
@@ -1812,79 +1958,81 @@ not a log line.
 
 **The one architectural rule here, and it is `C1`-adjacent in importance: two independent
 defences, neither sufficient alone** (ADAPTATION §9, README "Design decisions worth
-defending"). An AST guard that rejects anything but a `SELECT`, *and* execution as
-`mnemos_ro`, a Postgres role that physically cannot write. The guard alone is one parser
-bug from a write; the role alone gives no useful error and no audit trail of the attempt.
-Both, and `test_the_readonly_role_refuses_a_write_the_guard_somehow_allowed` is the test
-that proves the second one is really there rather than assumed. **The second defence is
-already proven to exist**, independent of anything this milestone builds: connecting to
-`mnemos_analytics` as `mnemos_ro` and running `INSERT INTO analytics.region ...` raises
-`asyncpg.exceptions.InsufficientPrivilegeError` — verified directly while building
-deliverable 1's test fixture. Deliverable 3's acceptance test formalizes this; it does not
-discover it fresh.
+defending"). **Both are now built and proven, independently of each other:** the AST guard
+(`guard_sql`, deliverable 3) rejects anything but a single read, and `mnemos_ro`, a Postgres
+role that physically cannot write, is proven directly by
+`test_the_readonly_role_refuses_a_write_the_guard_somehow_allowed` — which connects as
+`mnemos_ro` and attempts a write **without going through the guard at all**, so the
+two-defence claim does not rest on the guard being correct. Deliverable 3's own live
+evidence (§3 above) is the sharper proof: a real local model complied with an adversarial
+prompt and emitted a real `DELETE`, and the guard — not the system prompt's instruction —
+was what actually stopped it. Deliverable 4 does not need to prove either defence again; it
+needs to **use** the first one's output (a `SqlRunRecord` with an `ALLOWED` verdict) and
+rely on the second one being there when it executes.
 
-**What deliverables 1-2 already give you, so deliverable 3 does not rebuild any of it:**
-- `DatasourceService` (`features/datasources/application/service.py`) — `register()`,
-  `refresh_schema()`, `seed_glossary()`, and **`render_context(org_id, slug) -> str`**,
-  which is the schema-plus-glossary text block deliverable 3's prompt should assemble
-  from directly. Do not re-query `sql_schema_object`/`glossary_term` by hand or re-derive a
-  second rendering — call `render_context` and slot its output into the prompt. Deliverable
-  3 will add a `generate()`-shaped method or a sibling service; decide by reading
-  `service.py` first, not by guessing its shape.
-- `features/datasources/domain/context.py`'s `render_schema_context` — the pure function
-  `render_context` calls. If the prompt needs the schema and glossary shaped differently
-  than deliverable 2 rendered them, extend this function rather than building a parallel
-  one; it is already unit-tested and already the single source of "what the model sees
-  about this warehouse."
-- `sql_schema_object` rows, one table-level (`column_name IS NULL`) plus one per column,
-  per registered datasource, and `glossary_term` rows (four seeded for the demo warehouse:
-  revenue, active customer, order volume, segment) — both are what `render_context` reads.
-  There is no reason to query either table directly; `render_context` already does.
+**What deliverables 1-3 already give you, so deliverable 4 does not rebuild any of it:**
+- `SqlGenerationService.generate(*, org_id, slug, question) -> SqlRunRecord`
+  (`features/datasources/application/generation.py`) — renders the schema+glossary context,
+  calls `ChatModel.complete()` once, extracts the candidate SQL, guards it with `guard_sql`,
+  and persists the attempt via `SqlRunRepository`. **Call this, do not re-implement
+  generation or the guard inside `flows/nl2sql/`.** It always does exactly one attempt
+  (`attempt=1`, `message_id=None`) — deliverable 4's repair loop and chat-message linkage
+  are new work on top of it, not already handled (see "Watch out" below).
+- `guard_sql` (`features/datasources/domain/guard.py`) — pure, already proven against
+  CodingStandards §9 case 4 in full and against a battery of shapes a naive blocklist would
+  miss (`SELECT ... INTO`, `FOR UPDATE`, `EXPLAIN`/`VACUUM`/`CALL`/`COPY`/`SET`, stacked
+  statements). If deliverable 4 needs to guard a *repaired* candidate, call this again — it
+  takes a bare SQL string and needs nothing else.
+- `SqlRunRepository.record_attempt(...)` (`adapters/repository.py`) — already accepts
+  `message_id` and `attempt` as caller-supplied parameters specifically so a repair loop or
+  a persisted chat message can pass real values instead of `None`/`1`. No port change should
+  be needed to link a `sql_run` row to the `chat_message` deliverable 4 creates.
+- `DatasourceService.require_datasource()` / `.render_context()` — unchanged from
+  deliverable 2, and what `SqlGenerationService` already calls; no reason to call either
+  directly from `flows/nl2sql/`.
+- `mnemosctl datasource generate --org-slug X "<question>"` — generates, guards, records,
+  **never executes**. Useful for producing a real `ALLOWED` `sql_run` row to execute against
+  by hand while building deliverable 4, before any chat-surface wiring exists.
 - The Postgres test fixture (`conftest.py`'s `postgres.analytics_ro_url` /
   `.analytics_owner_dsn`) — a real `mnemos_analytics` seeded from the real
-  `deploy/postgres/init/02-analytics-seed.sql`. Deliverable 3/4's tests use this directly;
-  do not build a second fixture.
-- `mnemosctl datasource introspect --org-slug X` then `mnemosctl datasource seed-glossary
-  --org-slug X` — run both against a live stack before manually testing generation, or
-  `render_context` will have nothing cached to render. `mnemosctl datasource show-context
-  --org-slug X` prints exactly what deliverable 3's prompt will receive — use it to sanity
-  check the prompt input before wiring generation to it.
+  `deploy/postgres/init/02-analytics-seed.sql`. Deliverable 4's execution tests use this
+  directly; do not build a second fixture.
 
 **Read first, in this order:**
 
-1. §0 through §4 of this file, and the `A3` (deliverable 1) and `A2` write-ups in §3 — the
-   flow shape (`flows/rag/`), the streaming reuse, and the provisional `use_documents`
+1. §0 through §4 of this file, and the `A3` (deliverables 1-3) and `A2` write-ups in §3 —
+   the flow shape (`flows/rag/`), the streaming reuse, and the provisional `use_documents`
    selector are all patterns this milestone follows and extends.
-2. [`docs/CodingStandards.md`](docs/CodingStandards.md) §9's **mandatory case 4**: "DML
-   nested inside a CTE, inside a `UNION`, and inside a subquery is rejected; unparseable
-   SQL is rejected fail-closed rather than passed through." Those four are the acceptance
-   tests, not suggestions.
-3. [`docs/DesignSystem.md`](docs/DesignSystem.md) §3 and §4. New territory: a **result
-   grid** (tabular data at the 46rem measure is wrong — the SQL panel and grid want the
-   full content column, so decide and write down how) and the **denial state**, which is a
-   first-class screen here rather than an error toast.
-4. [`docs/ADAPTATION.md`](docs/ADAPTATION.md) §3's `datasources` rows and §6's
+2. [`docs/DesignSystem.md`](docs/DesignSystem.md) §3 and §4. New territory for deliverable
+   5: a **result grid** (tabular data at the 46rem measure is wrong — the SQL panel and grid
+   want the full content column, so decide and write down how) and the **denial state**,
+   which is a first-class screen here rather than an error toast.
+3. [`docs/ADAPTATION.md`](docs/ADAPTATION.md) §3's `datasources` rows and §6's
    `datasources` schema group — `sql_datasource`, `sql_run` (per-attempt safety verdicts,
-   authorized/denied tables) and `glossary_term` all exist from `M2`.
-5. **The code you extend:**
-   - `backend/src/mnemos/features/datasources/` — deliverables 1-2's whole tree
-     (`domain/{schema,glossary,context}.py`, `application/{ports,service}.py`,
-     `adapters/{introspection,repository}.py`). This is the pattern: pure domain functions,
-     `Protocol` ports, Postgres adapters, a thin CLI or flow on top. Deliverables 3-4 are
-     more of this feature, not a new one.
-   - `backend/src/mnemos/features/datasources/adapters/models.py` — `SqlDatasource`,
-     `SqlRun`, `SqlSchemaObject`, `GlossaryTerm`. Read the comments: `sql_run` is designed
-     to record *every attempt* with its verdict, which is what makes a refused query
-     auditable rather than merely refused.
-   - `backend/src/mnemos/core/types.py` — `SqlVerdict` already enumerates
-     `allowed`/`rejected_write`/`rejected_unauthorized_table`/`rejected_unparseable`/
-     `rejected_too_complex`, and `check_in` pins the column to it. Use these; do not invent
-     a parallel vocabulary.
-   - `backend/src/mnemos/flows/rag/` (`A2`) — the flow shape to mirror for deliverable 4: a
-     `domain/` of pure functions, an `application/` that streams, reusing `A1`'s `ChatModel`
-     port and the `AssistantToken`/`AssistantDone`/`AssistantError` events unchanged. This
-     likely becomes `flows/nl2sql/`, sibling to `flows/rag/`, for the same layering reason
-     (`flows` may depend on multiple `features`; `features` never depends on `flows`).
+   authorized/denied tables) and `glossary_term` all exist from `M2`; `sql_run` already
+   carries `executed`/`row_count`/`truncated`/`duration_ms`/`error_code`/`error_detail`,
+   unused until deliverable 4 fills them in.
+4. **The code you extend:**
+   - `backend/src/mnemos/features/datasources/` — deliverables 1-3's whole tree
+     (`domain/{schema,glossary,context,guard,generation}.py`,
+     `application/{ports,service,generation}.py`, `adapters/{introspection,repository}.py`).
+     Execution (a new `PostgresExecutor` or similar, mirroring `PostgresIntrospector`'s
+     short-lived-engine pattern) is plausibly one more file in this same tree, since it is
+     still a fact about the `datasources` feature, not about a conversation.
+   - `backend/src/mnemos/features/datasources/adapters/models.py`'s `SqlRun` — the six
+     execution columns (`executed`, `row_count`, `truncated`, `duration_ms`, `error_code`,
+     `error_detail`) exist and are unused; deliverable 4 is what fills them in. No migration
+     should be needed.
+   - `backend/src/mnemos/core/config.py` — `Settings.sql_statement_timeout_ms` (15000),
+     `.sql_max_rows` (5000), `.sql_repair_attempts` (2) already exist, unused until now.
+   - `backend/src/mnemos/flows/rag/` (`A2`) — the flow shape to mirror: a `domain/` of pure
+     functions, an `application/` that streams, reusing `A1`'s `ChatModel` port and the
+     `AssistantToken`/`AssistantDone`/`AssistantError` events unchanged. This is where
+     `flows/nl2sql/` (currently three empty `__init__.py` stubs) gets its first real content
+     — deliverable 4, not deliverable 3, is where the flow package earns its existence,
+     because chat integration and streaming are what actually need it (TRACKER §5's earlier
+     note that "3-4 are more of `features/datasources/`" meant deliverable 3 specifically;
+     deliverable 4 is the one that crosses into `chat`).
    - `backend/src/mnemos/entrypoints/api/routers/chat.py` — where `use_documents` selects a
      flow today. `A3` adds a second selector in the same provisional shape; `A4` replaces
      both with a classifier.
@@ -1892,23 +2040,20 @@ discover it fresh.
      deliberately named (`{kind: "citation", ...}`) so `A3` can add `{kind: "sql_run", ...}`
      without reshaping it.
 
-**Scope — deliverables 3-5, one commit each. (1 and 2 are done — see above.)**
+**Scope — deliverables 4-5, one commit each. (1-3 are done — see above.)**
 
-3. **Generation and the AST guard.** Generate SQL through the `ChatModel` port, then parse
-   it with **`sqlglot`** (already a declared dependency, per the original brief — nothing
-   imports it yet; free, pure-Python, and the alternative is hand-rolling a SQL parser,
-   which is the actual security-critical mistake here) and walk the AST. Reject anything
-   that is not a single read: `INSERT`/`UPDATE`/`DELETE`/`MERGE`/`TRUNCATE`/`DROP`/`ALTER`/
-   `CREATE`/`GRANT`, and reject them **wherever they appear** — inside a CTE, inside a
-   `UNION` arm, inside a subquery. Unparseable SQL is rejected **fail-closed**, never passed
-   through on the theory that the role will catch it. Every attempt writes a `sql_run` row
-   with its `SqlVerdict` and the tables it touched.
-4. **Execution and narration.** Execute the allowed statement as `mnemos_ro` with
+4. **Execution and narration.** Take an `ALLOWED` `SqlRunRecord` from
+   `SqlGenerationService.generate()` and execute its `generated_sql` as `mnemos_ro` with
    `sql_statement_timeout_ms` and a `sql_max_rows` cap, then narrate the result set through
    the model. Persist the assistant message with `flow="nl2sql"` and the `sql_run` id, so a
-   later reader can open the answer and find the exact statement that produced it.
-   `sql_repair_attempts` exists for the "the model wrote invalid SQL, tell it the error and
-   let it try once more" loop — bounded, and every attempt gets its own `sql_run` row.
+   later reader can open the answer and find the exact statement that produced it — this is
+   also the first real consumer of `SqlRunRepository.record_attempt`'s `message_id`
+   parameter, which deliverable 3 added but always called with `None`. `sql_repair_attempts`
+   is for the "the model wrote invalid SQL, tell it the error and let it try once more" loop
+   — bounded, and every attempt gets its own `sql_run` row via a second call to
+   `record_attempt` with `attempt=2`. A `REJECTED_*` verdict skips execution entirely; its
+   "narration" is the verdict and detail already on the record, not a second model call —
+   decide whether deliverable 5 templates that text or whether it needs shaping here first.
    **Use a short-lived `create_async_engine(dsn, pool_size=1, ...)` the way
    `PostgresIntrospector` does** (`adapters/introspection.py`) — deliverable 1 already
    established the pattern of not holding a persistent pool open for the analytics side.
@@ -1920,20 +2065,14 @@ discover it fresh.
 
 **Acceptance**
 
-- `test_dml_is_rejected_inside_a_cte_a_union_and_a_subquery` — three cases, one test name,
-  CodingStandards §9 case 4. A guard that only checks the statement's top-level type passes
-  a naive test and fails this one, which is the whole point.
-- `test_unparseable_sql_is_rejected_fail_closed`.
-- `test_the_readonly_role_refuses_a_write_the_guard_somehow_allowed` — the second defence,
-  proven independently by executing a write **directly** as `mnemos_ro`, bypassing the
-  guard entirely. Without this the two-defence claim rests on one of them.
-- `test_a_select_is_allowed` — the control. A guard that refuses everything passes all four
-  above.
-- `test_every_attempt_writes_a_sql_run_row_with_its_verdict` — including the refused ones,
-  because an audit trail that only records successes is not one.
-- `test_a_query_against_another_orgs_datasource_is_a_404`.
+- `test_execution_runs_the_allowed_statement_as_mnemos_ro_and_narrates_the_result`.
 - `test_the_result_set_is_capped_at_sql_max_rows`.
 - `test_a_statement_that_exceeds_the_timeout_is_cancelled_not_left_running`.
+- `test_a_rejected_verdict_is_never_executed` — the direct link between deliverable 3's
+  guard and deliverable 4's execution: a `REJECTED_*` `SqlRunRecord` must short-circuit
+  before anything touches `mnemos_analytics`.
+- `test_a_repaired_query_after_a_rejection_records_a_second_sql_run_row_at_attempt_two`.
+- `test_the_persisted_assistant_message_carries_flow_nl2sql_and_the_sql_run_id`.
 - **Frontend:** `test_the_sql_panel_shows_the_statement_the_grid_and_the_narration`.
 - **Frontend:** `test_a_refused_query_shows_the_verdict_and_the_sql_it_refused`.
 - **Frontend:** `test_the_sql_panel_has_no_axe_violations`.
@@ -1941,20 +2080,13 @@ discover it fresh.
   40), ask "what was revenue by region last quarter", see SQL + grid + narration. Then
   provoke a refusal and see it named on screen. Skips loudly with the stack down; cleans up
   after itself like `knowledge.spec.ts` does.
-- **Gates:** `make test` above 298 · `make lint` · `make types` clean · `make check` clean
-  (**a migration may genuinely be needed here** if `sql_run` lacks a column the flow wants
-  — unlike `A1` and `A2`, that would be legitimate; say so in §4 and write a reversible
-  revision) · frontend `lint`, `tsc --noEmit`, `test`, `build` · **CI green, all jobs.**
+- **Gates:** `make test` above 342 · `make lint` · `make types` clean · `make check` clean
+  (no migration expected — `sql_run`'s execution columns already exist from `M2`; say so in
+  §4 if one genuinely turns out to be needed) · frontend `lint`, `tsc --noEmit`, `test`,
+  `build` · **CI green, all jobs.**
 
 **Watch out for these:**
 
-- **Do not let the AST guard be the only defence, and do not let `mnemos_ro` be the only
-  one either.** The first is one parser bug from a write; the second gives an unhelpful
-  Postgres error and no audit trail. Both, always, and the test above proves the second
-  independently.
-- **`sqlglot` must parse with the Postgres dialect**, or it will accept syntax Postgres
-  rejects and reject syntax Postgres accepts — either way the guard is reasoning about a
-  different language than the one that will execute.
 - **The analytics database is a separate connection, not `Database`.** `Database` is the
   application's own Postgres as `mnemos_app`. `mnemos_analytics` as `mnemos_ro` is a second
   engine with its own pool and its own statement timeout, and mixing them would put the
@@ -1963,6 +2095,11 @@ discover it fresh.
   after the guard — string-building around it (adding a `LIMIT` by concatenation, say) is
   how a guarded statement becomes an unguarded one. Cap rows by fetching at most
   `sql_max_rows + 1` from the cursor instead.
+- **`SqlGenerationService.generate()` does one attempt; it has no repair loop.** Calling it
+  twice for a retry works but produces two independent `attempt=1` rows unless deliverable 4
+  either passes `attempt` through to `record_attempt` itself or extends the service. Decide
+  by reading `generation.py` first — the docstring on `SqlRunRepository.record_attempt`
+  already anticipates this and explains why `attempt` is caller-supplied.
 - **`alembic check` from a host venv talks to the wrong Postgres** (§4 item 33) — `make
   check`, always. **`ruff format` is version-sensitive** (§4 item 22) — `make lint`.
 - **Sign in as `analyst@mnemos.local` in browser evidence** (§4 item 40).
@@ -1982,7 +2119,7 @@ why `B1`/`B2` now sit before `A4`. The phase tables still group work by kind; th
 promise strict A-then-B-then-C-then-D order.
 
 - **`A3` — ask about your data.** Specified in full above; this is the task. Deliverables
-  1-2 done, 3-5 remain.
+  1-3 done, 4-5 remain.
 - **`B1` — connect a source and watch it ingest.** Object storage port + `S3ObjectStore`
   already exist from `A2` (MinIO); `B1` adds the `SourceConnector` abstraction (MinIO/S3,
   local filesystem, HTTP URL) and a Redis Streams event bus, so a source is *connected and

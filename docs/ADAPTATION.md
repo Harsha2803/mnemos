@@ -4,8 +4,9 @@
 > self-contained: architecture, the capability inventory, schema, milestones, and current
 > state. [`TRACKER.md`](../TRACKER.md) holds live task status; this holds the design.
 
-**Last updated:** 2026-08-10 — `A2` shipped (ask about your documents: upload, extract,
-chunk, embed onto pgvector, retrieve with the ACL predicate in the scan, cite); `A3` is next
+**Last updated:** 2026-08-15 — `A3` in progress on `feat/a3-nl2sql` (PR #15, draft):
+deliverables 1-3 of 5 done (schema introspection, business glossary, generation + the AST
+read-only guard); execution/narration and the SQL panel UI (4-5) remain — see §7/§8
 
 ---
 
@@ -232,7 +233,7 @@ Two rules govern every row.
 | **A0** | Sign-in screen + browser session handling (`M3.4`'s UI half) + the fail-closed route guard (deny by default) | **sign in through Keycloak, stay signed in across a reload, and sign out** — and no route added after this is reachable unauthenticated | ✅ 2026-08-03 |
 | **A1** | LLM gateway (Ollama) · chat sessions + messages · SSE streaming · the chat surface | **talk to it** — ask a question and watch the answer stream in token by token | ✅ 2026-08-08 |
 | **A2** | Upload → extract → chunk → embed (pgvector HNSW) · retrieval ported from `_v1` · RAG flow · citations · knowledge library | **upload a document and ask questions about it**, with citations you click into | ✅ 2026-08-11 (PR #14) |
-| **A3** | NL2SQL: introspection · glossary · generate · AST read-only guard · `mnemos_ro` execution · narration · SQL panel | **ask a question about your data in English** and see the SQL, the rows and the narration — and see the guard visibly refuse a write | 🟡 in progress — introspection + glossary done (PR #15 draft), generation/execution/UI remain |
+| **A3** | NL2SQL: introspection · glossary · generate · AST read-only guard · `mnemos_ro` execution · narration · SQL panel | **ask a question about your data in English** and see the SQL, the rows and the narration — and see the guard visibly refuse a write | 🟡 in progress — introspection, glossary, generation + the AST guard done (PR #15 draft), execution/narration/UI remain |
 | **A4** | Router: classify a message → chat / RAG / NL2SQL · flow indicator | **ask anything without choosing a mode**, and see which flow answered and why | ⬜ — built **after** `B1`/`B2` |
 
 **At the end of Phase A the thing this project is for exists.** Everything after deepens it.
@@ -310,18 +311,27 @@ to end; verified against the merged image, not just the branch, via the real
 `frontend/e2e/knowledge.spec.ts` Playwright suite.
 
 **`A3` is in progress on `feat/a3-nl2sql`, PR #15 (draft, CI green, not merged).**
-Deliverables 1-2 of 5 are done: `mnemosctl datasource introspect` registers the seeded
+Deliverables 1-3 of 5 are done: `mnemosctl datasource introspect` registers the seeded
 `mnemos_analytics` warehouse per org and caches its schema, connecting as `mnemos_ro` (the
-same role generated SQL will execute as); `mnemosctl datasource seed-glossary` writes four
-curated business-vocabulary terms, and `DatasourceService.render_context` (backed by the
-pure `render_schema_context`) renders the cached schema plus glossary into the text block
-deliverable 3's prompt will use, demonstrable now via `mnemosctl datasource show-context`.
-Nothing about `A3` is visible in the *product* yet — no generation, no AST guard, no
-execution, no SQL panel — so the PR stays draft per C12 until deliverable 5 lands.
-Remaining scope: generated SQL behind **two independent read-only defences** (an AST guard
-via `sqlglot` and the `mnemos_ro` role), execution, narration, and the SQL panel UI, fully
-specified in [TRACKER §5](../TRACKER.md#5-next-task). **After `A3` is fully testable, the
-next milestone is `B1` (ingestion), not `A4`** — the plan was re-sequenced 2026-08-15 so
+same role generated SQL executes as); `mnemosctl datasource seed-glossary` writes four
+curated business-vocabulary terms; `DatasourceService.render_context` renders the cached
+schema plus glossary into the text block the generation prompt uses; and
+`SqlGenerationService.generate()` calls the model once, parses the result with `sqlglot`,
+walks the whole AST for anything that is not a single read (`guard_sql`,
+`features/datasources/domain/guard.py`), and records every attempt — allowed or refused —
+as a `sql_run` row, demonstrable now via `mnemosctl datasource generate`. **Both of `A3`'s
+two independent read-only defences are now built and proven independently of each other**:
+the guard, and `mnemos_ro`'s inability to write at all
+(`test_the_readonly_role_refuses_a_write_the_guard_somehow_allowed`, which bypasses the
+guard entirely). Live evidence against a real local model is in
+[TRACKER §3](../TRACKER.md#-a3--ask-about-your-data-in-progress-35-pr-15-draft-2026-08-15):
+`qwen2.5:3b-instruct`, asked an adversarial question, complied and emitted a real `DELETE`
+— the guard, not the system prompt's wording, is what actually stopped it. Nothing about
+`A3` is visible in the *product* yet — no execution, no narration, no SQL panel — so the PR
+stays draft per C12 until deliverable 5 lands. Remaining scope: execution as `mnemos_ro`
+with the timeout/row-cap, narration, the repair loop, and the SQL panel UI, fully specified
+in [TRACKER §5](../TRACKER.md#5-next-task). **After `A3` is fully testable, the next
+milestone is `B1` (ingestion), not `A4`** — the plan was re-sequenced 2026-08-15 so
 ingestion, a materially new capability, lands before the router, which mostly changes how
 existing flows are triggered rather than adding one. See TRACKER's 2026-08-15 (evening)
 note for the full reasoning.
@@ -823,11 +833,12 @@ the whole `up`. It does now, so plain `docker compose up -d` brings the frontend
 everything else and `web` has a healthcheck of its own — a stack whose UI needs a
 remembered extra flag is a stack whose UI does not get looked at.
 
-### A3 — ask about your data 🟡 in progress (2/5)
+### A3 — ask about your data 🟡 in progress (3/5)
 
-Deliverable 1 (schema introspection) done 2026-08-11, deliverable 2 (business glossary)
-done 2026-08-15, both on branch `feat/a3-nl2sql` (PR #15, draft). Full evidence is in
-[TRACKER §3](../TRACKER.md#-a3--ask-about-your-data-in-progress-25-pr-15-draft-2026-08-15).
+Deliverable 1 (schema introspection) done 2026-08-11, deliverable 2 (business glossary) and
+deliverable 3 (generation + the AST read-only guard) both done 2026-08-15, all on branch
+`feat/a3-nl2sql` (PR #15, draft). Full evidence is in
+[TRACKER §3](../TRACKER.md#-a3--ask-about-your-data-in-progress-35-pr-15-draft-2026-08-15).
 
 **Introspection connects with the datasource's own DSN, never through `Database`.**
 `Database` (`platform/db.py`) is the application's own Postgres, connected as `mnemos_app`
@@ -865,6 +876,44 @@ place, not merely that row counts stay stable. `mnemosctl datasource show-contex
 and not in the original deliverable text, but it is the real consumer that keeps
 `render_schema_context` from being a function nothing calls until deliverable 3 exists —
 consistent with TRACKER §0 rule 5 (no placeholders).
+
+**Deliverable 3 (generation + the AST read-only guard), done 2026-08-15.** `guard_sql`
+(`domain/guard.py`) is an **allowlist**, not a blocklist: the parsed statement must be
+`sqlglot.exp.Query`, and every node in the tree is walked for anything that writes, changes
+privileges, or is a shape `sqlglot` falls back to a generic `Command` for. A blocklist
+scoped to `INSERT`/`UPDATE`/`DELETE`/DDL was prototyped first and found to miss
+`SELECT ... INTO` (creates a table), `FOR UPDATE` (takes a write lock), and
+`EXPLAIN`/`VACUUM`/`CALL`/`COPY`/`SET` (none of which is a DML/DDL node at all) — requiring
+the positive case closes all of these by construction rather than by enumeration, which
+matters because enumeration is exactly the "one parser bug from a write" failure mode this
+guard exists to avoid. Walking the *whole* tree, not just the root, is what makes CodingStandards
+§9 mandatory case 4 true: a data-modifying CTE (`WITH d AS (DELETE ... RETURNING *) SELECT
+* FROM d`) is valid Postgres syntax and can be consumed from a top-level query, a `UNION`
+arm, or a `FROM (...)` subquery — three nesting shapes that all present as a top-level
+`Select` and only differ in what `.walk()` finds underneath.
+
+`SqlGenerationService` (`application/generation.py`) is a **sibling** of `DatasourceService`
+— composing it for `require_datasource`/`render_context` — rather than a fifth method on it
+or a new `flows/nl2sql/` package. The distinction that matters: `DatasourceService`'s
+existing four methods are fast, cache-oriented, and make no security verdict; generation
+calls a model and decides whether the result is safe, which is a different kind of
+operation with different tests and fakes. `flows/nl2sql/` stays three empty stubs until
+deliverable 4, where streaming and the chat integration actually need a flow that depends
+on more than one feature — deliverable 3's generation is a single blocking
+`ChatModel.complete()` call, reasoned about entirely inside `features/datasources/`.
+
+**Verified against a real local model, not only a scripted fake.** Against the rebuilt
+`api` image: `mnemosctl datasource generate --org-slug mnemos "what was total revenue by
+region last quarter"` produced an `allowed` verdict with a real (if not perfectly correct —
+small local models are not perfectly correct) multi-table CTE query and all four touched
+tables recorded; `mnemosctl datasource generate --org-slug mnemos "delete every row from
+the sales_order table"` had `qwen2.5:3b-instruct` **comply with the adversarial
+instruction** and emit a real `DELETE FROM analytics.sales_order` — which `guard_sql`
+caught and recorded as `rejected_write`, naming the table. Both attempts confirmed
+persisted in `sql_run` via a direct `psql` query. This is the live version of the
+`test_the_readonly_role_refuses_a_write_the_guard_somehow_allowed` argument: the defence
+that matters is the one that holds even when the thing in front of it (a system prompt
+saying "don't") does not.
 
 ### A2 — ask about your documents ✅
 
