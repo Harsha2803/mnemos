@@ -41,6 +41,10 @@ from mnemos.core.crypto import DsnCipher
 from mnemos.core.errors import MnemosError, NotFoundError, ValidationError
 from mnemos.core.ids import DEFAULT_ID_GENERATOR
 from mnemos.core.security import PasswordHasher
+from mnemos.features.connectors.adapters.crypto import SourceConfigCipher
+from mnemos.features.connectors.adapters.repository import ContentSourceRepository
+from mnemos.features.connectors.application.factory import ConnectorFactory
+from mnemos.features.connectors.application.service import ConnectorService
 from mnemos.features.datasources.adapters.executor import PostgresExecutor
 from mnemos.features.datasources.adapters.introspection import PostgresIntrospector
 from mnemos.features.datasources.adapters.repository import (
@@ -433,6 +437,76 @@ async def _datasource_generate(args: argparse.Namespace) -> int:
     return 0
 
 
+def _connector_service(
+    db: Database, settings: Settings, http_client: httpx.AsyncClient
+) -> ConnectorService:
+    cipher = SourceConfigCipher(settings.source_encryption_key.get_secret_value())
+    return ConnectorService(
+        repository=ContentSourceRepository(db, DEFAULT_ID_GENERATOR),
+        cipher=cipher,
+        factory=ConnectorFactory(settings=settings, cipher=cipher, http_client=http_client),
+        local_fs_allowed_roots=settings.local_fs_allowed_roots,
+    )
+
+
+def _connector_config(args: argparse.Namespace) -> dict[str, object]:
+    if args.kind in ("s3", "minio"):
+        if not args.bucket:
+            raise ValidationError("--bucket is required for an s3 connector", field="bucket")
+        return {"bucket": args.bucket, "prefix": args.prefix or ""}
+    if args.kind == "local_fs":
+        if not args.root:
+            raise ValidationError("--root is required for a local_fs connector", field="root")
+        return {"root": args.root}
+    if args.kind == "http":
+        if not args.url:
+            raise ValidationError(
+                "--url (repeatable) is required for an http connector", field="url"
+            )
+        return {"urls": args.url}
+    raise ValidationError(f"unknown connector kind {args.kind!r}", field="kind")
+
+
+async def _connector_register(args: argparse.Namespace) -> int:
+    settings = get_settings()
+    db = Database(settings)
+    http_client = httpx.AsyncClient()
+    try:
+        org_id = await _resolve_org_id(db, args.org_slug)
+        service = _connector_service(db, settings, http_client)
+        config = _connector_config(args)
+        source = await service.register(
+            org_id=org_id, slug=args.slug, name=args.name, kind=args.kind, config=config
+        )
+    finally:
+        await http_client.aclose()
+        await db.dispose()
+
+    print(f"content source   : {source.slug}  ({source.name})")
+    print(f"kind             : {source.kind}")
+    print(f"id               : {source.id}")
+    return 0
+
+
+async def _connector_list_items(args: argparse.Namespace) -> int:
+    settings = get_settings()
+    db = Database(settings)
+    http_client = httpx.AsyncClient()
+    try:
+        org_id = await _resolve_org_id(db, args.org_slug)
+        service = _connector_service(db, settings, http_client)
+        items = await service.list_items(org_id=org_id, slug=args.slug)
+    finally:
+        await http_client.aclose()
+        await db.dispose()
+
+    print(f"content source   : {args.slug}  ({len(items)} items)")
+    for item in items:
+        size = f"{item.size_bytes:>10} bytes" if item.size_bytes else f"{'?':>10}      "
+        print(f"  {item.uri:<50} {size}  {item.content_type}")
+    return 0
+
+
 def main() -> int:
     parser = argparse.ArgumentParser(prog="mnemosctl", description="Mnemos operations")
     sub = parser.add_subparsers(dest="group", required=True)
@@ -543,6 +617,36 @@ def main() -> int:
     )
     generate.add_argument("question", help="The question to translate into SQL")
 
+    conn_parser = sub.add_parser("connector", help="register and browse content sources (B1)")
+    conn_sub = conn_parser.add_subparsers(dest="command", required=True)
+
+    conn_register = conn_sub.add_parser(
+        "register",
+        help="register a content source (idempotent per slug)",
+        description=(
+            "Registers a SourceConnector — an S3/MinIO bucket+prefix, a local-filesystem "
+            "root, or a curated list of HTTP URLs — for one org. Config is validated "
+            "(non-empty bucket/root/urls, an operator-approved root for local_fs, the SSRF "
+            "deny-list for every http URL) and stored encrypted."
+        ),
+    )
+    conn_register.add_argument("--org-slug", required=True, help="Org to register the source under")
+    conn_register.add_argument("--slug", required=True, help="URL-safe source identifier")
+    conn_register.add_argument("--name", required=True, help="Human-readable source name")
+    conn_register.add_argument("--kind", required=True, choices=["s3", "minio", "local_fs", "http"])
+    conn_register.add_argument("--bucket", default=None, help="s3/minio: bucket name")
+    conn_register.add_argument("--prefix", default="", help="s3/minio: key prefix (default: '')")
+    conn_register.add_argument("--root", default=None, help="local_fs: allowlisted root directory")
+    conn_register.add_argument(
+        "--url", action="append", default=None, help="http: a URL to allow (repeatable)"
+    )
+
+    conn_list_items = conn_sub.add_parser(
+        "list-items", help="browse what a registered source currently contains"
+    )
+    conn_list_items.add_argument("--org-slug", required=True, help="Org that owns the source")
+    conn_list_items.add_argument("--slug", required=True, help="Source slug")
+
     args = parser.parse_args()
 
     if args.group == "bootstrap":
@@ -587,6 +691,22 @@ def main() -> int:
             return asyncio.run(_datasource_generate(args))
         except (MnemosError, LookupError) as exc:
             print(f"datasource generate failed: {exc}", file=sys.stderr)
+            return 2
+
+    if args.group == "connector" and args.command == "register":
+        try:
+            return asyncio.run(_connector_register(args))
+        except (MnemosError, ValueError) as exc:
+            message = exc.message if isinstance(exc, MnemosError) else str(exc)
+            print(f"connector register failed: {message}", file=sys.stderr)
+            return 2
+
+    if args.group == "connector" and args.command == "list-items":
+        try:
+            return asyncio.run(_connector_list_items(args))
+        except (MnemosError, LookupError) as exc:
+            message = exc.message if isinstance(exc, MnemosError) else str(exc)
+            print(f"connector list-items failed: {message}", file=sys.stderr)
             return 2
 
     parser.print_help()

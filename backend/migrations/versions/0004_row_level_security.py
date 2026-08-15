@@ -33,17 +33,62 @@ from collections.abc import Sequence
 
 from alembic import op
 
-from mnemos.platform.models import ORG_SCOPED_TABLES
-
 revision: str = "0004"
 down_revision: str | None = "0003"
 branch_labels: str | Sequence[str] | None = None
 depends_on: str | Sequence[str] | None = None
 
-# Frozen at the time this revision was written. Importing the live tuple would
-# make an already-applied migration change meaning when a table is added later;
-# a migration must describe the past, not track the present.
-TABLES: tuple[str, ...] = ORG_SCOPED_TABLES
+# Frozen at the time this revision was written — a literal, not an import of
+# `mnemos.platform.models.ORG_SCOPED_TABLES`. A migration must describe the
+# past, not track the present: importing the live tuple would mean that
+# **on a fresh database**, replaying this revision reaches out to whatever
+# `ORG_SCOPED_TABLES` contains *today*, including tables a later revision
+# creates — e.g. `content_source`, added for `B1` in revision 0007 — and
+# fails with "relation does not exist", because this revision runs before
+# that table does. Caught by `alembic check` when `B1`'s own migration was
+# written; fixed here rather than left for the next new table to hit again.
+TABLES: tuple[str, ...] = (
+    "app_user",
+    "identity_provider",
+    "role",
+    "role_binding",
+    "tag",
+    "user_tag",
+    "api_key",
+    "session",
+    "subject",
+    "memory",
+    "memory_edge",
+    "memory_embedding",
+    "collection",
+    "document",
+    "chunk",
+    "chunk_embedding",
+    "ingest_job",
+    "ingest_job_event",
+    "folder",
+    "chat_session",
+    "chat_message",
+    "message_citation",
+    "bookmark",
+    "feedback",
+    "context_plan",
+    "context_bundle",
+    "bundle_item",
+    "sql_datasource",
+    "sql_schema_object",
+    "glossary_term",
+    "sql_run",
+    "mcp_server",
+    "mcp_tool",
+    "mcp_credential",
+    "mcp_grant",
+    "mcp_invocation",
+    "prompt",
+    "prompt_version",
+    "inference_call",
+    "audit_log",
+)
 
 POLICY = "org_isolation"
 

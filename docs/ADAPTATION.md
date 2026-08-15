@@ -247,7 +247,7 @@ authoritative for sequencing, not these tables' phase grouping.
 
 | ID | What it builds | You can now… | Status |
 |---|---|---|---|
-| **B1** | Object storage · source connectors (MinIO/S3, local FS, HTTP) · Redis Streams event bus · sources UI | **connect a source, browse it, and watch ingestion events arrive live** | ⬜ **next — brief written 2026-08-15, [TRACKER §5](../TRACKER.md#5-next-task)** |
+| **B1** | Object storage · source connectors (MinIO/S3, local FS, HTTP) · Redis Streams event bus · sources UI | **connect a source, browse it, and watch ingestion events arrive live** | 🟡 **deliverable 1/5 done 2026-08-15 (evening)** — connectors + migration + CLI built; event bus, realtime auth, worker, UI remain, [TRACKER §5](../TRACKER.md#5-next-task) |
 | **B2** | Ingestion jobs at scale: heartbeat, retries, status history, stuck-job reaper · per-job progress UI | **ingest a folder and watch every job's progress — including one that dies, surfaced as stuck rather than silently lost** | ⬜ **after `B1`** |
 | **B3** | MCP tool runtime: registry, per-user credentials, trust tiers, approval gates · tool console | **register a tool, have the assistant call it, and approve a gated call** — with a denial that names the offending source on screen | ⬜ |
 | **B4** | Agent flow: bounded state machine over tools, checkpoints, step trace | **give it a multi-step task and watch it plan, call tools and finish — with every step inspectable** | ⬜ |
@@ -833,6 +833,27 @@ the whole `up`. It does now, so plain `docker compose up -d` brings the frontend
 everything else and `web` has a healthcheck of its own — a stack whose UI needs a
 remembered extra flag is a stack whose UI does not get looked at.
 
+### B1 — connect a source and watch it ingest 🟡 deliverable 1/5 done 2026-08-15 (evening)
+
+Deliverable 1, the `SourceConnector` port + factory, is built and merged to
+`feat/b1-connectors` (PR open, draft). `features/connectors/` now has real
+`domain`/`adapters`/`application` content: `domain/port.py`'s `SourceItem` +
+`SourceConnector` protocol; three adapters (`s3.py` over the `ObjectStore` port —
+extended with `list(prefix)` — `local_fs.py` default-deny outside an operator-approved
+root, `http.py` over an operator-curated URL list with a real SSRF deny-list and
+DNS-rebinding-safe address pinning in `ssrf_guard.py`); the `content_source` table + RLS
+(migration `0007`, the first since `M2`); and `mnemosctl connector
+register`/`list-items`. Full detail, including two pre-existing migration bugs found and
+fixed (`0004`/`0006` importing the live `ORG_SCOPED_TABLES` instead of a frozen copy —
+harmless until a new org-scoped table was added, which `content_source` now is) and the
+trust-tier reconciliation deliverable 4 needs, is in
+[TRACKER's dated note](../TRACKER.md) for 2026-08-15 (evening).
+
+Deliverables 2-5 — the Redis Streams event bus, the realtime gateway's authentication fix,
+the worker's first real job-processing path, and the sources UI — are not built. No
+frontend change; C12's UI requirement is deliverable 5's, not deliverable 1's, and the PR
+stays draft until it lands.
+
 ### A3 — ask about your data ✅ verified end to end 2026-08-15
 
 All five deliverables done and, as of 2026-08-15, verified in a real browser against the
@@ -1046,13 +1067,17 @@ here on signs in as `analyst@mnemos.local` instead.
 stated plainly because the gap between what `docs/` describes and what runs is the thing
 this file exists to keep honest:
 
-- **There is no source connector, event bus, or sources UI.** Documents still arrive only
-  through `A2`'s manual upload form; `features/connectors/` is three empty `__init__.py`
-  files and `platform/events/` does not exist. `B1` — its full five-deliverable brief is in
-  [TRACKER §5](../TRACKER.md#5-next-task), written 2026-08-15 (later), not yet built.
+- **There is a source connector abstraction; there is no event bus, worker ingestion path,
+  or sources UI yet.** `B1` deliverable 1 (2026-08-15 evening) built
+  `features/connectors/` for real — `SourceConnector` port + factory, S3/local-fs/HTTP
+  adapters, the SSRF deny-list, the `content_source` table, and the CLI — but documents
+  still arrive only through `A2`'s manual upload form: `platform/events/` does not exist,
+  the worker still has nothing to claim, and there is no screen for any of this yet.
+  Deliverables 2-5 are in [TRACKER §5](../TRACKER.md#5-next-task), fully specified, not
+  yet built.
 - **The realtime WebSocket gateway is unauthenticated.** It relays any channel to any
-  connection; nothing has needed it enough to close that gap yet. `B1` is the first feature
-  that does, and its brief calls this out explicitly.
+  connection; nothing has needed it enough to close that gap yet. `B1` deliverable 3 is
+  the first thing that does, and its brief calls this out explicitly.
 - **There is no router.** A person still has to tick "Use documents" or "Ask your data" to
   get a grounded answer; nothing classifies a message to a flow on its own. `A4` — moved
   after `B1`/`B2` in the 2026-08-15 (evening) re-sequencing — and both provisional selectors

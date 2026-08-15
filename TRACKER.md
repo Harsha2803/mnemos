@@ -6,22 +6,82 @@
 > **and [`docs/ADAPTATION.md`](docs/ADAPTATION.md)** *in the same commit* — a stale
 > tracker is worse than none.
 
-**Last updated:** 2026-08-15 (later) — `A3` is merged to `main` (PR #15, squashed). This
-session wrote the full `B1` brief in §5 — five deliverables, in build order, grounded in
-what the current code and docs actually contain rather than guessed — and did not start
-building it, per §0 rule 9.
+**Last updated:** 2026-08-15 (evening) — `B1` deliverable 1 built: the `SourceConnector`
+port + factory (`features/connectors/`), the `content_source` migration (the first since
+`M2`), and `mnemosctl connector register`/`list-items`. Deliverables 2-5 (event bus,
+realtime auth, the worker's real job-processing path, the sources UI) remain — see §5.
 **Phase:** **A — make it a chatbot.** `A0` ✅, `A1` ✅, `A2` ✅, `A3` ✅ — all merged to
 `main`. Phase A is complete. Build order deviates from phase order once: `B1`/`B2` come
 next, before `A4` (2026-08-15 evening re-sequencing note below).
-**Next task:** `B1` — connect a source and watch it ingest. **Fully specified in §5** —
-five deliverables (the `SourceConnector` port + factory, the Redis Streams event bus, the
-realtime gateway's auth gap, the worker's first real job-processing path, and the sources
-UI), a "first Alembic migration since `M2`" flag, an explicit not-in-scope list, and the
-evidence bar to close it. A future session builds it from that brief; this session only
-wrote it.
-**Branch right now:** none open. `main`'s tip is the squashed `A3` merge plus this session's
-docs-only commit (no code changed).
+**Next task:** `B1` deliverable 2 — the Redis Streams event bus (`platform/events/`).
+Deliverable 1 is done and merged (evidence below and in §3). Deliverables 2-5 are
+**fully specified in §5**, unchanged from the original brief except deliverable 1's own
+entry, which now records what was actually built rather than what was planned.
+**Branch right now:** `feat/b1-connectors`, PR open (draft — `B1`'s PR stays in draft
+until deliverable 5's sources UI exists, per C12). Deliverable 1's commit(s) are on it;
+`main` is unchanged.
 
+> ### 2026-08-15 (evening) — `B1` deliverable 1 built: `SourceConnector` port + factory,
+> the `content_source` migration, the CLI
+>
+> Picked up the `B1` brief §5 already specified and built deliverable 1 exactly as
+> written: `features/connectors/domain/port.py` (`SourceItem` + the `SourceConnector`
+> protocol — `list_items`/`fetch`), three adapters (`s3.py` on top of the existing
+> `ObjectStore` port, extended with a `list(prefix)` method rather than a second MinIO
+> client; `local_fs.py` scoped to an operator-approved root; `http.py` over an
+> operator-curated URL list), `ssrf_guard.py` (ThreatModel.md §3⑥'s deny-list, with real
+> DNS-rebinding protection — the request is pinned to the address that was actually
+> checked, not re-resolved at connect time), the `content_source` table + RLS, and
+> `mnemosctl connector register`/`list-items`.
+>
+> **A real bug found and fixed, not scope creep:** migrations `0004` and `0006` both
+> import the *live* `ORG_SCOPED_TABLES` tuple rather than a frozen copy, despite `0004`'s
+> own docstring stating the frozen-copy intent. Adding `content_source` to
+> `ORG_SCOPED_TABLES` (required — `test_every_org_scoped_table_has_forced_rls` checks the
+> reverse direction too) would have made both migrations try to `ALTER TABLE`/`ALTER
+> POLICY` on `content_source` *before* revision `0007` creates it, breaking `alembic
+> upgrade head` on any fresh database. Caught by running `alembic check` early, per this
+> brief's own flag that this was the first migration since `M2` and not to assume it would
+> just work. Fixed by freezing both migrations to a literal tuple (the same 39 tables they
+> already applied to) — their behaviour on every existing database is unchanged; only the
+> import that made them fragile to a future new table is gone. `content_source`'s own RLS
+> is set up inside `0007`, with the corrected (`NULLIF`) policy expression from the start.
+>
+> **Trust tier for connector-sourced documents, resolved (deliverable 4 will consume
+> this):** ThreatModel.md §4's layer-1 row ("external connectors ≥ 4; tool output = 6")
+> uses `_v1/core.py`'s original 0-6 scale (`SYSTEM=0` most trusted … `TOOL_OUTPUT=6`
+> least), not `core/types.py`'s ported 4-rung scale (`RETRIEVED=10` … `SYSTEM=40`, higher
+> = more trusted) — the two were never reconciled when retrieval was ported onto Postgres
+> in `A2`. `core/types.py`'s `RETRIEVED` (10) is already the floor of the current scale
+> and is already what manual uploads get (`DEFAULT_TRUST_TIER`), and the enum's own
+> docstring already lumps "document chunks, tool output, SQL results" into it — there is
+> no lower rung to assign. Deliverable 4 should pass `TrustTier.RETRIEVED` for
+> connector-sourced documents, same as manual uploads; connector content is not *more*
+> trusted than an upload, and the current schema cannot express *less*. `docs/ThreatModel.md`
+> §4 still needs a follow-up correction to re-express its table against the current enum —
+> flagged here rather than fixed in this session, since it touches a document deliverable 1
+> did not otherwise need to open.
+>
+> **Evidence:** `make test` — 384 passed (352 + 32 new: 8 SSRF-guard, 6 local-fs
+> traversal, 4 HTTP connector, 3 S3 connector, 11 `ConnectorService` validation/registration
+> — including the loopback/link-local/metadata-IP/localhost refusals actually raising, not
+> just asserted to exist). `make lint` / `make types` clean. `alembic upgrade head` and
+> `alembic check` both clean against a real Postgres (`pgvector/pgvector:pg16`), including
+> the fixed `0004`/`0006` replay and a full upgrade→downgrade→upgrade round trip of `0007`;
+> `content_source`'s `FORCE ROW LEVEL SECURITY` and `org_isolation` policy confirmed live
+> via `\d+ content_source`. No frontend change — deliverable 1 has no UI surface of its own
+> (C12's UI requirement lands with deliverable 5, the sources screen; the PR stays draft
+> until then).
+>
+> **Not done, deliberately — deliverables 2-5, exactly as `B1`'s original brief specifies
+> them below.** No event bus, no realtime auth fix, no worker changes, no frontend. §0
+> rule 9 does not force a stop mid-milestone the way it would between milestones — but the
+> remaining four deliverables are each substantial and the realtime auth fix in particular
+> is security-load-bearing (C's "never ship a second defence as if it were the first" rule);
+> landing deliverable 1 cleanly, verified, and committed is a real stopping point the same
+> shape as `A3` deliverable 3's session stopping with deliverable 4 fully specified ahead of
+> it, rather than rushing the remaining four deliverables to close `B1` in one sitting.
+>
 > ### 2026-08-15 (later) — the `B1` brief written, nothing built
 >
 > A fresh session, picking up right after `A3`'s merge to `main`. §0 rule 9 (one task per
@@ -680,7 +740,7 @@ order" list is the authoritative next-up sequence; the note above it explains wh
 
 | ID | What it builds | You can now… | Status |
 |---|---|---|---|
-| **B1** | Object storage · source connectors (MinIO/S3, local FS, HTTP) · Redis Streams event bus · sources UI | **connect a source, browse it, and watch ingestion events arrive live** | ⬜ **next after `A3`** |
+| **B1** | Object storage · source connectors (MinIO/S3, local FS, HTTP) · Redis Streams event bus · sources UI | **connect a source, browse it, and watch ingestion events arrive live** | 🟡 **deliverable 1/5 done** — connectors + migration + CLI; event bus, realtime auth, worker, UI remain |
 | **B2** | Ingestion jobs at scale: heartbeat, retries, status history, stuck-job reaper · per-job progress UI | **ingest a folder and watch every job's progress — including one that dies, surfaced as stuck rather than silently lost** | ⬜ **after `B1`** |
 | **B3** | MCP tool runtime: registry, per-user credentials, trust tiers, approval gates · tool console | **register a tool, have the assistant call it, and approve a gated call** — with a denial that names the offending source on screen | ⬜ |
 | **B4** | Agent flow: bounded state machine over tools, checkpoints, step trace | **give it a multi-step task and watch it plan, call tools and finish — with every step inspectable** | ⬜ |
@@ -731,6 +791,35 @@ discarded. If you find a reference to an old ID anywhere, this is the translatio
 | `M12` router | `A4` | Moved **earlier**: without it the user has to pick a mode, which is not what a chatbot is |
 | `M13` frontend | dissolved into `F0` + a UI slice per milestone | Unchanged by this re-plan |
 | `M14` realtime + e2e + docs | `D1` | |
+
+### 🟡 B1 — connect a source and watch it ingest, deliverable 1/5 done 2026-08-15 (evening)
+
+**Deliverable 1 — the `SourceConnector` port + factory — is done; deliverables 2-5 are
+not.** Branch `feat/b1-connectors`, PR open in draft (stays draft until deliverable 5's
+sources UI exists, per C12 — deliverables 1-4 have no product UI by design).
+
+What's built: `features/connectors/domain/port.py` (`SourceItem`, `SourceConnector`
+protocol), three adapters (`s3.py` over the extended `ObjectStore` port, `local_fs.py`
+default-deny outside an operator-approved root, `http.py` over an operator-curated URL
+list, never crawling), `ssrf_guard.py` (deny-list + DNS-rebinding-safe address pinning),
+`adapters/crypto.py`'s `SourceConfigCipher`, the `content_source` table + RLS (migration
+`0007`), `ConnectorFactory` + `ConnectorService`, and `mnemosctl connector
+register`/`list-items`. Full detail, including the two migration bugs found and fixed
+along the way and the trust-tier reconciliation for deliverable 4, is in the dated note
+near the top of this file ("`B1` deliverable 1 built").
+
+**Evidence:** `make test` — 384 passed (352 prior + 32 new, including the SSRF deny-list
+actually refusing loopback/link-local/metadata/`localhost` URLs, and local-fs path
+traversal — `../`, an absolute path, and a symlink escaping the root — actually refused,
+not merely asserted to exist). `make lint` / `make types` clean. A real Postgres
+(`pgvector/pgvector:pg16`) confirms `alembic upgrade head`, `alembic check` (clean — no
+drift between the migration and the models), a full upgrade→downgrade→upgrade round trip,
+and `content_source`'s `FORCE ROW LEVEL SECURITY` + `org_isolation` policy live via
+`\d+ content_source`. No frontend change; not claimed as done.
+
+**Not done:** the event bus (`platform/events/`), the realtime gateway's auth fix, the
+worker's real job-processing path, and the sources UI — deliverables 2-5, fully specified
+in §5, unstarted. `entrypoints/realtime/main.py` is still unauthenticated.
 
 ### ✅ A3 — ask about your data, verified end to end 2026-08-15, PR #15
 
@@ -2161,20 +2250,27 @@ Recorded so they are not rediscovered as surprises:
 real browser against the real stack. Full evidence is in the dated note near the top of
 this file ("`A3` deliverables 4-5 done") and in §3's `A3` entry.
 
-**This session's task was to write the `B1` brief below, not to build `B1`.** §0 rule 9 is
-back in force and TRACKER's own next-task note asked explicitly for the brief to be written
-"before starting it" — the same shape as every other milestone's boundary in this project
-(deliverable 3's session, for instance, stopped with deliverable 4 already fully specified in
-front of it, rather than rolling on). This session read ADAPTATION §3's `connectors` row, §4
-(service topology), §6 (schema), §7's `B1` row, `docs/ThreatModel.md`'s connector/SSRF and
-trust-tier rows, and the current code in `features/connectors/` (three empty `__init__.py`
-files — nothing built yet), `platform/cache.py`, `entrypoints/worker/main.py` (the
-stuck-job reaper already exists and already touches `ingest_job`/`ingest_job_event` — see
-below), and `entrypoints/realtime/main.py` (a generic Redis pub/sub → WebSocket relay,
-**explicitly unauthenticated** — its own docstring says so). The brief below is grounded in
-what that reading found, not guessed. **A future session builds `B1` from this; this
-session does not touch `features/connectors/`, `platform/events/`, the worker, the realtime
-gateway, or the frontend.**
+**`B1` deliverable 1 — the `SourceConnector` port + factory — is done.** Full evidence is
+in the "2026-08-15 (evening)" dated note near the top of this file and in §3's `B1` entry.
+What that means for what follows: `features/connectors/` now has real
+`domain`/`adapters`/`application` content (not the three empty `__init__.py` files the
+brief below still describes finding), `platform/objectstore/port.py`'s `ObjectStore`
+protocol gained a fourth method (`list(prefix) -> Sequence[ObjectMeta]`, implemented in
+`S3ObjectStore`), `content_source` is a real table with RLS, and `mnemosctl connector
+register`/`list-items` work end to end against a real filesystem/bucket/URL list.
+**Deliverables 2-5 below are unchanged from the original brief** — they were written
+before deliverable 1 existed, but nothing in them assumed a *particular* shape for
+`SourceConnector`/`ConnectorFactory` beyond what got built, so they still apply as
+written. The one thing to know going in: `ConnectorService.list_items(org_id, slug)` is
+how deliverable 4's worker should reach a connector, not by importing `ConnectorFactory`
+directly — the service is what resolves a slug to a record and decrypts its config; skip
+it and you are re-deriving `require_source` inline.
+
+**`platform/events/`, the worker, the realtime gateway and the frontend are still
+exactly as `A3` left them** — deliverable 1 did not touch any of them. `entrypoints/
+worker/main.py`'s stuck-job reaper still has nothing to claim; `entrypoints/realtime/
+main.py` is still the generic, **unauthenticated** Redis pub/sub → WebSocket relay its own
+docstring already flagged. Both are exactly what deliverables 2-4 below fix.
 
 ### `B1` — connect a source and watch it ingest
 
@@ -2185,9 +2281,16 @@ over an authenticated WebSocket, while `ingest_job`/`ingest_job_event` (schema s
 untouched by any real ingestion path until now) finally carry real rows for the first time.
 
 **What already exists and must be reused, not rebuilt:**
-- `platform/objectstore/port.py` + `s3.py` — the `ObjectStore` port and its MinIO adapter
+- ~~`platform/objectstore/port.py` + `s3.py` — the `ObjectStore` port and its MinIO adapter
   from `A2`. The S3 connector adapter should sit on top of this port (list/get by
-  prefix), not open a second, parallel MinIO client.
+  prefix), not open a second, parallel MinIO client.~~ **Done in deliverable 1**: the port
+  gained `list(prefix) -> Sequence[ObjectMeta]`, implemented in `S3ObjectStore` via
+  `list_objects_v2`; `features/connectors/adapters/s3.py`'s `S3Connector` sits on top of it.
+- ~~`core/crypto.py`'s `DsnCipher` (Fernet) — reuse the pattern (a new cipher instance/key,
+  `MNEMOS_SOURCE_ENCRYPTION_KEY`).~~ **Done in deliverable 1**:
+  `features/connectors/adapters/crypto.py`'s `SourceConfigCipher`, same Fernet pattern, its
+  own key (`MNEMOS_SOURCE_ENCRYPTION_KEY` / `Settings.source_encryption_key`). Reuse this
+  for deliverable 4, not `DsnCipher` and not a third cipher class.
 - `entrypoints/worker/main.py`'s `reap_stuck_jobs` — the lease/heartbeat/reclaim shape for
   `ingest_job` already exists and already works (`status`, `attempts`, `max_attempts`,
   `owner_id`, `heartbeat_at`, `lease_expires_at`, `error_code`, `error_detail` are all real
@@ -2226,24 +2329,24 @@ must come from the validated token, never from client-supplied path/query data.
 **Deliverables, in build order — one commit (or a small adjacent group) per numbered item,
 matching how `A3`'s deliverables were committed:**
 
-1. **`SourceConnector` port + factory, `features/connectors/`.** `domain/port.py`: a
-   `SourceItem` value (uri, name, size_bytes, content_type, modified_at) and a
-   `SourceConnector` protocol — `list_items() -> Sequence[SourceItem]`,
-   `fetch(uri: str) -> bytes`. Three adapters: an S3 connector wrapping the existing
-   `ObjectStore` port (bucket + prefix), a local-filesystem connector scoped to an
-   **operator-configured allowlisted root** (default-deny outside it — the same discipline
-   `A3`'s `allowed_schemas` enforces, and `test_register_rejects_an_empty_allowlist` is the
-   pattern to copy for "reject an unconfigured root"), and an HTTP connector that fetches
-   only from an **operator-curated list of URLs**, never a crawl and never an
-   arbitrary user-supplied URL — apply the SSRF deny-list ThreatModel.md §3⑥ already commits
-   to (link-local/loopback/private ranges, DNS-rebinding guard) to every URL before fetching,
-   the same control `A3`/MCP already promise and none of them have had to implement yet
-   (`B1` is the first consumer). A new `content_source` table (org-scoped, encrypted config,
-   `kind` discriminator) is needed — **this is the first Alembic migration since `M2`**;
-   write it carefully and run `alembic check` before assuming the schema is already there,
-   unlike every `A3` deliverable which got to skip this step. `mnemosctl connector register
-   --org-slug X --kind {s3,local,http} ...` and `mnemosctl connector list-items --slug Y`
-   mirror `datasource introspect`'s CLI pattern.
+1. ✅ **Done (2026-08-15 evening). `SourceConnector` port + factory, `features/connectors/`.**
+   Built exactly as specified: `domain/port.py`'s `SourceItem` + `SourceConnector` protocol
+   (`list_items`/`fetch`); three adapters (`adapters/s3.py`, `adapters/local_fs.py` —
+   default-deny outside an operator-approved root, enforced at *two* levels, the
+   per-registration `root` and a new deployment-level `Settings.local_fs_allowed_roots` —
+   and `adapters/http.py`, never crawling, only an operator-curated URL list); the SSRF
+   deny-list (`adapters/ssrf_guard.py`) with genuine DNS-rebinding protection (the request
+   pins to the address that was checked, via IP-substitution + `Host`/SNI, not a check
+   followed by a second, unpinned resolution); the `content_source` table + RLS (migration
+   `0007`, the first since `M2` — `alembic check` clean, and two latent bugs in migrations
+   `0004`/`0006` found and fixed along the way, see the dated note above); and
+   `mnemosctl connector register --org-slug X --slug Y --name N --kind {s3,local_fs,http}
+   [--bucket/--prefix | --root | --url ...]` / `connector list-items --org-slug X --slug Y`.
+   `ConnectorFactory` decrypts a registered source's config and builds the right adapter;
+   `ConnectorService` is the thing to call (`register`, `list_sources`, `list_items`) —
+   deliverable 4 should use it, not `ConnectorFactory` directly. Evidence: 32 new tests
+   (`tests/test_connectors_{ssrf,local_fs,http,s3,service}.py`), all passing against real
+   Postgres/no-network-needed fakes; `make lint`/`make types` clean.
 2. **The event bus, `platform/events/`.** An `EventBus` port + a Redis Streams adapter
    (`XADD`/consumer-group `XREADGROUP`, not the pub/sub `platform/cache.py` already has for
    the realtime gateway's existing channels — Streams give replay/durability pub/sub does

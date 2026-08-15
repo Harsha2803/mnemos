@@ -45,16 +45,60 @@ from collections.abc import Sequence
 
 from alembic import op
 
-from mnemos.platform.models import ORG_SCOPED_TABLES
-
 revision: str = "0006"
 down_revision: str | None = "0005"
 branch_labels: str | Sequence[str] | None = None
 depends_on: str | Sequence[str] | None = None
 
-# Frozen at the time this revision was written, for the same reason 0004 freezes
-# its own copy: a migration must describe the past, not track the present.
-TABLES: tuple[str, ...] = ORG_SCOPED_TABLES
+# Frozen at the time this revision was written, as a literal — not an import
+# of `ORG_SCOPED_TABLES`, for the same reason `0004` freezes its own copy: on
+# a fresh database, this revision runs before any table a later revision adds
+# (e.g. `content_source` in `0007`) exists, and `ALTER POLICY` on a table that
+# is not there yet fails. `0004`'s docstring says this was the intent from the
+# start; this revision had the same import and the same latent bug, caught and
+# fixed alongside it while writing `B1`'s migration.
+TABLES: tuple[str, ...] = (
+    "app_user",
+    "identity_provider",
+    "role",
+    "role_binding",
+    "tag",
+    "user_tag",
+    "api_key",
+    "session",
+    "subject",
+    "memory",
+    "memory_edge",
+    "memory_embedding",
+    "collection",
+    "document",
+    "chunk",
+    "chunk_embedding",
+    "ingest_job",
+    "ingest_job_event",
+    "folder",
+    "chat_session",
+    "chat_message",
+    "message_citation",
+    "bookmark",
+    "feedback",
+    "context_plan",
+    "context_bundle",
+    "bundle_item",
+    "sql_datasource",
+    "sql_schema_object",
+    "glossary_term",
+    "sql_run",
+    "mcp_server",
+    "mcp_tool",
+    "mcp_credential",
+    "mcp_grant",
+    "mcp_invocation",
+    "prompt",
+    "prompt_version",
+    "inference_call",
+    "audit_log",
+)
 
 POLICY = "org_isolation"
 
