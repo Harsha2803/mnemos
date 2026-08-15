@@ -31,15 +31,22 @@ requires and nothing tests.
 
 from __future__ import annotations
 
+from collections.abc import AsyncIterator
+from contextvars import Token
 from typing import Final
 
 from fastapi import Request
 
+from mnemos.core.logging import org_id_var, session_id_var, user_id_var
 from mnemos.features.identity.application.principals import (
     AuthenticatedCaller,
     PrincipalResolver,
 )
 from mnemos.features.identity.providers import denied
+
+#: What `bind_caller_context` hands back to `reset_caller_context` — one
+#: `contextvars.Token` per var it set, in the same order.
+CallerContextTokens = tuple[Token[str | None], Token[str | None], Token[str | None]]
 
 #: The scheme, compared case-insensitively per RFC 7235 §2.1.
 BEARER_SCHEME: Final = "bearer"
@@ -101,17 +108,58 @@ def bearer_token(request: Request) -> str:
     return token.strip()
 
 
-async def enforce_authentication(request: Request) -> None:
+def bind_caller_context(caller: AuthenticatedCaller) -> CallerContextTokens:
+    """Bind `caller`'s org/user/session ids to `core/logging.py`'s contextvars.
+
+    Two call sites need this, not one: :func:`enforce_authentication` below,
+    for log lines the route handler itself emits, and `main.py`'s
+    request-logging middleware, for the `http.request` summary line — which is
+    emitted *after* `call_next` returns, by which point this dependency's own
+    binding has already been reset (dependency teardown runs inside
+    `call_next`, before control returns to the middleware). Sharing this
+    function is what keeps both bindings — and both resets — identical.
+    """
+    return (
+        org_id_var.set(str(caller.principal.org_id)),
+        user_id_var.set(str(caller.principal.principal_id)),
+        session_id_var.set(str(caller.principal.session_id)),
+    )
+
+
+def reset_caller_context(tokens: CallerContextTokens) -> None:
+    org_token, user_token, session_token = tokens
+    org_id_var.reset(org_token)
+    user_id_var.reset(user_token)
+    session_id_var.reset(session_token)
+
+
+async def enforce_authentication(request: Request) -> AsyncIterator[None]:
     """The application-level dependency. Runs before every route handler.
 
     Stores the resolved caller on ``request.state`` rather than returning it,
     because a dependency's return value is only reachable by a handler that
     declared it — and a handler that forgot to declare it must still be guarded.
     :func:`require_caller` is how a handler that *wants* the identity asks for it.
+
+    A generator rather than a plain coroutine so the caller's org/user/session
+    ids can be bound to `core/logging.py`'s contextvars *and reset* once the
+    route handler is done — the ``finally`` below is what keeps one request's
+    identity from bleeding into whatever this task does next. Denial is
+    unaffected: an exception raised while resolving the caller propagates
+    before the ``yield`` the same way a ``return`` did in the
+    plain-coroutine version.
     """
     if request.url.path in _public_paths(request):
+        yield
         return
-    request.state.caller = await _resolver(request).resolve(bearer_token(request))
+
+    caller = await _resolver(request).resolve(bearer_token(request))
+    request.state.caller = caller
+    tokens = bind_caller_context(caller)
+    try:
+        yield
+    finally:
+        reset_caller_context(tokens)
 
 
 def require_caller(request: Request) -> AuthenticatedCaller:

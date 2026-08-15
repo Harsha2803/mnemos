@@ -22,6 +22,83 @@ wrote it.
 **Branch right now:** none open. `main`'s tip is the squashed `A3` merge plus this session's
 docs-only commit (no code changed).
 
+> ### 2026-08-16 — per-session log files (dev tooling, not on the roadmap)
+>
+> A request from the project owner, out of band from the `B1`/`B2`/… plan above: every
+> authenticated request's log lines should also land in a file named by that request's
+> session id, so a past login session's activity can be pulled up by id later, without
+> grepping the full container log stream for it. Branch `feat/session-log-files`, off
+> `main` (not `feat/b1-connectors` — this is unrelated to connectors, and touching a
+> second concern on that branch would have muddied its PR). **Does not change what
+> `B1` is or what §5 says is next** — read past this note to the "`B1` brief written"
+> one below for the actual next task.
+>
+> **What's built:** `core/logging.py` gained `session_id_var` (alongside the existing,
+> previously-never-actually-bound `org_id_var`/`user_id_var` — this is also the first
+> code to set those two, which is a genuine gap this session found: CodingStandards §8
+> has claimed "org_id, principal_id ... are bound once by middleware" since before `A0`,
+> and until now nothing did) and a new opt-in processor: when `session_log_enabled` is
+> on, any log line carrying a `session_id` is also appended, as its own JSON line, to
+> `logs/sessions/{session_id}.log`. `entrypoints/api/security.py`'s `enforce_authentication`
+> — already refactored into a generator dependency for exactly this — binds the three ids
+> from the resolved `AuthenticatedCaller` and resets them in a `finally`, the same
+> bind-then-reset discipline `request_id_var` already used at the middleware layer.
+>
+> **A real bug found and fixed, not scope creep:** the summary `http.request` log line
+> — arguably the single most useful line for "what did this session do" — is emitted by
+> `main.py`'s middleware *after* `call_next` returns, by which point the dependency's own
+> binding has already been reset (dependency teardown runs *inside* `call_next`, before
+> control returns to the middleware). Fixed by factoring the bind/reset pair into
+> `bind_caller_context`/`reset_caller_context` (`security.py`) and having the middleware
+> re-bind from `request.state.caller` — which the guard leaves behind precisely for this —
+> around that one log call. Caught by a test that asserted the file contained an
+> `http.request` entry and watched it fail with an empty file.
+>
+> **A second, independent bug the first one's fix exposed:** reconfiguring `structlog` a
+> second time in the same process (which every entrypoint's `lifespan` already did before
+> this session, and which this session's own tests need to do, pointing at a `tmp_path`)
+> silently did nothing for any logger that had already logged once —
+> `cache_logger_on_first_use=True` permanently freezes a logger's processor chain on
+> first use. Invisible before now because every prior reconfiguration passed the same
+> `json_output`/`level` as the one before it; this session's tests are the first to pass
+> a *different* value and noticed. Fixed by turning caching off — a correctness fix to
+> `configure_logging`'s actual contract ("call this to reconfigure"), not a workaround
+> specific to session logging.
+>
+> **Off by default, on only where it can be used:** `Settings.session_log_enabled: bool
+> = False` — `pytest` authenticates hundreds of throwaway sessions across the suite and
+> must never write into the working tree, so every test that turns the feature on also
+> points `session_log_dir` at its own `tmp_path`. `docker-compose.yml` sets
+> `MNEMOS_SESSION_LOG_ENABLED=true` for `api` only (the one service that resolves a
+> caller's session on `main` today; `realtime` gains the same identity-resolution
+> machinery in `B1` deliverable 3, on the separate `feat/b1-connectors` branch — wiring
+> the flag there belongs to whichever session merges that work, not this one) and
+> bind-mounts `./logs:/app/logs` so the files land in the repo's own working tree. A new
+> one-shot `logs-init` service (same shape as `minio-init`) `chown`s `./logs` to the
+> image's unprivileged uid before `api` starts — a fresh clone has no `./logs` yet, Docker
+> auto-creates the bind-mount source owned by root, and the container cannot write into
+> that without this. Verified against a real, empty clone-shaped host directory before
+> settling on this fix (a bare `mkdir -p` from inside the container failed with
+> `Permission denied` first). `logs/` and `*.log` were already in the root `.gitignore`
+> from before this session — no `.gitignore` change was needed.
+>
+> **Evidence:** `make test` — 363 passed (352 prior on `main` + 11 new,
+> `tests/test_session_logging.py`: the processor in isolation, then the same claim wired
+> through a real `create_app()` and a real (fake-repository) authenticated request —
+> a genuine session writes its file with `org_id`/`user_id`/`session_id` on every line
+> including the `http.request` summary; a denied request (forged token, deactivated
+> user) writes nothing; two different sessions never share a file; a session's binding
+> does not leak into the request that follows it; the feature off writes nothing at all).
+> `make lint`/`make types` clean. `make check` clean — no schema touched. Live-verified
+> against the running compose stack: rebuilt `api`, watched `logs-init` correctly `chown`
+> a freshly-auto-created `./logs` before `api`'s first boot, minted a token for a real
+> live session, called `/api/v1/auth/me`, and read back the resulting
+> `logs/sessions/{session_id}.log` on the host — one JSON line, `org_id`/`user_id`/
+> `session_id` all present, `git status` confirming it is genuinely untracked.
+>
+> No frontend change; this has no UI and needs none (C12 is about product features, and
+> this is a local debug convenience nobody but the developer running the stack ever sees).
+
 > ### 2026-08-15 (later) — the `B1` brief written, nothing built
 >
 > A fresh session, picking up right after `A3`'s merge to `main`. §0 rule 9 (one task per

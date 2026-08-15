@@ -344,6 +344,26 @@ merely untested; that is written up in §8 and in
 
 ## 8. Current state
 
+### Dev tooling — per-session log files (2026-08-16, not a milestone)
+
+Not part of the `A`/`B`/`C`/`D` plan in §7 — an out-of-band developer convenience, so it
+gets no milestone id and does not move `B1`'s "next task" status. `core/logging.py` can
+now, opt-in (`Settings.session_log_enabled`, off by default), append every log line that
+carries a `session_id` to its own file at `logs/sessions/{session_id}.log` — a login
+session's whole activity, pullable by id later, rather than grepped out of the container
+log stream. `entrypoints/api/security.py`'s `enforce_authentication` binds the resolved
+caller's `org_id`/`user_id`/`session_id` to contextvars for the duration of the request
+(and, via `bind_caller_context`/`reset_caller_context`, for `main.py`'s post-`call_next`
+`http.request` summary line too — dependency teardown runs *inside* `call_next`, so the
+middleware has to re-bind from `request.state.caller` rather than reuse the dependency's
+already-reset binding). `docker-compose.yml`'s `api` service turns the flag on and
+bind-mounts `./logs`; a new one-shot `logs-init` service (same shape as `minio-init`)
+`chown`s it to the image's unprivileged uid first, since a fresh clone has no `./logs`
+and Docker would otherwise auto-create it owned by root. `logs/`/`*.log` were already
+gitignored. Full detail, including a `cache_logger_on_first_use` correctness bug this
+surfaced in `configure_logging` itself, is in
+[TRACKER's dated note](../TRACKER.md) for 2026-08-16.
+
 ### F0 — app shell ✅
 
 The one task with no backend half, because `frontend/` was an empty directory and there
