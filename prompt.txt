@@ -1,20 +1,19 @@
 You are picking up an in-progress project called Mnemos, at
 /home/shreeharsha/Personal/Projects/Resume_001/mnemos
 
-This file was rewritten on 2026-08-11, at the end of a session that first finished
-merging A2 (which the previous prompt.txt handed off mid-merge) and then, with the
-project owner's explicit go-ahead to keep working until the session ended rather than
-stop after one task, started A3 and shipped its first deliverable. It replaces the
-2026-08-10 version of itself, which described A2 as open with one unfixed CI blocker —
-that is resolved and merged now. Trust this file and TRACKER.md over any memory of a
-prior prompt.txt.
+This file was rewritten on 2026-08-15, at the end of a session that did exactly one task —
+A3 deliverable 2, the business glossary — under the ordinary one-task-per-session rule,
+which is back in force (the 2026-08-08 marathon and the 2026-08-11 "keep going until the
+session ends" instruction were both one-off, session-scoped, and neither applies here). It
+replaces the 2026-08-11 version of itself, which handed off after deliverable 1 (schema
+introspection). Trust this file and TRACKER.md over any memory of a prior prompt.txt.
 
 ------------------------------------------------------------------------------
 READ FIRST, IN THIS ORDER
 
-  1. TRACKER.md            — read section 0, the header, the "2026-08-11 — A3 started"
+  1. TRACKER.md            — read section 0, the header, the "2026-08-15 — A3 deliverable 2"
                               note near the top, and section 3's A3 entry in full.
-                              Then section 5 (deliverables 2-5, fully specified).
+                              Then section 5 (deliverables 3-5, fully specified).
   2. docs/ADAPTATION.md    — architecture, capability map, schema, milestone ledger,
                               §7/§8 for A3's current position
   3. README.md             — public framing and the benchmark numbers
@@ -26,102 +25,83 @@ is a pointer to it, not a duplicate of it.
 ------------------------------------------------------------------------------
 EXACTLY WHERE THIS WAS LEFT — read this before touching anything
 
-This session did two things, in order:
-
-  1. **Finished merging A2.** PR #14 had one diagnosed-but-unfixed CI blocker (the
-     `compose` job racing MinIO's bucket creation). Fixed it
-     (`minio-init: {condition: service_completed_successfully}` added to `api`'s
-     `depends_on`), verified locally with a clean `docker compose down -v && up -d
-     --build`, watched PR #14 go green, squash-merged it, then rebuilt from clean `main`
-     and re-ran the real `frontend/e2e/knowledge.spec.ts` against the merged image —
-     passed. Updated TRACKER.md and docs/ADAPTATION.md to drop the stale "PR #14 open"
-     language and pushed that as its own `docs:` commit directly to `main` (the
-     established pattern here — see `82b6fd5` for precedent). **A2 is fully done, on
-     `main`, no open PRs at that point.**
-
-  2. **Started A3 (NL2SQL) and shipped deliverable 1 of 5.** TRACKER §5 (as it stood
-     before this session) specified five deliverables: schema introspection, business
-     glossary, generation + AST guard, execution + narration, and the chat surface's SQL
-     panel. This session built deliverable 1 — schema introspection — completely and for
-     real: domain/application/adapters, a CLI command, and a real Postgres test fixture
-     for the `mnemos_analytics` warehouse that did not exist before. It did **not**
-     attempt deliverables 2-5. That was a deliberate scope decision, not a time-out: SQL
-     generation behind an AST guard is the security-critical center of this milestone,
-     and rushing all five deliverables in one sitting risked exactly the kind of shortcut
-     this project's rules exist to prevent. TRACKER §5 now specifies deliverables 2-5 at
-     full detail, the same way the original brief specified all five.
+This session did one thing: **built A3 deliverable 2 of 5, the business glossary,
+completely and for real**, then stopped. TRACKER §5 (as it stood before this session)
+specified four remaining deliverables: business glossary, generation + AST guard,
+execution + narration, and the chat surface's SQL panel. This session built only the
+first of those four. It did **not** touch generation, the AST guard, execution, narration,
+or any UI. TRACKER §5 now specifies deliverables 3-5 at full detail.
 
 **Current git state:**
-  - `main`'s tip is the squashed A2 commit (PR #14, merged) plus the docs commit that
-    followed it (`ebd85ae`). Clean, no open PRs against it.
-  - `feat/a3-nl2sql` is pushed, two commits ahead: `feat(nl2sql): schema introspection —
-    the warehouse registry and its cached schema`, then `docs: record A3 deliverable 1
-    (schema introspection), specify 2-5`.
-  - **PR #15 is open as a draft** — "A3: ask about your data — NL2SQL (deliverable
-    1/5: schema introspection)". All three CI jobs (backend, frontend, compose) are
-    green. It is deliberately still draft: C12 says a feature ships its UI in the same
-    milestone, and deliverable 1 has no UI of its own — nothing in `A3` is demonstrable
-    yet. Keep it draft, keep adding commits (one per deliverable, per TRACKER's own
-    commit-shape rule), and only take it out of draft and merge once deliverable 5 (the
-    SQL panel) is on the branch and the milestone's "you can now ___" sentence is true
-    and verified in a real browser — the same bar A0/A1/A2 were held to.
+  - `main`'s tip is unchanged from the last handoff — still the squashed A2 commit (PR #14)
+    plus its docs commit. No work landed on `main` this session.
+  - `feat/a3-nl2sql` is pushed, one commit ahead of where the last session left it:
+    `feat(nl2sql): the business glossary — render_schema_context and glossary seeding`,
+    then `docs: record A3 deliverable 2 (business glossary), specify 3-5`.
+  - **PR #15 is still open as a draft** — C12 still applies: deliverable 2 has no product
+    UI (it added CLI commands, not a screen), so nothing in `A3` is demonstrable in the
+    product yet. Keep it draft, keep adding commits (one per deliverable), and only take it
+    out of draft and merge once deliverable 5 (the SQL panel) is on the branch and the
+    milestone's "you can now ___" sentence is true and verified in a real browser — the
+    same bar A0/A1/A2 were held to.
 
-**There is no unresolved blocker right now.** Unlike the A2 handoff this file replaced,
-nothing is broken, red, or half-fixed. `make test` (298 passed), `make lint`, `make
+**There is no unresolved blocker right now.** `make test` (302 passed), `make lint`, `make
 types`, and `make check` are all clean on `feat/a3-nl2sql` as it stands. The work that
-remains is *scope*, not a bug: deliverables 2, 3, 4, 5.
+remains is *scope*, not a bug: deliverables 3, 4, 5 — and deliverable 3 (the AST guard) is
+the security-critical center of this milestone. Do not rush it into this session's leftover
+momentum; it deserves its own session's full attention, per TRACKER §0 rule 9.
 
-**What deliverable 1 actually built, concretely, so you do not re-discover or re-build
-it:**
-  - `mnemosctl datasource introspect --org-slug X [--slug sales-warehouse]` —
-    idempotently registers the seeded `analytics.*` warehouse for an org and refreshes
-    its cached schema in `sql_schema_object`. Run this against a live stack before
-    manually testing generation later, or there will be nothing cached to generate
-    against.
-  - `backend/src/mnemos/features/datasources/domain/schema.py` — pure functions
-    (`build_schema_objects`). `application/{ports,service}.py` — `DatasourceService`
-    with `register()` and `refresh_schema()`. `adapters/introspection.py` —
-    `PostgresIntrospector`, connects with a short-lived engine using the datasource's own
-    DSN, never through the app's `Database`. `adapters/repository.py` —
-    `DatasourceRepository` / `SchemaObjectRepository` over Postgres, same
-    `Database.session(org_id=...)` discipline every other repository in this codebase
-    uses.
-  - `backend/src/mnemos/core/crypto.py` — `DsnCipher` (Fernet), encrypts
-    `sql_datasource.dsn_encrypted` at rest. New setting `MNEMOS_DSN_ENCRYPTION_KEY`
-    (dev default provided, rejected in production like `MNEMOS_JWT_SECRET`).
-  - `backend/tests/conftest.py` — the shared `postgres` fixture now also creates
-    `mnemos_analytics` and seeds it by executing the real
-    `deploy/postgres/init/02-analytics-seed.sql` against it. This is what deliverables
-    3-4's tests should use too — do not build a second warehouse fixture.
-    `postgres.analytics_ro_url` / `.analytics_owner_dsn` are the connection strings.
-  - Fixed two latent bugs found while building this: `MNEMOS_ANALYTICS_DATABASE_URL` was
-    never wired into `docker-compose.yml` (nothing in a container could reach the
-    warehouse), and `Settings.analytics_database_url`'s default used a sync driver
-    (`postgresql://` instead of `postgresql+asyncpg://`). Both fixed; the latter is now
-    validated the same way `database_url` always was.
+**What deliverable 2 actually built, concretely, so you do not re-discover or re-build it:**
+  - `mnemosctl datasource seed-glossary --org-slug X [--slug sales-warehouse]` — writes four
+    curated glossary terms (`DEMO_GLOSSARY_TERMS` in `entrypoints/cli.py`: revenue, active
+    customer, order volume, segment) for the demo warehouse. Idempotent and
+    **non-destructive**: a term already present (matched by its `term` text) is left
+    untouched, so re-running never clobbers a hand-edit.
+  - `mnemosctl datasource show-context --org-slug X` — prints the rendered schema-plus-
+    glossary text block. Run this to see exactly what deliverable 3's prompt will receive.
+  - `backend/src/mnemos/features/datasources/domain/glossary.py` — `GlossaryTermRow`, one
+    shape for both a term about to be seeded and a term read back.
+  - `backend/src/mnemos/features/datasources/domain/context.py` — `render_schema_context`,
+    the pure function that groups cached `sql_schema_object` rows by table and lists
+    glossary terms after them. **This is what deliverable 3's prompt assembly should call —
+    do not re-query the tables directly or build a second renderer.**
+  - `DatasourceService.seed_glossary()` and `.render_context(org_id, slug) -> str`
+    (`application/service.py`), both built on `_require_datasource`, a small helper now
+    shared by `refresh_schema`, `seed_glossary`, and `render_context`.
+  - `GlossaryRepository` (`adapters/repository.py`) — `ensure_terms` (idempotent,
+    non-destructive) and `list_terms`. `SchemaObjectRepository` gained `list_all`, reusing
+    `SchemaObjectDraft` as the read shape rather than a second dataclass.
+  - Verified against the **rebuilt `api` container image**, not just pytest:
+    `docker compose build api && up -d api`, then `seed-glossary` → `seed-glossary` again
+    (0 newly written, confirming idempotence) → `show-context`, which printed all four
+    `analytics.*` tables and all four glossary terms, schema before glossary. Full
+    transcript in TRACKER §3's `A3` entry.
 
 ------------------------------------------------------------------------------
 WHAT TO DO, IN ORDER, THE MOMENT YOU START
 
   1. `gh auth status` — confirm `Harsha2803` is active. If `harshaJKT` (the work account)
      is active instead, run `gh auth switch --user Harsha2803` before anything else. This
-     bit the previous session at its very start; check it before touching git.
+     has bitten a previous session at its very start; check it before touching git.
   2. `git fetch && git status` — check out `feat/a3-nl2sql`
      (`git checkout feat/a3-nl2sql`) if it exists locally, or `git checkout -b
      feat/a3-nl2sql origin/feat/a3-nl2sql` if not. Confirm `git log --oneline -5` shows
-     the two commits described above.
+     the deliverable-2 commits described above.
   3. `gh pr list --state open` — confirm PR #15 is what you expect (A3, open, draft).
-  4. Read TRACKER §5 in full — it specifies deliverables 2-5 at the same detail level the
-     original A3 brief specified all five. Deliverable 2 (the business glossary) is next
-     in sequence and is the smallest of the four remaining.
+  4. Read TRACKER §5 in full — it specifies deliverables 3-5 at the same detail level the
+     original A3 brief specified all five. Deliverable 3 (generation + the AST guard) is
+     next, and it is the largest and most security-sensitive of the three remaining.
   5. Bring up a stack if you need one to test against: `docker compose up -d --build`,
      `curl localhost:8000/readyz` until fully green, `make bootstrap` (see RUNNING IT
      below for the exact admin-password mechanics), then
      `docker compose exec -e MNEMOS_BOOTSTRAP_ADMIN_PASSWORD=... api mnemosctl datasource
-     introspect --org-slug mnemos` to get a cached schema to build deliverable 2 against.
+     introspect --org-slug mnemos` followed by `... mnemosctl datasource seed-glossary
+     --org-slug mnemos` to get a cached schema and glossary to build deliverable 3 against.
+     `... mnemosctl datasource show-context --org-slug mnemos` shows you exactly what the
+     generation prompt will see.
   6. Work deliverable by deliverable, one commit each, exactly as TRACKER §5's "Scope"
-     section lists them (2, 3, 4, 5 — 1 is already done). After each: `make test` / `make
-     lint` / `make types` / `make check` clean, push, keep PR #15 updated. Do **not**
+     section lists them (3, 4, 5 — 1 and 2 are already done). After each: `make test` /
+     `make lint` / `make types` / `make check` clean, push, keep PR #15 updated. Do **not**
      take the PR out of draft or merge it until deliverable 5 (the SQL panel) is on the
      branch and the milestone's "ask a question about your data in English and see the
      SQL, the rows and the narration — and see the guard visibly refuse a write" sentence
@@ -131,29 +111,25 @@ WHAT TO DO, IN ORDER, THE MOMENT YOU START
      how #11/#13/#14 were merged. Then rebuild from clean `main` and re-verify the A3
      sentence against the merged image — the same "CI green is not the same claim as the
      feature works from a clean start" discipline TRACKER section 4 item 32 exists to
-     enforce, and the same step the A2 handoff insisted on.
+     enforce.
   8. Update TRACKER.md and docs/ADAPTATION.md in the same commit as the final
      deliverable's work — mark `A3` ✅, move its evidence into §3/§8, and write §5 fresh
      for `A4` (the router — TRACKER §5's "Then, in order" section already names it and
-     ADAPTATION §7 has its one-line description; write the full brief the way this
-     session wrote A3 deliverables 2-5's brief).
+     ADAPTATION §7 has its one-line description; write the full brief the way this session
+     and the last one wrote A3's remaining deliverables' briefs).
 
 ------------------------------------------------------------------------------
 THE RULE ABOUT HOW MUCH TO DO IN ONE SESSION
 
-There is no marathon instruction active right now. The 2026-08-08 marathon ("finish A2
-through D1 in one continuous run") ended when the user stopped that session on
-2026-08-10, and TRACKER's own note says explicitly that the ordinary one-task-per-session
-rule reverts once that run ends. This session (2026-08-11) was a **separate, session-scoped**
-instruction from the project owner — finish merging A2, then keep making real progress
-until the session ended rather than stopping after the first coherent unit — and it is not
-standing instruction for whoever reads this next.
+No marathon instruction is active. TRACKER §0 rule 9 (one task per session, then stop) is
+the standing rule and this session followed it exactly: it did deliverable 2 alone, verified
+it end to end, updated both tracker files, and stopped rather than starting deliverable 3.
 
 **Default to the ordinary rule: one deliverable (or a small, coherent group) per session,
-then stop and update this file**, unless whoever invokes you says otherwise. A3 has four
-deliverables left; that is very plausibly two or three sessions' worth of honest work,
-especially deliverable 3 (the AST guard), which is the part of this milestone where a
-rushed job would be the actual security defect the milestone exists to prevent.
+then stop and update this file**, unless whoever invokes you says otherwise. A3 has three
+deliverables left. Deliverable 3 (the AST guard) in particular is where a rushed job would
+be the actual security defect this milestone exists to prevent — give it its own session's
+full attention rather than folding it into a session that starts with something else.
 
 Either way: never leave a PR open and stale — every session that touches `feat/a3-nl2sql`
 should end with the branch pushed, `make test`/`lint`/`types`/`check` clean, and this file
@@ -177,8 +153,9 @@ HARD RULES — violating any of these is worse than doing nothing
 
 * ZERO MONETARY COST. Every component free and self-hosted. No API key for any capability
   in the default path. Ollama is the default model forever. `sqlglot` and `cryptography`
-  (deliverable 1's two new dependencies) are both free, pure-Python-or-widely-vendored,
-  and self-hosted — keep it that way.
+  are both free, pure-Python-or-widely-vendored, and self-hosted — keep it that way.
+  Deliverable 3 is the first to actually import `sqlglot`; it has been a declared
+  dependency doing nothing since the original brief.
 
 * NEVER READ OR COPY FROM ../jiva/. That directory is the author's EMPLOYER'S proprietary
   codebase. Not a reference, not a source, not to be cited. Every file in Mnemos is written
@@ -186,20 +163,19 @@ HARD RULES — violating any of these is worse than doing nothing
 
 * NEVER use the work GitHub account or email (harshaJKT, @jktech.com). Two accounts are
   authenticated in `gh` on this machine. Confirm `Harsha2803` is active before any push —
-  this session found `harshaJKT` active at startup and had to switch; check every time,
-  do not assume the last session left it right.
+  check every time, do not assume the last session left it right.
 
 * NO PLACEHOLDERS, NO TODOs, NO STUBBED RETURNS. Split a task rather than stub it.
-  Deliverable 1 deliberately did NOT build a `render_schema_context` prompt-assembly
-  function, even though it would be easy to add — that function needs the glossary
-  (deliverable 2) to have anything meaningful to render, and building it early would have
-  meant dead, untested code sitting in the tree. That is the right instinct to keep
-  applying to 2-5: build exactly what the deliverable needs, nothing ahead of it.
+  Deliverable 2 built `render_schema_context` and gave it a real caller
+  (`mnemosctl datasource show-context`) rather than leaving it uncalled until deliverable 3
+  — a function nothing calls is exactly the placeholder this rule forbids. Keep applying
+  that instinct to 3-5: build exactly what the deliverable needs, with a real caller, and
+  nothing speculative ahead of it.
 
-* EVERY FEATURE SHIPS ITS UI IN THE SAME MILESTONE (C12). Deliverable 1 has no UI and
-  that is fine — it is not a "feature" on its own, it is infrastructure the rest of `A3`
-  needs. The milestone as a whole does not ship, and PR #15 does not leave draft, until
-  deliverable 5 lands.
+* EVERY FEATURE SHIPS ITS UI IN THE SAME MILESTONE (C12). Deliverables 1 and 2 have no
+  product UI and that is fine — they are infrastructure the rest of `A3` needs, and their
+  CLI commands are operator tools, not the feature's UI slice. The milestone as a whole
+  does not ship, and PR #15 does not leave draft, until deliverable 5 lands.
 
 * THE UI FOLLOWS docs/DesignSystem.md (C13). Tokens are the only source of colour, type,
   spacing and radius. Deliverable 5 introduces new territory — a result grid and a denial
@@ -213,9 +189,9 @@ HARD RULES — violating any of these is worse than doing nothing
 * DO NOT run `pkill -f mnemos` — it matches the agent's own shell. Kill by port or PID.
 
 * Never leave uncommitted work, and never leave a genuinely finished PR open. Push, open a
-  PR the moment a branch has its first commit (draft if unfinished — PR #15 is exactly
-  this), merge it the moment it is actually done and green. "Actually done" for `A3` means
-  all five deliverables, not just the ones that happen to fit in one session.
+  PR the moment a branch has its first commit, merge it the moment it is actually done and
+  green. "Actually done" for `A3` means all five deliverables, not just the ones that
+  happen to fit in one session.
 
 ------------------------------------------------------------------------------
 HOW TO WORK
@@ -225,10 +201,10 @@ Never a bulk commit of unrelated files. TRACKER §5's "Commit shape" note: one c
 numbered deliverable, not one per milestone.
 
 Every change ends with ALL of:
-  - make test            (298 passed as of A3 deliverable 1; will be higher after 2-5)
+  - make test            (302 passed as of A3 deliverable 2; will be higher after 3-5)
   - make lint / make types / make check
   - frontend: npm run lint && npx tsc --noEmit && npm run test && npm run build (once a
-    deliverable touches the frontend — none of 1 did)
+    deliverable touches the frontend — none of 1-2 did)
   - TRACKER.md updated in the same commit as the work — status, evidence, next task
   - docs/ADAPTATION.md updated in the same commit — section 7 position, section 8 state
   - README numbers updated ONLY if the retrieval or compile path moved, with the real
@@ -237,8 +213,9 @@ Every change ends with ALL of:
 
 Report honestly. Claim something works only after you have run it and seen the output —
 "the endpoint returns 200" is not the same claim as "I signed in and did X in a browser".
-Deliverable 1 has no UI, so its evidence is test output, not a screenshot — say so plainly
-rather than implying a browser check happened when it did not.
+Deliverables 1-2 have no UI, so their evidence is test output plus a rebuilt-container CLI
+transcript, not a screenshot — say so plainly rather than implying a browser check happened
+when it did not.
 
 ------------------------------------------------------------------------------
 RUNNING IT
@@ -254,9 +231,17 @@ RUNNING IT
                                                   # host env vars into the container
   docker compose exec -e MNEMOS_BOOTSTRAP_ADMIN_PASSWORD=<pw> api mnemosctl datasource \
       introspect --org-slug mnemos              # registers + caches the demo warehouse
+  docker compose exec -e MNEMOS_BOOTSTRAP_ADMIN_PASSWORD=<pw> api mnemosctl datasource \
+      seed-glossary --org-slug mnemos           # seeds the four curated glossary terms
+  docker compose exec -e MNEMOS_BOOTSTRAP_ADMIN_PASSWORD=<pw> api mnemosctl datasource \
+      show-context --org-slug mnemos            # prints what deliverable 3's prompt will see
 
   cd backend && ../.venv/bin/python -m pytest -q
   make lint && make types && make check
+
+  # Code changes require a rebuild before `docker compose exec` will see them — the api
+  # image has no bind mount:
+  docker compose build api && docker compose up -d api
 
 Sign in at http://localhost:3000 as org `mnemos`, then on Keycloak's form use
 `analyst@mnemos.local` / `analyst` (or `user@mnemos.local` / `user`) — NOT
@@ -268,45 +253,48 @@ Host ports (unchanged since M1): postgres 15432, redis 6380, api 8000, realtime 
 keycloak 8080, minio 9000/9001, ollama 11434. Container-to-container traffic uses standard
 ports — this now includes `mnemos_analytics`, reachable inside the compose network at
 `postgres:5432/mnemos_analytics` as `mnemos_ro` (see `MNEMOS_ANALYTICS_DATABASE_URL` in
-`docker-compose.yml`, added this session). Python venv is at .venv/ in the repo root; the
-package lives in backend/.
+`docker-compose.yml`). Python venv is at .venv/ in the repo root; the package lives in
+backend/.
 
 ------------------------------------------------------------------------------
-WHERE THINGS ARE (current, post-A3-deliverable-1)
+WHERE THINGS ARE (current, post-A3-deliverable-2)
 
   backend/src/mnemos/
-    core/          config, errors, logging, clock, ids, crypto (new — DsnCipher), shared
-                   enums
+    core/          config, errors, logging, clock, ids, crypto (DsnCipher), shared enums
     platform/      db engine + tenant-scoped sessions, redis, objectstore (S3/MinIO), models
     features/      identity, chat, llm (Ollama gateway), knowledge (RAG), memory, context,
-                   connectors, datasources (NL2SQL — introspection is built; glossary,
-                   generation, execution are not), tools, prompts, observability
+                   connectors, datasources (NL2SQL — introspection and glossary are built;
+                   generation, the AST guard, and execution are not), tools, prompts,
+                   observability
     flows/         rag (built, A2), nl2sql (not created yet — deliverable 4 will likely
                    need it, sibling to flows/rag/), agent, router
-    entrypoints/   api, worker, realtime, cli (now has `datasource introspect`)
+    entrypoints/   api, worker, realtime, cli (now has `datasource introspect`,
+                   `seed-glossary`, `show-context`)
     _v1/           the SQLite kernel. Retrieval was ported OUT of it in A2. Memory + the
                    six-phase compiler are still only in here, ported in C4.
   backend/migrations/    alembic revisions (no new one needed since A0 — A1/A2/A3-so-far
                           all used columns M2 already created)
-  backend/tests/          test_datasources_domain.py / test_datasources_introspection.py
-                          are A3 deliverable 1's; conftest.py's `postgres` fixture now
-                          also seeds `mnemos_analytics`
+  backend/tests/          test_datasources_domain.py (deliverable 1's pure tests plus
+                          deliverable 2's render_schema_context tests),
+                          test_datasources_introspection.py (deliverable 1's integration
+                          tests), test_datasources_glossary.py (deliverable 2's, new);
+                          conftest.py's `postgres` fixture seeds `mnemos_analytics`
   frontend/src/
     app/(app)/chat/, app/(app)/knowledge/    the two built screens (A3 has no screen yet)
     components/chat/, components/knowledge/, lib/chat/, lib/knowledge/, lib/inspector/
-  deploy/                postgres init SQL (now includes the analytics seed, wired into
-                          docker-compose.yml this session), keycloak realm
+  deploy/                postgres init SQL (includes the analytics seed, wired into
+                          docker-compose.yml), keycloak realm
   docs/                  architecture, schema, API contract, threat model, ADRs
 
 Layering rule: domain (pure) <- application <- adapters/api. `features` must never import
 `flows`; `flows` may import multiple `features`. `features/datasources/` follows this
-already (domain/schema.py has zero SQLAlchemy imports) — keep deliverables 2-4 the same
-shape.
+already (`domain/{schema,glossary,context}.py` have zero SQLAlchemy imports) — keep
+deliverables 3-4 the same shape.
 
 ------------------------------------------------------------------------------
 START HERE
 
-Read TRACKER.md now — the header, the "2026-08-11 — A3 started" note, section 3's A3
-entry, then section 5 (deliverables 2-5, fully specified). Do steps 1-6 under "WHAT TO DO,
+Read TRACKER.md now — the header, the "2026-08-15 — A3 deliverable 2" note, section 3's A3
+entry, then section 5 (deliverables 3-5, fully specified). Do steps 1-6 under "WHAT TO DO,
 IN ORDER" above before writing any new feature code. Tell me what you're about to do
 before you start.

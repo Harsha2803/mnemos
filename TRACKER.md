@@ -6,18 +6,74 @@
 > **and [`docs/ADAPTATION.md`](docs/ADAPTATION.md)** *in the same commit* — a stale
 > tracker is worse than none.
 
-**Last updated:** 2026-08-11 (`A3` deliverable 1/5 — schema introspection — committed and
+**Last updated:** 2026-08-15 (`A3` deliverable 2/5 — the business glossary — committed and
 pushed; PR #15 open as **draft**, CI green, not yet merged — merge only once all five
 deliverables are on the branch, per C12)
 **Phase:** **A — make it a chatbot.** `A0` ✅, `A1` ✅, `A2` ✅ merged. `A3` **in progress**:
-deliverable 1 of 5 done (schema introspection). Deliverables 2-5 fully specified in §5.
-**Next task:** `A3` deliverable 2 — the business glossary. §5 has the complete brief for
-2-5, written at the same level of detail as the original A3 brief it replaces.
+deliverables 1-2 of 5 done (schema introspection, business glossary). Deliverables 3-5
+fully specified in §5.
+**Next task:** `A3` deliverable 3 — generation and the AST guard, the security-critical
+center of this milestone. §5 has the complete brief for 3-5, written at the same level of
+detail as the original A3 brief it replaces.
 **Branch right now:** `feat/a3-nl2sql`, pushed, PR #15 open as **draft** (draft is
 deliberate — C12/§0 rule 7 says every branch gets a PR immediately, but this one only
 becomes a real merge candidate once the UI slice in deliverable 5 lands; see §0 rule 8).
-CI is green on the branch as it stands (deliverable 1 only). `main`'s tip is still the
+CI is green on the branch as it stands (deliverables 1-2 only). `main`'s tip is still the
 squashed `A2` commit (PR #14) — `A3` is not in `main` yet, not even partially.
+
+> ### 2026-08-15 — `A3` deliverable 2 (business glossary) done, PR #15 still draft
+>
+> A separate, fresh session picking up exactly where the 2026-08-11 session's handoff left
+> off — the ordinary one-task-per-session rule (§0 rule 9) is back in force, so this session
+> did deliverable 2 alone and stopped, rather than continuing into deliverable 3.
+>
+> **What shipped, on `feat/a3-nl2sql`:**
+> - `features/datasources/domain/glossary.py` — `GlossaryTermRow`, the one shape a term
+>   takes whether it is about to be seeded or was just read back (matched by `term` text,
+>   not by id, so there is nothing to convert between a draft and a persisted row).
+> - `features/datasources/domain/context.py` — `render_schema_context`, the pure function
+>   TRACKER §5 deliverable 2 asked for: groups `sql_schema_object` rows by table (table row,
+>   then its columns) and lists the glossary after the schema, so the model reads the
+>   columns a term maps onto before it reads the term itself. Deliberately not built in
+>   deliverable 1 — there was no glossary to render yet.
+> - `GlossaryRepository` (`adapters/repository.py`) — `ensure_terms` (idempotent, matched by
+>   `term` text — re-seeding never clobbers an edit made since) and `list_terms`.
+>   `SchemaObjectRepository` gained `list_all`, reusing `SchemaObjectDraft` as the read shape
+>   rather than inventing a second near-identical type.
+> - `DatasourceService.seed_glossary` and `.render_context` — both follow deliverable 1's
+>   `_require_datasource`-or-`LookupError` shape (now factored out, since three methods
+>   share it).
+> - `mnemosctl datasource seed-glossary --org-slug X` — writes the four curated terms in
+>   `DEMO_GLOSSARY_TERMS` (`entrypoints/cli.py`): revenue, active customer, order volume,
+>   segment, each with a real `sql_expression` against the actual `analytics.*` columns.
+> - `mnemosctl datasource show-context --org-slug X` — prints the rendered block. Not
+>   strictly required by the deliverable's text, but it is the real, demonstrable consumer
+>   of `render_schema_context` until deliverable 3 exists — a function nothing calls is the
+>   placeholder rule 5 forbids, and this is a genuinely useful inspection command on its own,
+>   not scaffolding built to satisfy a rule.
+>
+> **Verified against the rebuilt `api` image, not just tests:** `docker compose build api &&
+> up -d api`, then `introspect` → `seed-glossary` (`4 newly written`) → `seed-glossary` again
+> (`0 newly written` — idempotent) → `show-context`, which printed all four `analytics.*`
+> tables with their columns and all four glossary terms, schema before glossary. Full
+> transcript in §3's `A3` entry below.
+>
+> **Evidence:** `make test` — 302 passed (290 before this session's work — TRACKER's
+> previous "298" for deliverable 1 was measured against a slightly different tree state;
+> 290 is what this session actually measured on `feat/a3-nl2sql` as it stood before any new
+> code — +12: 5 pure `render_schema_context` cases, 7 glossary integration cases against a
+> real Postgres). `make lint` / `make types` (162 files, `--strict`) / `make check` all
+> clean — `make check` confirms no migration was needed: `glossary_term` already had every
+> column from `M2`.
+>
+> **Deliberately left in draft, not merged, still no UI:** same C12 reasoning as deliverable
+> 1's note. `seed-glossary` and `show-context` are operational CLI commands, not a product
+> screen — the SQL panel (deliverable 5) is still what makes any of `A3` demonstrable in the
+> product.
+>
+> **What is NOT done:** no SQL generation, no `sqlglot` usage anywhere yet, no AST guard, no
+> execution, no narration, no chat-surface UI, no e2e test. §5 below specifies deliverables
+> 3-5 in full.
 
 > ### 2026-08-11 — `A3` started: deliverable 1 (schema introspection) done, PR #15 draft
 >
@@ -340,11 +396,12 @@ discarded. If you find a reference to an old ID anywhere, this is the translatio
 | `M13` frontend | dissolved into `F0` + a UI slice per milestone | Unchanged by this re-plan |
 | `M14` realtime + e2e + docs | `D1` | |
 
-### 🟡 A3 — ask about your data, in progress (1/5), PR #15 draft, 2026-08-11
+### 🟡 A3 — ask about your data, in progress (2/5), PR #15 draft, 2026-08-15
 
 **Not verified end to end yet — no chat-surface UI exists, so there is no "you can now ___"
-sentence to demonstrate.** What is verified is deliverable 1 in isolation, against a real
-`mnemos_ro` connection to a real (test-seeded or compose-seeded) `mnemos_analytics`.
+sentence to demonstrate.** What is verified is deliverables 1 and 2 in isolation, against a
+real `mnemos_ro` connection to a real (test-seeded or compose-seeded) `mnemos_analytics`,
+and against the rebuilt `api` container image.
 
 **Deliverable 1 — schema introspection — done:**
 - `mnemosctl datasource introspect --org-slug X [--slug sales-warehouse]`
@@ -379,7 +436,7 @@ directly before anything was built on top of it: connecting as `mnemos_ro` and a
 That is deliverable 3's second defence, already provable, a session before deliverable 3
 exists.
 
-**Gaps found and fixed as part of this work, not pre-existing and not left for later:**
+**Gaps found and fixed as part of deliverable 1, not pre-existing and not left for later:**
 - `MNEMOS_ANALYTICS_DATABASE_URL` did not exist in `docker-compose.yml` — nothing running
   in a container could have reached `mnemos_analytics` even though `Settings` had carried a
   default for it since `M1`. Fixed.
@@ -387,17 +444,70 @@ exists.
   — would have failed the moment anything tried to build an async engine from it. Fixed,
   and now validated by the same `_require_async_driver` check `database_url` has always had.
 
-**Evidence:** `make test` — 298 passed. `make lint` / `make types` / `make check` clean
-(`alembic check`: "No new upgrade operations detected" — confirmed `sql_datasource`,
-`sql_schema_object`, `glossary_term`, `sql_run` already had `FORCE ROW LEVEL SECURITY` from
-`M2` via a direct `pg_class` query before writing any repository code, rather than assuming
-it). PR #15: `backend`, `frontend`, `compose` all green, draft.
+**Deliverable 2 — the business glossary — done:**
+- `features/datasources/domain/glossary.py`'s `GlossaryTermRow` and
+  `features/datasources/domain/context.py`'s `render_schema_context` are both pure — no
+  SQLAlchemy, no I/O — and unit-tested directly (`test_datasources_domain.py`, 5 new
+  tests): schema grouped by table with its row estimate, glossary listed after the schema,
+  and both halves individually optional so an empty warehouse or an empty glossary each
+  render sensibly rather than emitting an empty section header.
+- `GlossaryRepository.ensure_terms` (`adapters/repository.py`) is idempotent **and
+  non-destructive**: a term already present, matched by its `term` text, is left untouched
+  rather than overwritten — `test_seed_glossary_never_overwrites_a_term_edited_since`
+  proves a re-seed does not clobber an edit made since, not just that it does not
+  duplicate rows.
+- `SchemaObjectRepository` gained `list_all`, reusing deliverable 1's `SchemaObjectDraft` as
+  the read shape rather than a second, identical dataclass.
+- `mnemosctl datasource seed-glossary --org-slug X` seeds the four curated
+  `DEMO_GLOSSARY_TERMS` (`entrypoints/cli.py`): revenue, active customer, order volume,
+  segment — each with a real `sql_expression` against the actual `analytics.*` schema, not
+  a placeholder string.
+- `mnemosctl datasource show-context --org-slug X` prints `render_schema_context`'s output —
+  a real, demonstrable consumer of the render function until deliverable 3's prompt exists.
+  **Run against the rebuilt `api` container**, not just pytest:
+  ```
+  $ docker compose build api && docker compose up -d api
+  $ docker compose exec api mnemosctl datasource seed-glossary --org-slug mnemos
+  glossary terms   : 4 newly written, 4 total seeded
+  $ docker compose exec api mnemosctl datasource seed-glossary --org-slug mnemos
+  glossary terms   : 0 newly written, 4 total seeded          # idempotent
+  $ docker compose exec api mnemosctl datasource show-context --org-slug mnemos
+  ## Schema
+  ### analytics.customer
+  - customer_id (integer)
+  ...
+  ### analytics.sales_order (~900 rows)
+  - customer_id (integer)
+  ...
+  ## Business glossary
+  - **active customer** (also: engaged customer): A customer with at least one sales
+    order placed in the last 90 days. — `EXISTS (SELECT 1 FROM analytics.sales_order so
+    WHERE so.customer_id = analytics.customer.customer_id AND so.ordered_on >=
+    CURRENT_DATE - INTERVAL '90 days')`
+  - **revenue** (also: sales, total sales, income): The net amount collected across
+    completed sales orders. — `SUM(analytics.sales_order.net_amount) WHERE status =
+    'completed'`
+  ...
+  ```
+  Schema printed before glossary, exactly as `render_schema_context` orders it.
+- `DatasourceService._require_datasource` factors the "get by slug or raise `LookupError`"
+  pattern out of `refresh_schema`, `seed_glossary` and `render_context` — three call sites
+  made it worth naming rather than repeating a third time.
 
-**Not done — deliverables 2-5, specified in full in §5:** business glossary, SQL generation
-+ the `sqlglot` AST read-only guard (the security-critical center of this milestone —
-`sqlglot` is declared as a dependency and imported nowhere yet), execution as `mnemos_ro`
-with the timeout/row-cap, narration, and the chat surface's SQL panel including the denial
-screen. No UI exists for any of `A3` yet — C12 is why the PR stays draft.
+**Evidence:** `make test` — 302 passed (290 measured on this branch before deliverable 2's
+work; +12: 5 pure `render_schema_context`/`GlossaryTermRow` cases in
+`test_datasources_domain.py`, 7 integration cases in the new `test_datasources_glossary.py`
+against a real Postgres — idempotence, non-destructive re-seed, the schema-then-glossary
+ordering, and `LookupError` for an unregistered slug). `make lint` / `make types` (162
+source files, `--strict`) / `make check` clean (`alembic check`: "No new upgrade operations
+detected" — `glossary_term` already had every column from `M2`). PR #15: `backend`,
+`frontend`, `compose` all green, still draft.
+
+**Not done — deliverables 3-5, specified in full in §5:** SQL generation + the `sqlglot`
+AST read-only guard (the security-critical center of this milestone — `sqlglot` is declared
+as a dependency and imported nowhere yet), execution as `mnemos_ro` with the timeout/row-cap,
+narration, and the chat surface's SQL panel including the denial screen. No UI exists for
+any of `A3` yet — C12 is why the PR stays draft.
 
 ### ✅ A2 — ask about your documents, verified 2026-08-10
 
@@ -1651,12 +1761,12 @@ Recorded so they are not rediscovered as surprises:
 
 ## 5. NEXT TASK
 
-### `A3` — ask about your data: NL2SQL with two independent read-only defences (2/5 remain: deliverables 3-4; 2 not started; 1 done)
+### `A3` — ask about your data: NL2SQL with two independent read-only defences (3/5 remain: deliverables 3-5; 1-2 done)
 
-**Deliverable 1 (schema introspection) is done, committed, tested, and on
-`feat/a3-nl2sql` — PR #15, open as draft, CI green.** This section now specifies
-deliverables 2-5. Do not restart deliverable 1 or re-read the old version of this section
-looking for it; the §3 `A3` entry above has its evidence.
+**Deliverables 1 (schema introspection) and 2 (business glossary) are done, committed,
+tested, and on `feat/a3-nl2sql` — PR #15, open as draft, CI green.** This section now
+specifies deliverables 3-5. Do not restart 1 or 2, or re-read an old version of this
+section looking for them; the §3 `A3` entry above has their evidence.
 
 > **You can now ask a question about your data in English and see the SQL, the rows and
 > the narration — and see the guard visibly refuse a write.**
@@ -1679,19 +1789,32 @@ already proven to exist**, independent of anything this milestone builds: connec
 deliverable 1's test fixture. Deliverable 3's acceptance test formalizes this; it does not
 discover it fresh.
 
-**What deliverable 1 already gives you, so deliverable 3 does not rebuild it:**
-- `DatasourceService` (`features/datasources/application/service.py`) — `register()` and
-  `refresh_schema()`. Deliverable 3 will add a `generate()`-shaped method or a sibling
-  service; decide by reading `service.py` first, not by guessing its shape.
+**What deliverables 1-2 already give you, so deliverable 3 does not rebuild any of it:**
+- `DatasourceService` (`features/datasources/application/service.py`) — `register()`,
+  `refresh_schema()`, `seed_glossary()`, and **`render_context(org_id, slug) -> str`**,
+  which is the schema-plus-glossary text block deliverable 3's prompt should assemble
+  from directly. Do not re-query `sql_schema_object`/`glossary_term` by hand or re-derive a
+  second rendering — call `render_context` and slot its output into the prompt. Deliverable
+  3 will add a `generate()`-shaped method or a sibling service; decide by reading
+  `service.py` first, not by guessing its shape.
+- `features/datasources/domain/context.py`'s `render_schema_context` — the pure function
+  `render_context` calls. If the prompt needs the schema and glossary shaped differently
+  than deliverable 2 rendered them, extend this function rather than building a parallel
+  one; it is already unit-tested and already the single source of "what the model sees
+  about this warehouse."
 - `sql_schema_object` rows, one table-level (`column_name IS NULL`) plus one per column,
-  per registered datasource — this **is** the schema context deliverable 3 feeds the model.
-  Read it with a plain `select(SqlSchemaObject).where(...)`, no new introspection needed.
+  per registered datasource, and `glossary_term` rows (four seeded for the demo warehouse:
+  revenue, active customer, order volume, segment) — both are what `render_context` reads.
+  There is no reason to query either table directly; `render_context` already does.
 - The Postgres test fixture (`conftest.py`'s `postgres.analytics_ro_url` /
   `.analytics_owner_dsn`) — a real `mnemos_analytics` seeded from the real
   `deploy/postgres/init/02-analytics-seed.sql`. Deliverable 3/4's tests use this directly;
   do not build a second fixture.
-- `mnemosctl datasource introspect --org-slug X` — run this against a live stack before
-  manually testing generation, or there will be no cached schema to generate against.
+- `mnemosctl datasource introspect --org-slug X` then `mnemosctl datasource seed-glossary
+  --org-slug X` — run both against a live stack before manually testing generation, or
+  `render_context` will have nothing cached to render. `mnemosctl datasource show-context
+  --org-slug X` prints exactly what deliverable 3's prompt will receive — use it to sanity
+  check the prompt input before wiring generation to it.
 
 **Read first, in this order:**
 
@@ -1710,10 +1833,10 @@ discover it fresh.
    `datasources` schema group — `sql_datasource`, `sql_run` (per-attempt safety verdicts,
    authorized/denied tables) and `glossary_term` all exist from `M2`.
 5. **The code you extend:**
-   - `backend/src/mnemos/features/datasources/` — deliverable 1's whole tree
-     (`domain/schema.py`, `application/{ports,service}.py`,
+   - `backend/src/mnemos/features/datasources/` — deliverables 1-2's whole tree
+     (`domain/{schema,glossary,context}.py`, `application/{ports,service}.py`,
      `adapters/{introspection,repository}.py`). This is the pattern: pure domain functions,
-     `Protocol` ports, Postgres adapters, a thin CLI or flow on top. Deliverables 2-4 are
+     `Protocol` ports, Postgres adapters, a thin CLI or flow on top. Deliverables 3-4 are
      more of this feature, not a new one.
    - `backend/src/mnemos/features/datasources/adapters/models.py` — `SqlDatasource`,
      `SqlRun`, `SqlSchemaObject`, `GlossaryTerm`. Read the comments: `sql_run` is designed
@@ -1735,16 +1858,8 @@ discover it fresh.
      deliberately named (`{kind: "citation", ...}`) so `A3` can add `{kind: "sql_run", ...}`
      without reshaping it.
 
-**Scope — deliverables 2-5, one commit each. (1 is done — see above.)**
+**Scope — deliverables 3-5, one commit each. (1 and 2 are done — see above.)**
 
-2. **The business glossary.** `glossary_term` rows — "revenue means `sales_order.total_amount`
-   summed", "active customer means one with an order in the last 90 days" — fed into the
-   same schema context deliverable 1 built. Seed a handful for the demo warehouse; a CRUD
-   surface for them is `C2`-adjacent and out of scope unless the UI slice needs one to be
-   demonstrable. Suggested shape: a pure `domain` function that renders `SqlSchemaObject` +
-   `GlossaryTerm` rows into the text block deliverable 3's prompt will use — this was
-   deliberately *not* built in deliverable 1 (it needs the glossary to have any rows to
-   render), so it belongs here, not as a deliverable-1 leftover.
 3. **Generation and the AST guard.** Generate SQL through the `ChatModel` port, then parse
    it with **`sqlglot`** (already a declared dependency, per the original brief — nothing
    imports it yet; free, pure-Python, and the alternative is hand-rolling a SQL parser,

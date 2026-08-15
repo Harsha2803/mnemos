@@ -232,7 +232,7 @@ Two rules govern every row.
 | **A0** | Sign-in screen + browser session handling (`M3.4`'s UI half) + the fail-closed route guard (deny by default) | **sign in through Keycloak, stay signed in across a reload, and sign out** — and no route added after this is reachable unauthenticated | ✅ 2026-08-03 |
 | **A1** | LLM gateway (Ollama) · chat sessions + messages · SSE streaming · the chat surface | **talk to it** — ask a question and watch the answer stream in token by token | ✅ 2026-08-08 |
 | **A2** | Upload → extract → chunk → embed (pgvector HNSW) · retrieval ported from `_v1` · RAG flow · citations · knowledge library | **upload a document and ask questions about it**, with citations you click into | ✅ 2026-08-11 (PR #14) |
-| **A3** | NL2SQL: introspection · glossary · generate · AST read-only guard · `mnemos_ro` execution · narration · SQL panel | **ask a question about your data in English** and see the SQL, the rows and the narration — and see the guard visibly refuse a write | 🟡 in progress — introspection done (PR #15 draft), glossary/generation/execution/UI remain |
+| **A3** | NL2SQL: introspection · glossary · generate · AST read-only guard · `mnemos_ro` execution · narration · SQL panel | **ask a question about your data in English** and see the SQL, the rows and the narration — and see the guard visibly refuse a write | 🟡 in progress — introspection + glossary done (PR #15 draft), generation/execution/UI remain |
 | **A4** | Router: classify a message → chat / RAG / NL2SQL · flow indicator | **ask anything without choosing a mode**, and see which flow answered and why | ⬜ |
 
 **At the end of Phase A the thing this project is for exists.** Everything after deepens it.
@@ -305,13 +305,16 @@ to end; verified against the merged image, not just the branch, via the real
 `frontend/e2e/knowledge.spec.ts` Playwright suite.
 
 **`A3` is in progress on `feat/a3-nl2sql`, PR #15 (draft, CI green, not merged).**
-Deliverable 1 of 5 — schema introspection — is done: `mnemosctl datasource introspect`
-registers the seeded `mnemos_analytics` warehouse per org and caches its schema, connecting
-as `mnemos_ro` (the same role generated SQL will execute as). Nothing about `A3` is visible
-in the product yet — no glossary, no generation, no AST guard, no execution, no SQL panel —
-so the PR stays draft per C12 until deliverable 5 lands. Remaining scope: the business
-glossary, generated SQL behind **two independent read-only defences** (an AST guard via
-`sqlglot` and the `mnemos_ro` role), execution, narration, and the SQL panel UI, fully
+Deliverables 1-2 of 5 are done: `mnemosctl datasource introspect` registers the seeded
+`mnemos_analytics` warehouse per org and caches its schema, connecting as `mnemos_ro` (the
+same role generated SQL will execute as); `mnemosctl datasource seed-glossary` writes four
+curated business-vocabulary terms, and `DatasourceService.render_context` (backed by the
+pure `render_schema_context`) renders the cached schema plus glossary into the text block
+deliverable 3's prompt will use, demonstrable now via `mnemosctl datasource show-context`.
+Nothing about `A3` is visible in the *product* yet — no generation, no AST guard, no
+execution, no SQL panel — so the PR stays draft per C12 until deliverable 5 lands.
+Remaining scope: generated SQL behind **two independent read-only defences** (an AST guard
+via `sqlglot` and the `mnemos_ro` role), execution, narration, and the SQL panel UI, fully
 specified in [TRACKER §5](../TRACKER.md#5-next-task). The router that stops the user having
 to choose a flow is `A4`.
 
@@ -812,11 +815,11 @@ the whole `up`. It does now, so plain `docker compose up -d` brings the frontend
 everything else and `web` has a healthcheck of its own — a stack whose UI needs a
 remembered extra flag is a stack whose UI does not get looked at.
 
-### A3 — ask about your data 🟡 in progress (1/5)
+### A3 — ask about your data 🟡 in progress (2/5)
 
-Deliverable 1 (schema introspection) done 2026-08-11 on branch `feat/a3-nl2sql` (PR #15,
-draft). Full evidence is in
-[TRACKER §3](../TRACKER.md#-a3--ask-about-your-data-in-progress-15-pr-15-draft-2026-08-11).
+Deliverable 1 (schema introspection) done 2026-08-11, deliverable 2 (business glossary)
+done 2026-08-15, both on branch `feat/a3-nl2sql` (PR #15, draft). Full evidence is in
+[TRACKER §3](../TRACKER.md#-a3--ask-about-your-data-in-progress-25-pr-15-draft-2026-08-15).
 
 **Introspection connects with the datasource's own DSN, never through `Database`.**
 `Database` (`platform/db.py`) is the application's own Postgres, connected as `mnemos_app`
@@ -841,6 +844,19 @@ seeds it by executing the real `deploy/postgres/init/02-analytics-seed.sql` — 
 deliverable 1's tests prove the `mnemos_ro` role's can't-write guarantee directly
 (`INSERT ... -> asyncpg.exceptions.InsufficientPrivilegeError`) a session before deliverable
 3 (the AST guard) exists to depend on it.
+
+**Deliverable 2 (business glossary), done 2026-08-15.** `render_schema_context`
+(`domain/context.py`) is the one function this deliverable exists to build — pure,
+grouping `sql_schema_object` rows by table and listing `glossary_term` rows after them —
+and it is deliberately the thing `A3`'s eventual prompt assembly will call rather than
+re-deriving. `GlossaryRepository.ensure_terms` is idempotent by matching on `term` text
+rather than a synthetic key, and specifically **non-destructive**: re-running the seed
+after an operator has hand-edited a term's definition must not overwrite it, which is why
+the acceptance test checks that a re-seed with different content leaves the original in
+place, not merely that row counts stay stable. `mnemosctl datasource show-context` is new
+and not in the original deliverable text, but it is the real consumer that keeps
+`render_schema_context` from being a function nothing calls until deliverable 3 exists —
+consistent with TRACKER §0 rule 5 (no placeholders).
 
 ### A2 — ask about your documents ✅
 
