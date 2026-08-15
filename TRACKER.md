@@ -83,15 +83,27 @@ docs-only commit (no code changed).
 > partial-failure behaviour, and the resize handles under both simulated pointer drag
 > and keyboard. `npm run build` (production) succeeds.
 >
-> **Not done: real-browser verification.** `docker-compose.yml` pins `name: mnemos`
-> (line 12) — every git worktree of this repo, not only the primary checkout, resolves
-> to the *same* running compose project. The stack was mid-use by the concurrent session
-> building the per-session-log-files work above (its `api`/`worker`/`realtime` had just
-> been rebuilt from *its* backend changes) while this session ran, and rebuilding those
-> same services from this branch would have overwritten containers another session was
-> actively relying on. Automated coverage above is real; a manual pass through
-> `docker compose up -d --build` once the stack is free is the one thing this note
-> cannot claim.
+> **Real-browser verification, done as a follow-up once the shared stack was free.**
+> `docker-compose.yml` pins `name: mnemos` (line 12) — every git worktree of this repo,
+> not only the primary checkout, resolves to the *same* running compose project, and the
+> stack was mid-use by the concurrent session building the per-session-log-files work
+> above while this session first built and tested the seven fixes, so PR #18 originally
+> went up without a browser pass. The project owner asked for the containers to be
+> rebuilt once that concurrent session had moved on to `feat/b1-connectors`; `docker
+> compose build api worker realtime web && docker compose up -d api worker realtime web`
+> from this branch's worktree, then verified live against `localhost:3000` signed in as
+> `analyst@mnemos.local`: a fresh session started at "New chat", sent "What is the
+> tallest mountain in the world?", and the sidebar row retitled itself to the question
+> live, no reload — deliverable 1 end to end. Renamed that row inline (Enter commits),
+> created and deleted a second session while it was the open one and landed back on
+> `/chat`, confirming the delete dialog named it correctly first. Dragged the sidebar's
+> resize handle 100px right and watched it grow 260px → ~297px in the DOM, then
+> collapsed and reopened it from the toolbar. On `/knowledge`, dropped a 62-byte file
+> and a real 26 MB file together: the oversized one was refused client-side
+> ("huge.txt: larger than the 25 MB limit") without a network request, the small one
+> uploaded and appeared in the document list — the multi-file/partial-failure path
+> genuinely exercised, not just unit-tested. Both test documents and sessions cleaned
+> up afterward.
 >
 > A request from the project owner, out of band from the `B1`/`B2`/… plan above: every
 > authenticated request's log lines should also land in a file named by that request's

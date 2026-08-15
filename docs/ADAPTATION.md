@@ -376,7 +376,11 @@ separately); an open conversation reads at a new, wider `--chat-measure` token w
 tighter gutter instead of the document-route `measure`; and the sidebar now collapses/
 resizes exactly like the inspector already did, plus draggable-and-keyboard-resizable
 boundaries for both panels (the ARIA "window splitter" pattern). No schema change, no
-migration. Full detail and evidence is in
+migration. Live-verified against the running compose stack once it was free: a session
+retitling itself from its first message with no reload, inline rename, delete-the-open-
+session navigating back to `/chat`, the sidebar resize handle and collapse toggle, and a
+real 26 MB file being refused client-side alongside a small file that uploaded
+successfully. Full detail and evidence is in
 [TRACKER's dated note](../TRACKER.md) for 2026-08-16.
 
 ### F0 — app shell ✅
