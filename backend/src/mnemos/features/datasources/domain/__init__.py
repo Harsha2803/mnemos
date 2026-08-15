@@ -2,6 +2,8 @@
 
 from __future__ import annotations
 
+from mnemos.features.datasources.domain.context import render_schema_context
+from mnemos.features.datasources.domain.glossary import GlossaryTermRow
 from mnemos.features.datasources.domain.ids import DatasourceId, SqlRunId
 from mnemos.features.datasources.domain.schema import (
     IntrospectedColumn,
@@ -12,9 +14,11 @@ from mnemos.features.datasources.domain.schema import (
 
 __all__ = [
     "DatasourceId",
+    "GlossaryTermRow",
     "IntrospectedColumn",
     "IntrospectedTable",
     "SchemaObjectDraft",
     "SqlRunId",
     "build_schema_objects",
+    "render_schema_context",
 ]

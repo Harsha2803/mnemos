@@ -36,9 +36,11 @@ from mnemos.core.security import PasswordHasher
 from mnemos.features.datasources.adapters.introspection import PostgresIntrospector
 from mnemos.features.datasources.adapters.repository import (
     DatasourceRepository,
+    GlossaryRepository,
     SchemaObjectRepository,
 )
 from mnemos.features.datasources.application.service import DatasourceService
+from mnemos.features.datasources.domain import GlossaryTermRow
 from mnemos.features.identity.adapters.bootstrap_store import SqlBootstrapStore
 from mnemos.features.identity.adapters.models import Org
 from mnemos.features.identity.application.bootstrap import (
@@ -62,6 +64,40 @@ DEMO_DATASOURCE_DESCRIPTION = (
     "region, product, customer, sales_order."
 )
 DEMO_DATASOURCE_SCHEMAS = ["analytics"]
+
+#: The demo warehouse's business vocabulary (TRACKER §5 deliverable 2). Curated
+#: by hand, the way a real deployment's glossary would be — these are facts
+#: about what "revenue" means *here*, not something introspection could ever
+#: infer from `information_schema`.
+DEMO_GLOSSARY_TERMS = [
+    GlossaryTermRow(
+        term="revenue",
+        definition="The net amount collected across completed sales orders.",
+        sql_expression="SUM(analytics.sales_order.net_amount) WHERE status = 'completed'",
+        synonyms=["sales", "total sales", "income"],
+    ),
+    GlossaryTermRow(
+        term="active customer",
+        definition="A customer with at least one sales order placed in the last 90 days.",
+        sql_expression=(
+            "EXISTS (SELECT 1 FROM analytics.sales_order so WHERE so.customer_id = "
+            "analytics.customer.customer_id AND so.ordered_on >= CURRENT_DATE - INTERVAL '90 days')"
+        ),
+        synonyms=["engaged customer"],
+    ),
+    GlossaryTermRow(
+        term="order volume",
+        definition="The count of sales orders placed, regardless of status.",
+        sql_expression="COUNT(*) FROM analytics.sales_order",
+        synonyms=["order count", "number of orders"],
+    ),
+    GlossaryTermRow(
+        term="segment",
+        definition="A customer's commercial tier: enterprise, mid-market, or smb.",
+        sql_expression="analytics.customer.segment",
+        synonyms=["customer tier", "tier"],
+    ),
+]
 
 #: Where the admin password may be read from. It is an environment variable or an
 #: interactive prompt and **never a command-line argument**: `argv` is readable by
@@ -271,19 +307,22 @@ async def _resolve_org_id(db: Database, org_slug: str) -> OrgId:
     return OrgId(org.id)
 
 
+def _datasource_service(db: Database, settings: Settings) -> DatasourceService:
+    return DatasourceService(
+        datasources=DatasourceRepository(db, DEFAULT_ID_GENERATOR),
+        schema_objects=SchemaObjectRepository(db, DEFAULT_ID_GENERATOR),
+        introspector=PostgresIntrospector(),
+        cipher=DsnCipher(settings.dsn_encryption_key.get_secret_value()),
+        glossary=GlossaryRepository(db, DEFAULT_ID_GENERATOR),
+    )
+
+
 async def _datasource_introspect(args: argparse.Namespace) -> int:
     settings = get_settings()
     db = Database(settings)
     try:
         org_id = await _resolve_org_id(db, args.org_slug)
-
-        cipher = DsnCipher(settings.dsn_encryption_key.get_secret_value())
-        service = DatasourceService(
-            datasources=DatasourceRepository(db, DEFAULT_ID_GENERATOR),
-            schema_objects=SchemaObjectRepository(db, DEFAULT_ID_GENERATOR),
-            introspector=PostgresIntrospector(),
-            cipher=cipher,
-        )
+        service = _datasource_service(db, settings)
         datasource = await service.register(
             org_id=org_id,
             slug=args.slug,
@@ -300,6 +339,36 @@ async def _datasource_introspect(args: argparse.Namespace) -> int:
     print(f"datasource       : {datasource.slug}  ({datasource.name})")
     print(f"allowed schemas  : {', '.join(datasource.allowed_schemas)}")
     print(f"schema objects   : {rows_written} rows cached in sql_schema_object")
+    return 0
+
+
+async def _datasource_seed_glossary(args: argparse.Namespace) -> int:
+    settings = get_settings()
+    db = Database(settings)
+    try:
+        org_id = await _resolve_org_id(db, args.org_slug)
+        service = _datasource_service(db, settings)
+        written = await service.seed_glossary(
+            org_id=org_id, slug=args.slug, terms=DEMO_GLOSSARY_TERMS
+        )
+    finally:
+        await db.dispose()
+
+    print(f"glossary terms   : {written} newly written, {len(DEMO_GLOSSARY_TERMS)} total seeded")
+    return 0
+
+
+async def _datasource_show_context(args: argparse.Namespace) -> int:
+    settings = get_settings()
+    db = Database(settings)
+    try:
+        org_id = await _resolve_org_id(db, args.org_slug)
+        service = _datasource_service(db, settings)
+        context = await service.render_context(org_id=org_id, slug=args.slug)
+    finally:
+        await db.dispose()
+
+    print(context if context else "(no cached schema or glossary yet)")
     return 0
 
 
@@ -334,7 +403,9 @@ def main() -> int:
     boot.add_argument("--oidc-issuer-internal", default=None, help="Issuer the API validates over")
     boot.add_argument("--oidc-client-id", default=None, help="OIDC client id, e.g. 'mnemos-web'")
 
-    ds_parser = sub.add_parser("datasource", help="NL2SQL warehouse registration and introspection")
+    ds_parser = sub.add_parser(
+        "datasource", help="NL2SQL warehouse registration, introspection, and glossary"
+    )
     ds_sub = ds_parser.add_subparsers(dest="command", required=True)
     introspect = ds_sub.add_parser(
         "introspect",
@@ -350,6 +421,43 @@ def main() -> int:
         "--org-slug", required=True, help="Org to register the datasource under"
     )
     introspect.add_argument(
+        "--slug",
+        default=DEMO_DATASOURCE_SLUG,
+        help=f"Datasource slug (default: {DEMO_DATASOURCE_SLUG})",
+    )
+
+    seed_glossary = ds_sub.add_parser(
+        "seed-glossary",
+        help="seed the demo warehouse's business glossary (idempotent)",
+        description=(
+            "Writes the curated glossary terms in entrypoints/cli.py's "
+            "DEMO_GLOSSARY_TERMS for one org's datasource. A term already present, "
+            "matched by its term text, is left untouched — re-running never overwrites "
+            "an edit made since. Requires the datasource to already be registered "
+            "('datasource introspect' first)."
+        ),
+    )
+    seed_glossary.add_argument(
+        "--org-slug", required=True, help="Org whose datasource gets the glossary"
+    )
+    seed_glossary.add_argument(
+        "--slug",
+        default=DEMO_DATASOURCE_SLUG,
+        help=f"Datasource slug (default: {DEMO_DATASOURCE_SLUG})",
+    )
+
+    show_context = ds_sub.add_parser(
+        "show-context",
+        help="print the schema + glossary text block the NL2SQL prompt will use",
+        description=(
+            "Renders the datasource's cached sql_schema_object rows and glossary_term "
+            "rows into the same text block deliverable 3's prompt assembles from — a "
+            "read-only view for inspecting what the model will see, useful once "
+            "'introspect' and 'seed-glossary' have both been run."
+        ),
+    )
+    show_context.add_argument("--org-slug", required=True, help="Org whose datasource to render")
+    show_context.add_argument(
         "--slug",
         default=DEMO_DATASOURCE_SLUG,
         help=f"Datasource slug (default: {DEMO_DATASOURCE_SLUG})",
@@ -378,6 +486,20 @@ def main() -> int:
             return asyncio.run(_datasource_introspect(args))
         except MnemosError as exc:
             print(f"datasource introspect failed: {exc.message}", file=sys.stderr)
+            return 2
+
+    if args.group == "datasource" and args.command == "seed-glossary":
+        try:
+            return asyncio.run(_datasource_seed_glossary(args))
+        except (MnemosError, LookupError) as exc:
+            print(f"datasource seed-glossary failed: {exc}", file=sys.stderr)
+            return 2
+
+    if args.group == "datasource" and args.command == "show-context":
+        try:
+            return asyncio.run(_datasource_show_context(args))
+        except (MnemosError, LookupError) as exc:
+            print(f"datasource show-context failed: {exc}", file=sys.stderr)
             return 2
 
     parser.print_help()

@@ -10,9 +10,13 @@ from __future__ import annotations
 from sqlalchemy import delete, func, select
 
 from mnemos.core.ids import IdGenerator
-from mnemos.features.datasources.adapters.models import SqlDatasource, SqlSchemaObject
+from mnemos.features.datasources.adapters.models import (
+    GlossaryTerm,
+    SqlDatasource,
+    SqlSchemaObject,
+)
 from mnemos.features.datasources.application.ports import DatasourceRecord
-from mnemos.features.datasources.domain import DatasourceId, SchemaObjectDraft
+from mnemos.features.datasources.domain import DatasourceId, GlossaryTermRow, SchemaObjectDraft
 from mnemos.features.identity.domain import OrgId
 from mnemos.platform.db import Database
 
@@ -125,3 +129,93 @@ class SchemaObjectRepository:
             ]
             session.add_all(rows)
         return len(rows)
+
+    async def list_all(
+        self, *, org_id: OrgId, datasource_id: DatasourceId
+    ) -> list[SchemaObjectDraft]:
+        async with self._db.session(org_id=org_id) as session:
+            rows = (
+                await session.scalars(
+                    select(SqlSchemaObject)
+                    .where(
+                        SqlSchemaObject.org_id == org_id,
+                        SqlSchemaObject.datasource_id == datasource_id,
+                    )
+                    # Table row (`column_name is null`) before its columns —
+                    # `render_schema_context` relies on seeing a table's own
+                    # row before it starts collecting that table's columns.
+                    .order_by(SqlSchemaObject.table_name, SqlSchemaObject.column_name.nulls_first())
+                )
+            ).all()
+        return [
+            SchemaObjectDraft(
+                schema_name=r.schema_name,
+                table_name=r.table_name,
+                column_name=r.column_name,
+                data_type=r.data_type,
+                is_nullable=r.is_nullable,
+                row_estimate=r.row_estimate,
+            )
+            for r in rows
+        ]
+
+
+class GlossaryRepository:
+    def __init__(self, db: Database, ids: IdGenerator) -> None:
+        self._db = db
+        self._ids = ids
+
+    async def ensure_terms(
+        self, *, org_id: OrgId, datasource_id: DatasourceId, terms: list[GlossaryTermRow]
+    ) -> int:
+        async with self._db.session(org_id=org_id) as session:
+            existing = set(
+                (
+                    await session.scalars(
+                        select(GlossaryTerm.term).where(
+                            GlossaryTerm.org_id == org_id,
+                            GlossaryTerm.datasource_id == datasource_id,
+                        )
+                    )
+                ).all()
+            )
+            to_add = [t for t in terms if t.term not in existing]
+            session.add_all(
+                [
+                    GlossaryTerm(
+                        id=self._ids.new(),
+                        org_id=org_id,
+                        datasource_id=datasource_id,
+                        term=t.term,
+                        definition=t.definition,
+                        sql_expression=t.sql_expression,
+                        synonyms=t.synonyms,
+                    )
+                    for t in to_add
+                ]
+            )
+        return len(to_add)
+
+    async def list_terms(
+        self, *, org_id: OrgId, datasource_id: DatasourceId
+    ) -> list[GlossaryTermRow]:
+        async with self._db.session(org_id=org_id) as session:
+            rows = (
+                await session.scalars(
+                    select(GlossaryTerm)
+                    .where(
+                        GlossaryTerm.org_id == org_id,
+                        GlossaryTerm.datasource_id == datasource_id,
+                    )
+                    .order_by(GlossaryTerm.term)
+                )
+            ).all()
+        return [
+            GlossaryTermRow(
+                term=r.term,
+                definition=r.definition,
+                sql_expression=r.sql_expression,
+                synonyms=list(r.synonyms),
+            )
+            for r in rows
+        ]

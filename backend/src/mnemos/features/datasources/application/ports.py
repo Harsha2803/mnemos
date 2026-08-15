@@ -10,6 +10,7 @@ from typing import Protocol
 
 from mnemos.features.datasources.domain import (
     DatasourceId,
+    GlossaryTermRow,
     IntrospectedColumn,
     IntrospectedTable,
     SchemaObjectDraft,
@@ -70,3 +71,26 @@ class SchemaObjectRepository(Protocol):
         infrequent action that makes a delete-then-insert cheap enough.
         """
         ...
+
+    async def list_all(
+        self, *, org_id: OrgId, datasource_id: DatasourceId
+    ) -> list[SchemaObjectDraft]:
+        """The cached schema, table rows before their columns — what
+        `render_schema_context` renders. `SchemaObjectDraft` doubles as the
+        read shape too; a cached row and a row about to be cached carry
+        exactly the same fields."""
+        ...
+
+
+class GlossaryRepository(Protocol):
+    async def ensure_terms(
+        self, *, org_id: OrgId, datasource_id: DatasourceId, terms: list[GlossaryTermRow]
+    ) -> int:
+        """Idempotent per term, matched by `term` text: a term already present
+        is left untouched, so re-running the seed never overwrites an edit
+        made since. Returns how many were newly written."""
+        ...
+
+    async def list_terms(
+        self, *, org_id: OrgId, datasource_id: DatasourceId
+    ) -> list[GlossaryTermRow]: ...

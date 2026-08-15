@@ -22,6 +22,7 @@ from mnemos.core.ids import Uuid7Generator, uuid7
 from mnemos.features.datasources.adapters.introspection import PostgresIntrospector
 from mnemos.features.datasources.adapters.repository import (
     DatasourceRepository,
+    GlossaryRepository,
     SchemaObjectRepository,
 )
 from mnemos.features.datasources.application.service import DatasourceService
@@ -83,6 +84,7 @@ def service(db: Database, postgres: Postgres) -> DatasourceService:
         schema_objects=SchemaObjectRepository(db, ids),
         introspector=PostgresIntrospector(),
         cipher=DsnCipher(DSN_KEY),
+        glossary=GlossaryRepository(db, ids),
     )
 
 

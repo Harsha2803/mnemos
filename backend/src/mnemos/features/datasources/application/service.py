@@ -14,10 +14,15 @@ from mnemos.core.logging import get_logger
 from mnemos.features.datasources.application.ports import (
     DatasourceRecord,
     DatasourceRepository,
+    GlossaryRepository,
     SchemaIntrospector,
     SchemaObjectRepository,
 )
-from mnemos.features.datasources.domain import build_schema_objects
+from mnemos.features.datasources.domain import (
+    GlossaryTermRow,
+    build_schema_objects,
+    render_schema_context,
+)
 from mnemos.features.identity.domain import OrgId
 
 log = get_logger(__name__)
@@ -31,11 +36,13 @@ class DatasourceService:
         schema_objects: SchemaObjectRepository,
         introspector: SchemaIntrospector,
         cipher: DsnCipher,
+        glossary: GlossaryRepository,
     ) -> None:
         self._datasources = datasources
         self._schema_objects = schema_objects
         self._introspector = introspector
         self._cipher = cipher
+        self._glossary = glossary
 
     async def register(
         self,
@@ -65,15 +72,19 @@ class DatasourceService:
             allowed_schemas=allowed_schemas,
         )
 
+    async def _require_datasource(self, *, org_id: OrgId, slug: str) -> DatasourceRecord:
+        datasource = await self._datasources.get_by_slug(org_id=org_id, slug=slug)
+        if datasource is None:
+            raise LookupError(f"no datasource registered for org {org_id} with slug {slug!r}")
+        return datasource
+
     async def refresh_schema(self, *, org_id: OrgId, slug: str) -> int:
         """Introspect the registered warehouse and replace its cached schema.
 
         Returns the number of `sql_schema_object` rows written, so the CLI has
         something concrete to print rather than a bare "done".
         """
-        datasource = await self._datasources.get_by_slug(org_id=org_id, slug=slug)
-        if datasource is None:
-            raise LookupError(f"no datasource registered for org {org_id} with slug {slug!r}")
+        datasource = await self._require_datasource(org_id=org_id, slug=slug)
 
         dsn = self._cipher.decrypt(datasource.dsn_encrypted)
         tables, columns = await self._introspector.introspect(
@@ -93,3 +104,30 @@ class DatasourceService:
             rows_written=count,
         )
         return count
+
+    async def seed_glossary(self, *, org_id: OrgId, slug: str, terms: list[GlossaryTermRow]) -> int:
+        """Idempotent: a term already present (matched by its `term` text) is
+        left untouched. Returns how many were newly written, mirroring
+        `refresh_schema`'s "something concrete to print" reasoning."""
+        datasource = await self._require_datasource(org_id=org_id, slug=slug)
+        written = await self._glossary.ensure_terms(
+            org_id=org_id, datasource_id=datasource.id, terms=terms
+        )
+        log.info(
+            "datasources.glossary_seeded",
+            org_id=str(org_id),
+            datasource_slug=slug,
+            terms_written=written,
+        )
+        return written
+
+    async def render_context(self, *, org_id: OrgId, slug: str) -> str:
+        """The schema-plus-glossary text block deliverable 3's prompt uses.
+        Reads the caches deliverable 1 and `seed_glossary` write; introspects
+        and seeds nothing itself."""
+        datasource = await self._require_datasource(org_id=org_id, slug=slug)
+        schema_objects = await self._schema_objects.list_all(
+            org_id=org_id, datasource_id=datasource.id
+        )
+        glossary_terms = await self._glossary.list_terms(org_id=org_id, datasource_id=datasource.id)
+        return render_schema_context(schema_objects=schema_objects, glossary_terms=glossary_terms)

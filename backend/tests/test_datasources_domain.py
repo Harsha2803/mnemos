@@ -12,9 +12,12 @@ nullable).
 from __future__ import annotations
 
 from mnemos.features.datasources.domain import (
+    GlossaryTermRow,
     IntrospectedColumn,
     IntrospectedTable,
+    SchemaObjectDraft,
     build_schema_objects,
+    render_schema_context,
 )
 
 
@@ -85,3 +88,101 @@ def test_build_schema_objects_leaves_row_estimate_null_for_an_unmatched_column()
 
 def test_build_schema_objects_is_empty_for_an_empty_warehouse() -> None:
     assert build_schema_objects(tables=[], columns=[]) == []
+
+
+def test_render_schema_context_groups_columns_under_their_table_with_the_row_estimate() -> None:
+    schema_objects = [
+        SchemaObjectDraft(
+            schema_name="analytics",
+            table_name="region",
+            column_name=None,
+            data_type=None,
+            is_nullable=None,
+            row_estimate=4,
+        ),
+        SchemaObjectDraft(
+            schema_name="analytics",
+            table_name="region",
+            column_name="region_id",
+            data_type="integer",
+            is_nullable=False,
+            row_estimate=4,
+        ),
+        SchemaObjectDraft(
+            schema_name="analytics",
+            table_name="region",
+            column_name="country",
+            data_type="text",
+            is_nullable=True,
+            row_estimate=4,
+        ),
+    ]
+
+    context = render_schema_context(schema_objects=schema_objects, glossary_terms=[])
+
+    assert "## Schema" in context
+    assert "### analytics.region (~4 rows)" in context
+    assert "- region_id (integer)" in context
+    assert "- country (text, nullable)" in context
+    assert "## Business glossary" not in context
+
+
+def test_render_schema_context_lists_glossary_terms_with_synonyms_and_expression() -> None:
+    terms = [
+        GlossaryTermRow(
+            term="revenue",
+            definition="Net amount collected for completed orders.",
+            sql_expression="SUM(analytics.sales_order.net_amount)",
+            synonyms=["sales", "income"],
+        )
+    ]
+
+    context = render_schema_context(schema_objects=[], glossary_terms=terms)
+
+    assert "## Business glossary" in context
+    assert "**revenue**" in context
+    assert "(also: sales, income)" in context
+    assert "Net amount collected for completed orders." in context
+    assert "`SUM(analytics.sales_order.net_amount)`" in context
+    assert "## Schema" not in context
+
+
+def test_render_schema_context_puts_schema_before_glossary() -> None:
+    schema_objects = [
+        SchemaObjectDraft(
+            schema_name="analytics",
+            table_name="region",
+            column_name=None,
+            data_type=None,
+            is_nullable=None,
+            row_estimate=None,
+        )
+    ]
+    terms = [
+        GlossaryTermRow(term="revenue", definition="Net sales.", sql_expression=None, synonyms=[])
+    ]
+
+    context = render_schema_context(schema_objects=schema_objects, glossary_terms=terms)
+
+    assert context.index("## Schema") < context.index("## Business glossary")
+
+
+def test_render_schema_context_is_empty_string_with_nothing_cached() -> None:
+    assert render_schema_context(schema_objects=[], glossary_terms=[]) == ""
+
+
+def test_render_schema_context_handles_a_table_with_no_visible_columns() -> None:
+    schema_objects = [
+        SchemaObjectDraft(
+            schema_name="analytics",
+            table_name="empty",
+            column_name=None,
+            data_type=None,
+            is_nullable=None,
+            row_estimate=0,
+        )
+    ]
+
+    context = render_schema_context(schema_objects=schema_objects, glossary_terms=[])
+
+    assert "### analytics.empty (~0 rows)" in context
