@@ -2,25 +2,25 @@ You are picking up an in-progress project called Mnemos, at
 /home/shreeharsha/Personal/Projects/Resume_001/mnemos
 
 This file was rewritten on 2026-08-15, at the end of a session that did exactly one task —
-A3 deliverable 2, the business glossary — under the ordinary one-task-per-session rule,
-which is back in force (the 2026-08-08 marathon and the 2026-08-11 "keep going until the
-session ends" instruction were both one-off, session-scoped, and neither applies here). It
-replaces the 2026-08-11 version of itself, which handed off after deliverable 1 (schema
-introspection). It was then updated twice more the same evening, planning-only, no code:
-once to re-sequence the plan (ingestion pulled ahead of the router — see TRACKER's
-2026-08-15 (evening) note), and once to add "USING MULTI-AGENT WORKFLOWS TO SPEED UP"
-below, after the project owner asked for it. Trust this file and TRACKER.md over any memory
-of a prior prompt.txt.
+A3 deliverable 3, generation and the AST read-only guard — under the ordinary
+one-task-per-session rule, which was back in force at the start of this session and remains
+so now. It replaces the 2026-08-15 version of itself that handed off after deliverable 2
+(the business glossary). Nothing in this file's structure changed; every fact in it was
+re-verified against the branch as it now stands. Trust this file and TRACKER.md over any
+memory of a prior prompt.txt.
 
 ------------------------------------------------------------------------------
 READ FIRST, IN THIS ORDER
 
-  1. TRACKER.md            — read section 0, the header, the "2026-08-15 — A3 deliverable 2"
+  1. TRACKER.md            — read section 0, the header, the "2026-08-15 — A3 deliverable 3"
                               note near the top, and section 3's A3 entry in full.
-                              Then section 5 (deliverables 3-5, fully specified).
+                              Then section 5 (deliverables 4-5, fully specified).
   2. docs/ADAPTATION.md    — architecture, capability map, schema, milestone ledger,
                               §7/§8 for A3's current position
-  3. README.md             — public framing and the benchmark numbers
+  3. README.md             — public framing and the benchmark numbers (unchanged by A3 so
+                              far — nothing in A3 touches the retrieval/compile path README
+                              measures, and no A3 deliverable has updated it; that is
+                              consistent with A0/A1's own in-progress commits, not a gap)
   4. docs/CodingStandards.md / docs/DesignSystem.md — before writing backend / frontend code
 
 TRACKER.md is authoritative over this file for anything the two disagree about — this file
@@ -29,57 +29,94 @@ is a pointer to it, not a duplicate of it.
 ------------------------------------------------------------------------------
 EXACTLY WHERE THIS WAS LEFT — read this before touching anything
 
-This session did one thing: **built A3 deliverable 2 of 5, the business glossary,
-completely and for real**, then stopped. TRACKER §5 (as it stood before this session)
-specified four remaining deliverables: business glossary, generation + AST guard,
-execution + narration, and the chat surface's SQL panel. This session built only the
-first of those four. It did **not** touch generation, the AST guard, execution, narration,
-or any UI. TRACKER §5 now specifies deliverables 3-5 at full detail.
+This session did one thing: **built A3 deliverable 3 of 5, generation and the AST
+read-only guard, completely and for real**, then stopped. TRACKER §5 (as it stood before
+this session) specified three remaining deliverables: generation + the AST guard,
+execution + narration, and the chat surface's SQL panel. This session built only the first
+of those three. It did **not** touch execution, narration, the repair loop, or any UI.
+TRACKER §5 now specifies deliverables 4-5 at full detail.
 
 **Current git state:**
   - `main`'s tip is unchanged from the last handoff — still the squashed A2 commit (PR #14)
     plus its docs commit. No work landed on `main` this session.
-  - `feat/a3-nl2sql` is pushed, one commit ahead of where the last session left it:
-    `feat(nl2sql): the business glossary — render_schema_context and glossary seeding`,
-    then `docs: record A3 deliverable 2 (business glossary), specify 3-5`.
-  - **PR #15 is still open as a draft** — C12 still applies: deliverable 2 has no product
-    UI (it added CLI commands, not a screen), so nothing in `A3` is demonstrable in the
-    product yet. Keep it draft, keep adding commits (one per deliverable), and only take it
-    out of draft and merge once deliverable 5 (the SQL panel) is on the branch and the
-    milestone's "you can now ___" sentence is true and verified in a real browser — the
-    same bar A0/A1/A2 were held to.
+  - `feat/a3-nl2sql` is pushed, two commits ahead of where the last session left it:
+    `feat(nl2sql): generation and the AST read-only guard`, then
+    `docs: record A3 deliverable 3 (generation + the AST guard), specify 4-5`.
+  - **PR #15 is still open as a draft** — C12 still applies: deliverable 3 has no product
+    UI (it added a CLI command, not a screen), so nothing in `A3` is demonstrable in the
+    product yet. Its title and body were updated this session to say "deliverables 1-3/5"
+    accurately (they had drifted — the title said "2/5" and the body still said "1/5" from
+    an earlier session that updated one and not the other; both are now in sync). Keep it
+    draft, keep adding commits (one per deliverable), and only take it out of draft and
+    merge once deliverable 5 (the SQL panel) is on the branch and the milestone's "you can
+    now ___" sentence is true and verified in a real browser — the same bar A0/A1/A2 were
+    held to.
 
-**There is no unresolved blocker right now.** `make test` (302 passed), `make lint`, `make
-types`, and `make check` are all clean on `feat/a3-nl2sql` as it stands. The work that
-remains is *scope*, not a bug: deliverables 3, 4, 5 — and deliverable 3 (the AST guard) is
-the security-critical center of this milestone. Do not rush it into this session's leftover
-momentum; it deserves its own session's full attention, per TRACKER §0 rule 9.
+**There is no unresolved blocker right now.** `make test` (342 passed), `make lint`, `make
+types`, and `make check` are all clean on `feat/a3-nl2sql` as it stands, and all three CI
+jobs (`backend`, `frontend`, `compose`) are green on the pushed commits. The work that
+remains is *scope*, not a bug: deliverables 4 and 5. Deliverable 4 (execution) is real
+work — a live connection to `mnemos_analytics`, a statement timeout, a row cap, streaming
+narration, a bounded repair loop — but it is composition over already-decided pieces
+(`SqlGenerationService`, `guard_sql`, the RAG flow's own shape to mirror) rather than one
+new irreducible security decision the way the guard itself was. Do not read that as
+license to rush the one part of it that *is* still security-adjacent: never let a
+`REJECTED_*` verdict reach execution, and never string-build around the guarded statement
+(see TRACKER §5's "Watch out for these" for exactly why).
 
-**What deliverable 2 actually built, concretely, so you do not re-discover or re-build it:**
-  - `mnemosctl datasource seed-glossary --org-slug X [--slug sales-warehouse]` — writes four
-    curated glossary terms (`DEMO_GLOSSARY_TERMS` in `entrypoints/cli.py`: revenue, active
-    customer, order volume, segment) for the demo warehouse. Idempotent and
-    **non-destructive**: a term already present (matched by its `term` text) is left
-    untouched, so re-running never clobbers a hand-edit.
-  - `mnemosctl datasource show-context --org-slug X` — prints the rendered schema-plus-
-    glossary text block. Run this to see exactly what deliverable 3's prompt will receive.
-  - `backend/src/mnemos/features/datasources/domain/glossary.py` — `GlossaryTermRow`, one
-    shape for both a term about to be seeded and a term read back.
-  - `backend/src/mnemos/features/datasources/domain/context.py` — `render_schema_context`,
-    the pure function that groups cached `sql_schema_object` rows by table and lists
-    glossary terms after them. **This is what deliverable 3's prompt assembly should call —
-    do not re-query the tables directly or build a second renderer.**
-  - `DatasourceService.seed_glossary()` and `.render_context(org_id, slug) -> str`
-    (`application/service.py`), both built on `_require_datasource`, a small helper now
-    shared by `refresh_schema`, `seed_glossary`, and `render_context`.
-  - `GlossaryRepository` (`adapters/repository.py`) — `ensure_terms` (idempotent,
-    non-destructive) and `list_terms`. `SchemaObjectRepository` gained `list_all`, reusing
-    `SchemaObjectDraft` as the read shape rather than a second dataclass.
-  - Verified against the **rebuilt `api` container image**, not just pytest:
-    `docker compose build api && up -d api`, then `seed-glossary` → `seed-glossary` again
-    (0 newly written, confirming idempotence) → `show-context`, which printed all four
-    `analytics.*` tables and all four glossary terms, schema before glossary. Full
-    transcript in TRACKER §3's `A3` entry.
+**What deliverable 3 actually built, concretely, so you do not re-discover or re-build it:**
+  - `backend/src/mnemos/features/datasources/domain/guard.py` — `guard_sql(sql: str) ->
+    GuardVerdict`. Pure, synchronous, no I/O. Deliberately an **allowlist**: the parsed
+    statement must be `sqlglot.exp.Query`, and every node in the tree — not just the root —
+    is walked for anything that writes, changes privileges, or is a shape `sqlglot` falls
+    back to a generic `Command` for. A blocklist scoped to `INSERT`/`UPDATE`/`DELETE`/DDL
+    was tried first, during this session, and found to miss `SELECT ... INTO`, `FOR
+    UPDATE`, and `EXPLAIN`/`VACUUM`/`CALL`/`COPY`/`SET` entirely — none of those is a
+    DML/DDL node, so a blocklist naming only DML/DDL lets every one of them through. Do not
+    reintroduce a blocklist shape here; the allowlist is why CodingStandards §9 case 4
+    (DML nested in a CTE, a UNION arm, a subquery) is provably closed rather than merely
+    tested against the cases someone thought to name.
+  - `backend/src/mnemos/features/datasources/domain/generation.py` — `NL2SQL_SYSTEM_PROMPT`
+    and `extract_sql_statement`, pulling the candidate SQL out of a fenced ```sql block
+    with a fallback to the whole response for a model that does not comply with the fence
+    instruction.
+  - `backend/src/mnemos/features/datasources/application/generation.py` —
+    `SqlGenerationService.generate(*, org_id, slug, question) -> SqlRunRecord`. A
+    **sibling** of `DatasourceService` (composes it for
+    `require_datasource`/`render_context`), not a fifth method on it and not a new
+    `flows/nl2sql/` package. Calls `ChatModel.complete()` once — never `.stream()` — because
+    nothing can be guarded before the whole statement has arrived. **This does exactly one
+    attempt** (`attempt=1`, `message_id=None` always) — it has no repair loop; deliverable 4
+    has to decide how to drive a second attempt through the same `SqlRunRepository` (see
+    TRACKER §5's "Watch out for these", which flags this explicitly).
+  - `SqlRunRepository` (`adapters/repository.py`) — persists every attempt, allowed or
+    refused, with its verdict, detail, and `authorized_tables`/`denied_tables`. Takes
+    `message_id` and `attempt` as caller-supplied parameters specifically so deliverable 4
+    can pass real values. **No migration was needed** — `sql_run` already had every column
+    from `M2`, including the six execution columns (`executed`, `row_count`, `truncated`,
+    `duration_ms`, `error_code`, `error_detail`) deliverable 4 will fill in.
+  - `DatasourceService._require_datasource` is now public, `require_datasource` — it
+    graduated the moment `SqlGenerationService` needed the same lookup a second class had to
+    make.
+  - `mnemosctl datasource generate --org-slug X "<question>"` — generates, guards, and
+    records one attempt; **never executes**. Useful for producing a real `ALLOWED`
+    `sql_run` row to execute against by hand while building deliverable 4.
+  - Fixed a `NoReferencedTableError` from a live `mnemosctl` run — the same bug class as
+    TRACKER §4 item 41 (an unimported model module leaves a cross-feature foreign key
+    unresolved). `sql_run.message_id`'s FK to `chat_message` was the first one any CLI code
+    path had touched; `entrypoints/cli.py` now imports `mnemos.platform.models` for its side
+    effect, the same way `entrypoints/api/main.py` already did. If deliverable 4 adds
+    another CLI command or entrypoint that writes a cross-feature FK for the first time from
+    a new process, expect the same class of error and know what it is immediately rather
+    than re-diagnosing it.
+  - Verified against the **rebuilt `api` container image with a real Ollama completion**,
+    not a fake and not just pytest: asked "what was total revenue by region last quarter",
+    got a real (if imperfect — `qwen2.5:3b-instruct` is a 3B model) multi-table CTE query,
+    `allowed`, four tables recorded. Then asked "delete every row from the sales_order
+    table" — **the model complied and emitted a real `DELETE`** — and the guard caught it,
+    `rejected_write`, naming `analytics.sales_order`. Both attempts confirmed persisted in
+    `sql_run` via a direct `psql` query, not the CLI's own printout. Full transcript in
+    TRACKER §3's `A3` entry and in the dated note near the top of TRACKER.md.
 
 ------------------------------------------------------------------------------
 WHAT TO DO, IN ORDER, THE MOMENT YOU START
@@ -90,29 +127,35 @@ WHAT TO DO, IN ORDER, THE MOMENT YOU START
   2. `git fetch && git status` — check out `feat/a3-nl2sql`
      (`git checkout feat/a3-nl2sql`) if it exists locally, or `git checkout -b
      feat/a3-nl2sql origin/feat/a3-nl2sql` if not. Confirm `git log --oneline -5` shows
-     the deliverable-2 commits described above.
-  3. `gh pr list --state open` — confirm PR #15 is what you expect (A3, open, draft).
-  4. Read TRACKER §5 in full — it specifies deliverables 3-5 at the same detail level the
-     original A3 brief specified all five. Deliverable 3 (generation + the AST guard) is
-     next, and it is the largest and most security-sensitive of the three remaining. Read
-     "USING MULTI-AGENT WORKFLOWS TO SPEED UP" below before deciding how to staff it —
-     deliverable 3's core logic is a deliberate exception to that section's general advice.
+     the deliverable-3 commits described above.
+  3. `gh pr list --state open` — confirm PR #15 is what you expect (A3, open, draft,
+     titled "deliverables 1-3/5").
+  4. Read TRACKER §5 in full — it specifies deliverables 4-5 at the same detail level the
+     original A3 brief specified all five. Deliverable 4 (execution and narration) is next.
+     It is real work, but it is composition over pieces deliverable 3 already built and
+     proved (`SqlGenerationService`, `guard_sql`) and a flow shape (`flows/rag/`) already
+     built and proved in `A2` — read "USING MULTI-AGENT WORKFLOWS TO SPEED UP" below before
+     deciding how to staff it, but do not assume it needs the same solo-session treatment
+     the guard did just because the guard did.
   5. Bring up a stack if you need one to test against: `docker compose up -d --build`,
      `curl localhost:8000/readyz` until fully green, `make bootstrap` (see RUNNING IT
      below for the exact admin-password mechanics), then
      `docker compose exec -e MNEMOS_BOOTSTRAP_ADMIN_PASSWORD=... api mnemosctl datasource
      introspect --org-slug mnemos` followed by `... mnemosctl datasource seed-glossary
-     --org-slug mnemos` to get a cached schema and glossary to build deliverable 3 against.
-     `... mnemosctl datasource show-context --org-slug mnemos` shows you exactly what the
-     generation prompt will see.
+     --org-slug mnemos` to get a cached schema and glossary. Then `... mnemosctl datasource
+     generate --org-slug mnemos "<some question>"` to get a real, `allowed` `sql_run` row —
+     query it directly with `psql` (`SELECT id, generated_sql FROM sql_run WHERE verdict =
+     'allowed' ORDER BY created_at DESC LIMIT 1`) to have something real to execute against
+     while building deliverable 4, before any flow or chat wiring exists.
   6. Work deliverable by deliverable, one commit each, exactly as TRACKER §5's "Scope"
-     section lists them (3, 4, 5 — 1 and 2 are already done). After each: `make test` /
-     `make lint` / `make types` / `make check` clean, push, keep PR #15 updated. Do **not**
-     take the PR out of draft or merge it until deliverable 5 (the SQL panel) is on the
-     branch and the milestone's "ask a question about your data in English and see the
+     section lists them (4, 5 — 1, 2 and 3 are already done). After each: `make test` /
+     `make lint` / `make types` / `make check` clean, push, keep PR #15 updated (title and
+     body, not just commits — they drifted out of sync once already this milestone). Do
+     **not** take the PR out of draft or merge it until deliverable 5 (the SQL panel) is on
+     the branch and the milestone's "ask a question about your data in English and see the
      SQL, the rows and the narration — and see the guard visibly refuse a write" sentence
      is true and verified in a real browser.
-  7. Once all five are done and verified: `gh pr checks 15 --watch` until green, `gh pr
+  7. Once both are done and verified: `gh pr checks 15 --watch` until green, `gh pr
      ready 15` (turn off draft), then `gh pr merge 15 --squash --delete-branch`, matching
      how #11/#13/#14 were merged. Then rebuild from clean `main` and re-verify the A3
      sentence against the merged image — the same "CI green is not the same claim as the
@@ -121,24 +164,29 @@ WHAT TO DO, IN ORDER, THE MOMENT YOU START
   8. Update TRACKER.md and docs/ADAPTATION.md in the same commit as the final
      deliverable's work — mark `A3` ✅, move its evidence into §3/§8, and write §5 fresh
      for **`B1` (ingestion), not `A4`**. The plan was re-sequenced 2026-08-15 (evening):
-     `B1`/`B2` now come before `A4` — see that date's note near the top of TRACKER.md for
-     why. TRACKER §5's "Then, in order" list already names `B1` next and sketches its scope
-     (source connectors, event bus, sources UI); ADAPTATION §7 has its one-line description.
-     Write `B1`'s full brief the way this session and the last one wrote A3's remaining
+     `B1`/`B2` now come before `A4` — see that date's note in TRACKER.md for why. TRACKER
+     §5's "Then, in order" list already names `B1` next and sketches its scope (source
+     connectors, event bus, sources UI); ADAPTATION §7 has its one-line description. Write
+     `B1`'s full brief the way this session and the ones before it wrote A3's remaining
      deliverables' briefs.
 
 ------------------------------------------------------------------------------
 THE RULE ABOUT HOW MUCH TO DO IN ONE SESSION
 
 No marathon instruction is active. TRACKER §0 rule 9 (one task per session, then stop) is
-the standing rule and this session followed it exactly: it did deliverable 2 alone, verified
-it end to end, updated both tracker files, and stopped rather than starting deliverable 3.
+the standing rule and this session followed it exactly: it did deliverable 3 alone, verified
+it end to end — including against a real local model, not only fakes — updated both tracker
+files and this one, updated PR #15's title and body, and stopped rather than starting
+deliverable 4.
 
 **Default to the ordinary rule: one deliverable (or a small, coherent group) per session,
-then stop and update this file**, unless whoever invokes you says otherwise. A3 has three
-deliverables left. Deliverable 3 (the AST guard) in particular is where a rushed job would
-be the actual security defect this milestone exists to prevent — give it its own session's
-full attention rather than folding it into a session that starts with something else.
+then stop and update this file**, unless whoever invokes you says otherwise. A3 has two
+deliverables left. Deliverable 4 does not carry the same "one rushed decision is the actual
+security defect" weight the guard did — the guard is already built and proven — but it is
+still not a five-minute task: a live connection to a second database, a timeout, a row cap,
+streaming, a bounded retry loop, and a new persisted-message shape are each their own way to
+get something subtly wrong. Give it a real session rather than folding it into whatever
+comes before or after it.
 
 Either way: never leave a PR open and stale — every session that touches `feat/a3-nl2sql`
 should end with the branch pushed, `make test`/`lint`/`types`/`check` clean, and this file
@@ -158,13 +206,15 @@ some parts of this repo and works against its own rules in others — read this 
 spawning anything, and re-read it every session; it is not a one-time decision.
 
 **Where it helps — independent chunks with a settled interface boundary:**
-  - Research that does not write code: reading a library's API (`sqlglot`'s AST node
-    types, Postgres dialect quirks) or surveying how an existing pattern is used elsewhere
-    in the repo (e.g., how `features/knowledge/` structures its adapters), before the lead
-    session decides a shape. Fan these out, read the results yourself, decide yourself — a
-    subagent's exploration must never become the design decision by default.
+  - Research that does not write code: reading a library's API or surveying how an existing
+    pattern is used elsewhere in the repo, before the lead session decides a shape. Fan
+    these out, read the results yourself, decide yourself — a subagent's exploration must
+    never become the design decision by default. (Deliverable 3 did exactly this kind of
+    research itself, in-session, by writing small standalone scripts against `sqlglot`
+    directly rather than guessing at its AST shapes — that is the model to follow, whether
+    it is the lead session or a subagent doing the probing.)
   - Adapters that each implement one already-decided `Protocol`, independently of each
-    other. `B1` (the next milestone after `A3`) is the clean example: once
+    other. `B1` (the milestone after `A3`) is still the clean example: once
     `SourceConnector` is defined, its three adapters — MinIO/S3, local filesystem, HTTP
     URL — share no state and can be built by three subagents in parallel, each handed the
     Protocol, one adapter's scope, and `features/knowledge/adapters/`'s tests as the
@@ -176,12 +226,13 @@ spawning anything, and re-read it every session; it is not a one-time decision.
     underneath it.
 
 **Where it does not help — keep these single-threaded, in the lead session itself:**
-  - `A3` deliverable 3, the AST guard. It is the security-critical center of this milestone
-    (TRACKER §5, HARD RULES below) specifically because rushing or fragmenting it is how a
-    guard ships with a gap. Splitting its core logic — the AST walk, the verdict shape,
-    what counts as "DML anywhere in the tree" — across agents recreates exactly the risk
-    the project's rules exist to prevent. Research *about* `sqlglot` can be parallel;
-    deciding and writing the guard itself should not be.
+  - `A3` deliverable 4's core wiring — the `flows/nl2sql/` flow class, the repair loop's
+    attempt bookkeeping, and anywhere the guarded statement is one string-concatenation away
+    from becoming an unguarded one. Not because it is a single irreducible security decision
+    the way the guard was (that decision is made; deliverable 4 has to *respect* it, not
+    re-derive it), but because it is one deliverable's worth of interdependent plumbing —
+    splitting "execute" from "narrate" from "persist the message" across agents would just
+    recreate the coordination cost the next bullet describes, for no real parallelism gained.
   - Anything two agents would edit in the same file or module at once. This repo's workflow
     has no tolerance for merge conflicts built in (small scoped commits, one branch, one PR
     at a time) — simultaneous edits to the same file are a coordination cost, not a
@@ -236,8 +287,9 @@ HARD RULES — violating any of these is worse than doing nothing
 * ZERO MONETARY COST. Every component free and self-hosted. No API key for any capability
   in the default path. Ollama is the default model forever. `sqlglot` and `cryptography`
   are both free, pure-Python-or-widely-vendored, and self-hosted — keep it that way.
-  Deliverable 3 is the first to actually import `sqlglot`; it has been a declared
-  dependency doing nothing since the original brief.
+  `sqlglot` is no longer a dependency doing nothing: deliverable 3 imports it in
+  `features/datasources/domain/guard.py`, and it is exercised by a real local model's
+  output, not only by hand-written test strings.
 
 * NEVER READ OR COPY FROM ../jiva/. That directory is the author's EMPLOYER'S proprietary
   codebase. Not a reference, not a source, not to be cited. Every file in Mnemos is written
@@ -248,20 +300,25 @@ HARD RULES — violating any of these is worse than doing nothing
   check every time, do not assume the last session left it right.
 
 * NO PLACEHOLDERS, NO TODOs, NO STUBBED RETURNS. Split a task rather than stub it.
-  Deliverable 2 built `render_schema_context` and gave it a real caller
-  (`mnemosctl datasource show-context`) rather than leaving it uncalled until deliverable 3
+  Deliverable 3 built `guard_sql` and `SqlGenerationService` and gave them a real caller
+  (`mnemosctl datasource generate`) rather than leaving them uncalled until deliverable 4
   — a function nothing calls is exactly the placeholder this rule forbids. Keep applying
-  that instinct to 3-5: build exactly what the deliverable needs, with a real caller, and
-  nothing speculative ahead of it.
+  that instinct to 4-5: build exactly what the deliverable needs, with a real caller, and
+  nothing speculative ahead of it. (One instance of restraint worth naming: deliverable 3
+  deliberately did *not* build per-table authorization checking, even though
+  `SqlVerdict.REJECTED_UNAUTHORIZED_TABLE` already exists as an enum value — nothing in the
+  deliverable's brief asked for it, and building it would have been exactly this kind of
+  unscoped, speculative work. It stays a reserved, unused verdict until something actually
+  needs it.)
 
-* EVERY FEATURE SHIPS ITS UI IN THE SAME MILESTONE (C12). Deliverables 1 and 2 have no
+* EVERY FEATURE SHIPS ITS UI IN THE SAME MILESTONE (C12). Deliverables 1, 2 and 3 have no
   product UI and that is fine — they are infrastructure the rest of `A3` needs, and their
   CLI commands are operator tools, not the feature's UI slice. The milestone as a whole
   does not ship, and PR #15 does not leave draft, until deliverable 5 lands.
 
 * THE UI FOLLOWS docs/DesignSystem.md (C13). Tokens are the only source of colour, type,
   spacing and radius. Deliverable 5 introduces new territory — a result grid and a denial
-  state — read DesignSystem.md §3/§4 and TRACKER §5's "Read first" item 3 before building
+  state — read DesignSystem.md §3/§4 and TRACKER §5's "Read first" item 2 before building
   either.
 
 * DO NOT re-litigate settled decisions (TRACKER section 2, ADAPTATION section 9, and its
@@ -283,21 +340,24 @@ Never a bulk commit of unrelated files. TRACKER §5's "Commit shape" note: one c
 numbered deliverable, not one per milestone.
 
 Every change ends with ALL of:
-  - make test            (302 passed as of A3 deliverable 2; will be higher after 3-5)
+  - make test            (342 passed as of A3 deliverable 3; will be higher after 4-5)
   - make lint / make types / make check
   - frontend: npm run lint && npx tsc --noEmit && npm run test && npm run build (once a
-    deliverable touches the frontend — none of 1-2 did)
+    deliverable touches the frontend — none of 1-3 did)
   - TRACKER.md updated in the same commit as the work — status, evidence, next task
   - docs/ADAPTATION.md updated in the same commit — section 7 position, section 8 state
   - README numbers updated ONLY if the retrieval or compile path moved, with the real
     benchmark re-run (nothing in A3 touches that path)
   - the branch pushed with its PR open and CI green before you call a deliverable done
+  - the PR's own title and body kept in sync too, not just its commits — they drifted this
+    milestone (title said one deliverable count, body said another) and had to be
+    reconciled; check both, every time, rather than assuming a past session got it right
 
 Report honestly. Claim something works only after you have run it and seen the output —
 "the endpoint returns 200" is not the same claim as "I signed in and did X in a browser".
-Deliverables 1-2 have no UI, so their evidence is test output plus a rebuilt-container CLI
-transcript, not a screenshot — say so plainly rather than implying a browser check happened
-when it did not.
+Deliverables 1-3 have no UI, so their evidence is test output plus a rebuilt-container CLI
+transcript against a real model, not a screenshot — say so plainly rather than implying a
+browser check happened when it did not.
 
 ------------------------------------------------------------------------------
 RUNNING IT
@@ -316,7 +376,11 @@ RUNNING IT
   docker compose exec -e MNEMOS_BOOTSTRAP_ADMIN_PASSWORD=<pw> api mnemosctl datasource \
       seed-glossary --org-slug mnemos           # seeds the four curated glossary terms
   docker compose exec -e MNEMOS_BOOTSTRAP_ADMIN_PASSWORD=<pw> api mnemosctl datasource \
-      show-context --org-slug mnemos            # prints what deliverable 3's prompt will see
+      show-context --org-slug mnemos            # prints what the generation prompt sees
+  docker compose exec -e MNEMOS_BOOTSTRAP_ADMIN_PASSWORD=<pw> api mnemosctl datasource \
+      generate --org-slug mnemos "<question>"   # generates + guards + records; never runs
+                                                  # it — expect ~1-2 minutes on CPU for
+                                                  # qwen2.5:3b-instruct to answer
 
   cd backend && ../.venv/bin/python -m pytest -q
   make lint && make types && make check
@@ -339,19 +403,21 @@ ports — this now includes `mnemos_analytics`, reachable inside the compose net
 backend/.
 
 ------------------------------------------------------------------------------
-WHERE THINGS ARE (current, post-A3-deliverable-2)
+WHERE THINGS ARE (current, post-A3-deliverable-3)
 
   backend/src/mnemos/
     core/          config, errors, logging, clock, ids, crypto (DsnCipher), shared enums
     platform/      db engine + tenant-scoped sessions, redis, objectstore (S3/MinIO), models
     features/      identity, chat, llm (Ollama gateway), knowledge (RAG), memory, context,
-                   connectors, datasources (NL2SQL — introspection and glossary are built;
-                   generation, the AST guard, and execution are not), tools, prompts,
-                   observability
-    flows/         rag (built, A2), nl2sql (not created yet — deliverable 4 will likely
-                   need it, sibling to flows/rag/), agent, router
+                   connectors, datasources (NL2SQL — introspection, glossary, generation and
+                   the AST guard are built; execution is not), tools, prompts, observability
+    flows/         rag (built, A2), nl2sql (still three empty __init__.py stubs — TRACKER §5
+                   was explicit that generation/guard, deliverable 3, is "more of
+                   features/datasources/, not a new one"; this package gets its first real
+                   content in deliverable 4, once streaming and the chat integration need
+                   a flow that spans more than one feature), agent, router
     entrypoints/   api, worker, realtime, cli (now has `datasource introspect`,
-                   `seed-glossary`, `show-context`)
+                   `seed-glossary`, `show-context`, `generate`)
     _v1/           the SQLite kernel. Retrieval was ported OUT of it in A2. Memory + the
                    six-phase compiler are still only in here, ported in C4.
   backend/migrations/    alembic revisions (no new one needed since A0 — A1/A2/A3-so-far
@@ -359,8 +425,12 @@ WHERE THINGS ARE (current, post-A3-deliverable-2)
   backend/tests/          test_datasources_domain.py (deliverable 1's pure tests plus
                           deliverable 2's render_schema_context tests),
                           test_datasources_introspection.py (deliverable 1's integration
-                          tests), test_datasources_glossary.py (deliverable 2's, new);
-                          conftest.py's `postgres` fixture seeds `mnemos_analytics`
+                          tests), test_datasources_glossary.py (deliverable 2's),
+                          test_datasources_guard.py (deliverable 3's, new — pure, 31 cases,
+                          no Postgres needed), test_datasources_generation.py (deliverable
+                          3's, new — extract_sql_statement plus SqlGenerationService
+                          integration tests against a real Postgres); conftest.py's
+                          `postgres` fixture seeds `mnemos_analytics`
   frontend/src/
     app/(app)/chat/, app/(app)/knowledge/    the two built screens (A3 has no screen yet)
     components/chat/, components/knowledge/, lib/chat/, lib/knowledge/, lib/inspector/
@@ -370,13 +440,14 @@ WHERE THINGS ARE (current, post-A3-deliverable-2)
 
 Layering rule: domain (pure) <- application <- adapters/api. `features` must never import
 `flows`; `flows` may import multiple `features`. `features/datasources/` follows this
-already (`domain/{schema,glossary,context}.py` have zero SQLAlchemy imports) — keep
-deliverables 3-4 the same shape.
+already (`domain/{schema,glossary,context,guard,generation}.py` have zero SQLAlchemy
+imports) — keep deliverable 4's execution adapter the same shape, and expect deliverable 4
+to be where `flows/nl2sql/` finally gets real content (see the `flows/` line above).
 
 ------------------------------------------------------------------------------
 START HERE
 
-Read TRACKER.md now — the header, the "2026-08-15 — A3 deliverable 2" note, section 3's A3
-entry, then section 5 (deliverables 3-5, fully specified). Do steps 1-6 under "WHAT TO DO,
+Read TRACKER.md now — the header, the "2026-08-15 — A3 deliverable 3" note, section 3's A3
+entry, then section 5 (deliverables 4-5, fully specified). Do steps 1-6 under "WHAT TO DO,
 IN ORDER" above before writing any new feature code. Tell me what you're about to do
 before you start.
