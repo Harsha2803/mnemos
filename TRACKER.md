@@ -6,21 +6,80 @@
 > **and [`docs/ADAPTATION.md`](docs/ADAPTATION.md)** *in the same commit* — a stale
 > tracker is worse than none.
 
-**Last updated:** 2026-08-15 (evening) — `B1` deliverable 1 built: the `SourceConnector`
-port + factory (`features/connectors/`), the `content_source` migration (the first since
-`M2`), and `mnemosctl connector register`/`list-items`. Deliverables 2-5 (event bus,
-realtime auth, the worker's real job-processing path, the sources UI) remain — see §5.
+**Last updated:** 2026-08-15 (night) — `B1` deliverable 2 built: the `EventBus` port and
+its Redis Streams adapter (`platform/events/`). Deliverables 3-5 (realtime auth, the
+worker's real job-processing path, the sources UI) remain — see §5.
 **Phase:** **A — make it a chatbot.** `A0` ✅, `A1` ✅, `A2` ✅, `A3` ✅ — all merged to
 `main`. Phase A is complete. Build order deviates from phase order once: `B1`/`B2` come
 next, before `A4` (2026-08-15 evening re-sequencing note below).
-**Next task:** `B1` deliverable 2 — the Redis Streams event bus (`platform/events/`).
-Deliverable 1 is done and merged (evidence below and in §3). Deliverables 2-5 are
-**fully specified in §5**, unchanged from the original brief except deliverable 1's own
-entry, which now records what was actually built rather than what was planned.
+**Next task:** `B1` deliverable 3 — close the realtime gateway's auth gap (JWT-validated
+WS handshake, org-derived channel scoping). Deliverables 1-2 are done and on the branch
+(evidence below and in §3). Deliverables 3-5 are **fully specified in §5**, unchanged from
+the original brief except deliverables 1-2's own entries, which now record what was
+actually built rather than what was planned.
 **Branch right now:** `feat/b1-connectors`, PR open (draft — `B1`'s PR stays in draft
-until deliverable 5's sources UI exists, per C12). Deliverable 1's commit(s) are on it;
+until deliverable 5's sources UI exists, per C12). Deliverables 1-2's commits are on it;
 `main` is unchanged.
 
+> ### 2026-08-15 (night) — `B1` deliverable 2 built: the `EventBus` port and its Redis
+> Streams adapter
+>
+> Picked up right where deliverable 1 left off, on the same branch. Built exactly what §5
+> specifies: `platform/events/port.py`'s `EventBus` protocol (`publish`, `ensure_group`,
+> `read_group`, `ack` — `XADD`/consumer-group `XREADGROUP`, deliberately not
+> `platform/cache.py`'s pub/sub, which the realtime gateway already uses and which cannot
+> replay a message to a consumer that was not listening at publish time) and
+> `platform/events/redis_streams.py`'s `RedisStreamsEventBus`.
+>
+> **The design decision §5 flagged as a real judgment call, made:** option (a) — the
+> worker (deliverable 4) will publish every `ingest_job` transition to both this Streams
+> adapter (durable, for replay) *and* the existing `mnemos:{channel}` pub/sub topic
+> `entrypoints/realtime/main.py` already relays (live, for an open WebSocket) — not option
+> (b), the gateway running its own consumer-group reader per subscription. (a) needs no
+> change to the gateway at all; (b) is real new work in a service that currently has none,
+> and its one advantage — replay-on-reconnect straight from the stream — is exactly the
+> depth `B2`'s "watch every job's progress" sentence exists for, not `B1`'s. Deliverable 4
+> is where this gets wired in; deliverable 2 only builds the primitive both paths need.
+>
+> **A real property, proved against a real Redis, not asserted:** `tests/
+> test_events_redis_streams.py`'s `redis_url` fixture is a session-scoped
+> `testcontainers.community.redis.RedisContainer` (the same pattern `conftest.py`'s
+> `postgres` fixture already uses for the same reason — a fake pub/sub or in-memory dict
+> would only prove the fake is durable). Six tests cover the properties that are the whole
+> point of choosing Streams over pub/sub: a group created *after* entries were already
+> published still sees them (`ensure_group`'s id `"0"`, not `"$"` — this is the backlog
+> pub/sub cannot give); `ensure_group` is idempotent (a worker restart calling it again must
+> not raise `BUSYGROUP`); an unacked message is not redelivered to the same consumer on the
+> next poll (`read_group` only ever asks for `">"`, new entries); two different consumers in
+> one group each get their own entry, never both (competing consumers, not broadcast — the
+> property that makes two worker replicas polling the same stream safe); and `ack` actually
+> clears the pending-entries list (`XPENDING`), checked directly against the raw client
+> rather than only through this adapter's own methods. A seventh test confirms `publish`
+> against an unreachable Redis raises `DependencyUnavailableError`, not something
+> unhandled — the same translation `S3ObjectStore` already does for MinIO.
+>
+> **A real mypy gap, resolved rather than silenced with a blanket ignore:** redis-py's
+> stubs declare `xadd`'s fields parameter and `xreadgroup`'s return type against wide,
+> invariant unions (`Dict[FieldT, EncodableT]`; a `list[...] | dict[...] | dict[...]`
+> return) that do not structurally match either a `Mapping[str, str]` argument or the
+> `list[[stream, entries]]` shape this client actually receives under RESP2 (its default
+> protocol, and the one `Cache` connects with — the dict-shaped alternatives only appear
+> under RESP3). Two narrowly-scoped `cast`s, each commented with which runtime shape it
+> is asserting and why, close the gap — the same shape of fix `entrypoints/realtime/
+> main.py`'s existing `# type: ignore[no-untyped-call]` on `pubsub.aclose` already set as
+> precedent for "the dependency's types are the gap, not this code."
+>
+> **Evidence:** `make test` — 391 passed (384 prior + 7 new, all against real Redis via
+> testcontainers). `make lint` / `make types` clean. `make check` (`alembic check`) clean —
+> no migration touched. No frontend change; deliverable 2 has no UI surface of its own.
+>
+> **Not done, deliberately — deliverables 3-5, exactly as `B1`'s original brief specifies
+> them.** No realtime auth fix, no worker changes, no frontend. Deliverable 3 (the realtime
+> gateway's JWT-validated WS handshake, org-derived channel scoping) is next, and is
+> security-load-bearing (C's "never ship a second defence as if it were the first" rule) —
+> landing deliverable 2 cleanly, verified, and committed is the same kind of stopping point
+> deliverable 1's session ended on, rather than starting deliverable 3 in the same sitting.
+>
 > ### 2026-08-15 (evening) — `B1` deliverable 1 built: `SourceConnector` port + factory,
 > the `content_source` migration, the CLI
 >
@@ -792,34 +851,47 @@ discarded. If you find a reference to an old ID anywhere, this is the translatio
 | `M13` frontend | dissolved into `F0` + a UI slice per milestone | Unchanged by this re-plan |
 | `M14` realtime + e2e + docs | `D1` | |
 
-### 🟡 B1 — connect a source and watch it ingest, deliverable 1/5 done 2026-08-15 (evening)
+### 🟡 B1 — connect a source and watch it ingest, deliverable 2/5 done 2026-08-15 (night)
 
-**Deliverable 1 — the `SourceConnector` port + factory — is done; deliverables 2-5 are
-not.** Branch `feat/b1-connectors`, PR open in draft (stays draft until deliverable 5's
-sources UI exists, per C12 — deliverables 1-4 have no product UI by design).
+**Deliverables 1-2 — the `SourceConnector` port + factory, and the `EventBus` port + Redis
+Streams adapter — are done; deliverables 3-5 are not.** Branch `feat/b1-connectors`, PR
+open in draft (stays draft until deliverable 5's sources UI exists, per C12 — deliverables
+1-4 have no product UI by design).
 
-What's built: `features/connectors/domain/port.py` (`SourceItem`, `SourceConnector`
-protocol), three adapters (`s3.py` over the extended `ObjectStore` port, `local_fs.py`
-default-deny outside an operator-approved root, `http.py` over an operator-curated URL
-list, never crawling), `ssrf_guard.py` (deny-list + DNS-rebinding-safe address pinning),
-`adapters/crypto.py`'s `SourceConfigCipher`, the `content_source` table + RLS (migration
-`0007`), `ConnectorFactory` + `ConnectorService`, and `mnemosctl connector
-register`/`list-items`. Full detail, including the two migration bugs found and fixed
-along the way and the trust-tier reconciliation for deliverable 4, is in the dated note
-near the top of this file ("`B1` deliverable 1 built").
+What's built (deliverable 1): `features/connectors/domain/port.py` (`SourceItem`,
+`SourceConnector` protocol), three adapters (`s3.py` over the extended `ObjectStore` port,
+`local_fs.py` default-deny outside an operator-approved root, `http.py` over an
+operator-curated URL list, never crawling), `ssrf_guard.py` (deny-list +
+DNS-rebinding-safe address pinning), `adapters/crypto.py`'s `SourceConfigCipher`, the
+`content_source` table + RLS (migration `0007`), `ConnectorFactory` + `ConnectorService`,
+and `mnemosctl connector register`/`list-items`. Full detail, including the two migration
+bugs found and fixed along the way and the trust-tier reconciliation for deliverable 4, is
+in the dated note near the top of this file ("`B1` deliverable 1 built").
 
-**Evidence:** `make test` — 384 passed (352 prior + 32 new, including the SSRF deny-list
-actually refusing loopback/link-local/metadata/`localhost` URLs, and local-fs path
-traversal — `../`, an absolute path, and a symlink escaping the root — actually refused,
-not merely asserted to exist). `make lint` / `make types` clean. A real Postgres
-(`pgvector/pgvector:pg16`) confirms `alembic upgrade head`, `alembic check` (clean — no
-drift between the migration and the models), a full upgrade→downgrade→upgrade round trip,
-and `content_source`'s `FORCE ROW LEVEL SECURITY` + `org_isolation` policy live via
-`\d+ content_source`. No frontend change; not claimed as done.
+What's built (deliverable 2): `platform/events/port.py`'s `EventBus` protocol (`publish`,
+`ensure_group`, `read_group`, `ack`) and `platform/events/redis_streams.py`'s
+`RedisStreamsEventBus` — `XADD`/consumer-group `XREADGROUP`, not `platform/cache.py`'s
+pub/sub. The design decision §5 left open (how a Streams entry reaches a browser) is made:
+the worker (deliverable 4) will publish to both this adapter and the existing pub/sub
+channel the realtime gateway already relays, rather than the gateway growing its own
+consumer-group reader. Full detail, including the six real-Redis tests that prove
+durability/idempotence/competing-consumer semantics rather than assert them, is in the
+dated note near the top of this file ("`B1` deliverable 2 built").
 
-**Not done:** the event bus (`platform/events/`), the realtime gateway's auth fix, the
-worker's real job-processing path, and the sources UI — deliverables 2-5, fully specified
-in §5, unstarted. `entrypoints/realtime/main.py` is still unauthenticated.
+**Evidence:** `make test` — 391 passed (384 prior + 7 new: the SSRF deny-list and
+local-fs traversal refusals from deliverable 1, plus deliverable 2's event-bus round trip
+against a real Redis via testcontainers — group-created-after-publish backlog delivery,
+idempotent group creation, no redelivery of an already-delivered message, competing
+consumers, `ack` clearing `XPENDING`, and an unreachable-Redis error translation). `make
+lint` / `make types` clean. A real Postgres (`pgvector/pgvector:pg16`) confirms `alembic
+upgrade head`, `alembic check` (clean — no drift between the migration and the models,
+and no new migration in deliverable 2), a full upgrade→downgrade→upgrade round trip, and
+`content_source`'s `FORCE ROW LEVEL SECURITY` + `org_isolation` policy live via `\d+
+content_source`. No frontend change; not claimed as done.
+
+**Not done:** the realtime gateway's auth fix, the worker's real job-processing path, and
+the sources UI — deliverables 3-5, fully specified in §5, unstarted. `entrypoints/
+realtime/main.py` is still unauthenticated.
 
 ### ✅ A3 — ask about your data, verified end to end 2026-08-15, PR #15
 
@@ -2250,27 +2322,38 @@ Recorded so they are not rediscovered as surprises:
 real browser against the real stack. Full evidence is in the dated note near the top of
 this file ("`A3` deliverables 4-5 done") and in §3's `A3` entry.
 
-**`B1` deliverable 1 — the `SourceConnector` port + factory — is done.** Full evidence is
-in the "2026-08-15 (evening)" dated note near the top of this file and in §3's `B1` entry.
-What that means for what follows: `features/connectors/` now has real
-`domain`/`adapters`/`application` content (not the three empty `__init__.py` files the
-brief below still describes finding), `platform/objectstore/port.py`'s `ObjectStore`
-protocol gained a fourth method (`list(prefix) -> Sequence[ObjectMeta]`, implemented in
-`S3ObjectStore`), `content_source` is a real table with RLS, and `mnemosctl connector
-register`/`list-items` work end to end against a real filesystem/bucket/URL list.
-**Deliverables 2-5 below are unchanged from the original brief** — they were written
-before deliverable 1 existed, but nothing in them assumed a *particular* shape for
-`SourceConnector`/`ConnectorFactory` beyond what got built, so they still apply as
-written. The one thing to know going in: `ConnectorService.list_items(org_id, slug)` is
-how deliverable 4's worker should reach a connector, not by importing `ConnectorFactory`
-directly — the service is what resolves a slug to a record and decrypts its config; skip
-it and you are re-deriving `require_source` inline.
+**`B1` deliverables 1-2 are done.** Deliverable 1 (the `SourceConnector` port + factory):
+full evidence in the "2026-08-15 (evening)" dated note near the top of this file and in
+§3's `B1` entry. `features/connectors/` now has real `domain`/`adapters`/`application`
+content (not the three empty `__init__.py` files the brief below still describes
+finding), `platform/objectstore/port.py`'s `ObjectStore` protocol gained a fourth method
+(`list(prefix) -> Sequence[ObjectMeta]`, implemented in `S3ObjectStore`), `content_source`
+is a real table with RLS, and `mnemosctl connector register`/`list-items` work end to end
+against a real filesystem/bucket/URL list. The one thing to know going in:
+`ConnectorService.list_items(org_id, slug)` is how deliverable 4's worker should reach a
+connector, not by importing `ConnectorFactory` directly — the service is what resolves a
+slug to a record and decrypts its config; skip it and you are re-deriving `require_source`
+inline.
 
-**`platform/events/`, the worker, the realtime gateway and the frontend are still
-exactly as `A3` left them** — deliverable 1 did not touch any of them. `entrypoints/
-worker/main.py`'s stuck-job reaper still has nothing to claim; `entrypoints/realtime/
-main.py` is still the generic, **unauthenticated** Redis pub/sub → WebSocket relay its own
-docstring already flagged. Both are exactly what deliverables 2-4 below fix.
+Deliverable 2 (the `EventBus` port + Redis Streams adapter): full evidence in the
+"2026-08-15 (night)" dated note near the top of this file and in §3's `B1` entry.
+`platform/events/port.py`'s `EventBus` (`publish`/`ensure_group`/`read_group`/`ack`) and
+`platform/events/redis_streams.py`'s `RedisStreamsEventBus` exist and are tested against a
+real Redis. **Deliverable 4's worker should call `EventBus.publish` at every `ingest_job`
+transition, in addition to — not instead of — the existing `Cache.client.publish` to the
+`mnemos:{channel}` pub/sub topic the realtime gateway already relays**; that "both, not
+either" split is the design decision deliverable 2's dated note records as settled.
+
+**Deliverables 3-5 below are unchanged from the original brief** — they were written
+before deliverables 1-2 existed, but nothing in them assumed a shape for
+`SourceConnector`/`ConnectorFactory`/`EventBus` beyond what got built, so they still apply
+as written.
+
+**The worker, the realtime gateway and the frontend are still exactly as `A3` left
+them** — neither deliverable touched them. `entrypoints/worker/main.py`'s stuck-job
+reaper still has nothing to claim; `entrypoints/realtime/main.py` is still the generic,
+**unauthenticated** Redis pub/sub → WebSocket relay its own docstring already flagged.
+Both are exactly what deliverables 3-4 below fix.
 
 ### `B1` — connect a source and watch it ingest
 
@@ -2347,21 +2430,20 @@ matching how `A3`'s deliverables were committed:**
    deliverable 4 should use it, not `ConnectorFactory` directly. Evidence: 32 new tests
    (`tests/test_connectors_{ssrf,local_fs,http,s3,service}.py`), all passing against real
    Postgres/no-network-needed fakes; `make lint`/`make types` clean.
-2. **The event bus, `platform/events/`.** An `EventBus` port + a Redis Streams adapter
-   (`XADD`/consumer-group `XREADGROUP`, not the pub/sub `platform/cache.py` already has for
-   the realtime gateway's existing channels — Streams give replay/durability pub/sub does
-   not, which is exactly why ADAPTATION §3 specifies Streams here and not a second pub/sub
-   channel). Every `ingest_job` transition the worker makes (deliverable 4) both appends to
-   `ingest_job_event` (durable, queryable) **and** publishes to the org's ingestion stream
-   (live). Decide, and document the decision, how the realtime gateway gets from "a Streams
-   entry landed" to "a browser's WebSocket receives it" — the two live options are (a) the
-   worker publishes to both the Stream and the existing pub/sub channel the gateway already
-   relays, or (b) the realtime gateway itself runs a consumer-group reader per active
-   subscription. (a) is far less new code and matches what the gateway already does; (b) is
-   what "Streams" is really for (replay after a reconnect) but is real new work in a service
-   that currently has none. A reasonable default is (a) for `B1` with a note that replay-on-
-   reconnect is exactly the kind of depth `B2`'s "watch every job's progress" sentence would
-   want — but this is a real judgment call for whoever builds it, not settled here.
+2. ✅ **Done (2026-08-15 night). The event bus, `platform/events/`.** Built exactly as
+   specified: `port.py`'s `EventBus` protocol (`publish`, `ensure_group`, `read_group`,
+   `ack`) and `redis_streams.py`'s `RedisStreamsEventBus` — `XADD`/consumer-group
+   `XREADGROUP`, not the pub/sub `platform/cache.py` already has for the realtime gateway's
+   existing channels. The open design question — how the realtime gateway gets from "a
+   Streams entry landed" to "a browser's WebSocket receives it" — is resolved as option (a):
+   deliverable 4's worker will publish every `ingest_job` transition to both this stream
+   (durable, for replay) **and** the existing pub/sub channel the gateway already relays
+   (live), rather than the gateway growing its own consumer-group reader (option (b), left
+   for `B2`'s replay-on-reconnect depth). Evidence: 7 new tests
+   (`tests/test_events_redis_streams.py`) against a real Redis via testcontainers, proving
+   backlog delivery to a group created after publish, idempotent group creation, no
+   redelivery of an already-delivered message, competing-consumer semantics, `ack` clearing
+   `XPENDING`, and unreachable-Redis error translation; `make lint`/`make types` clean.
 3. **Close the realtime auth gap** (see above) — JWT-validated WS handshake, org-derived
    channel scoping, a test that proves a token for org A cannot subscribe to org B's
    ingestion channel even by typing the channel name directly into the WS URL.

@@ -26,6 +26,7 @@ from pathlib import Path
 import asyncpg
 import pytest
 from testcontainers.community.postgres import PostgresContainer
+from testcontainers.community.redis import RedisContainer
 
 BACKEND_ROOT = Path(__file__).resolve().parent.parent
 
@@ -179,3 +180,14 @@ def postgres() -> Iterator[Postgres]:
         _run_migrations(pg.owner_url)
         asyncio.run(_seed_analytics_warehouse(pg))
         yield pg
+
+
+@pytest.fixture(scope="session")
+def redis_url() -> Iterator[str]:
+    """A real Redis, for the same reason `postgres` above is real: consumer-
+    group durability (`platform/events/redis_streams.py`) is a property of
+    actual Redis Streams, and a fake would only prove the fake is durable."""
+    with RedisContainer("redis:7-alpine") as container:
+        host = container.get_container_host_ip()
+        port = container.get_exposed_port(6379)
+        yield f"redis://{host}:{port}/0"
