@@ -35,7 +35,9 @@ HEARTBEAT_INTERVAL_S = 20
 @asynccontextmanager
 async def lifespan(app: FastAPI) -> AsyncIterator[None]:
     settings = get_settings()
-    configure_logging(json_output=not settings.is_local)
+    configure_logging(
+        json_output=not settings.is_local, session_log_enabled=settings.session_log_enabled
+    )
     app.state.cache = Cache(settings)
     log.info("realtime.startup")
     try:
