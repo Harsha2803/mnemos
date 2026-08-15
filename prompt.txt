@@ -6,7 +6,11 @@ A3 deliverable 2, the business glossary — under the ordinary one-task-per-sess
 which is back in force (the 2026-08-08 marathon and the 2026-08-11 "keep going until the
 session ends" instruction were both one-off, session-scoped, and neither applies here). It
 replaces the 2026-08-11 version of itself, which handed off after deliverable 1 (schema
-introspection). Trust this file and TRACKER.md over any memory of a prior prompt.txt.
+introspection). It was then updated twice more the same evening, planning-only, no code:
+once to re-sequence the plan (ingestion pulled ahead of the router — see TRACKER's
+2026-08-15 (evening) note), and once to add "USING MULTI-AGENT WORKFLOWS TO SPEED UP"
+below, after the project owner asked for it. Trust this file and TRACKER.md over any memory
+of a prior prompt.txt.
 
 ------------------------------------------------------------------------------
 READ FIRST, IN THIS ORDER
@@ -90,7 +94,9 @@ WHAT TO DO, IN ORDER, THE MOMENT YOU START
   3. `gh pr list --state open` — confirm PR #15 is what you expect (A3, open, draft).
   4. Read TRACKER §5 in full — it specifies deliverables 3-5 at the same detail level the
      original A3 brief specified all five. Deliverable 3 (generation + the AST guard) is
-     next, and it is the largest and most security-sensitive of the three remaining.
+     next, and it is the largest and most security-sensitive of the three remaining. Read
+     "USING MULTI-AGENT WORKFLOWS TO SPEED UP" below before deciding how to staff it —
+     deliverable 3's core logic is a deliberate exception to that section's general advice.
   5. Bring up a stack if you need one to test against: `docker compose up -d --build`,
      `curl localhost:8000/readyz` until fully green, `make bootstrap` (see RUNNING IT
      below for the exact admin-password mechanics), then
@@ -137,6 +143,79 @@ full attention rather than folding it into a session that starts with something 
 Either way: never leave a PR open and stale — every session that touches `feat/a3-nl2sql`
 should end with the branch pushed, `make test`/`lint`/`types`/`check` clean, and this file
 and TRACKER.md updated to say exactly what is true, not what was hoped for.
+
+**"One task per session" is about pacing across sessions, not about how many agents work
+within one.** The rule exists to spend usage budget on fresh context per deliverable rather
+than one long session. It says nothing about whether the session that owns a deliverable
+may use subagents internally to move faster on it — see the next section for where that
+does and does not make sense in this repo.
+
+------------------------------------------------------------------------------
+USING MULTI-AGENT WORKFLOWS TO SPEED UP
+
+The project owner asked (2026-08-15) to use multiple agents to move faster. This helps in
+some parts of this repo and works against its own rules in others — read this before
+spawning anything, and re-read it every session; it is not a one-time decision.
+
+**Where it helps — independent chunks with a settled interface boundary:**
+  - Research that does not write code: reading a library's API (`sqlglot`'s AST node
+    types, Postgres dialect quirks) or surveying how an existing pattern is used elsewhere
+    in the repo (e.g., how `features/knowledge/` structures its adapters), before the lead
+    session decides a shape. Fan these out, read the results yourself, decide yourself — a
+    subagent's exploration must never become the design decision by default.
+  - Adapters that each implement one already-decided `Protocol`, independently of each
+    other. `B1` (the next milestone after `A3`) is the clean example: once
+    `SourceConnector` is defined, its three adapters — MinIO/S3, local filesystem, HTTP
+    URL — share no state and can be built by three subagents in parallel, each handed the
+    Protocol, one adapter's scope, and `features/knowledge/adapters/`'s tests as the
+    pattern to follow.
+  - Frontend work once a backend API contract is stable and merged — a subagent building a
+    screen against an already-shipped endpoint is a different kind of parallel work than a
+    subagent guessing at an endpoint's shape.
+  - Additional test coverage against an interface that already exists and is not changing
+    underneath it.
+
+**Where it does not help — keep these single-threaded, in the lead session itself:**
+  - `A3` deliverable 3, the AST guard. It is the security-critical center of this milestone
+    (TRACKER §5, HARD RULES below) specifically because rushing or fragmenting it is how a
+    guard ships with a gap. Splitting its core logic — the AST walk, the verdict shape,
+    what counts as "DML anywhere in the tree" — across agents recreates exactly the risk
+    the project's rules exist to prevent. Research *about* `sqlglot` can be parallel;
+    deciding and writing the guard itself should not be.
+  - Anything two agents would edit in the same file or module at once. This repo's workflow
+    has no tolerance for merge conflicts built in (small scoped commits, one branch, one PR
+    at a time) — simultaneous edits to the same file are a coordination cost, not a
+    speedup.
+  - The final integration and verification gate: `make test`/`lint`/`types`/`check`,
+    updating TRACKER.md and ADAPTATION.md, committing, and pushing. One agent owns git for
+    this repo at any moment — subagents report diffs back to the lead session, which
+    reviews, integrates, and runs the gate as a single coherent pass. Do not let multiple
+    agents commit or push independently; that is the "invisible branch" / "unscoped
+    commit" failure TRACKER §0 rules 6-7 exist to prevent, just multiplied.
+
+**How to run it, concretely, in this repo:**
+  1. The lead session decides the interface boundary first — the `Protocol`, the shape of
+     the pure domain function, the test names the acceptance criteria already specify
+     (TRACKER §5's "Acceptance" list is usually that boundary already written down). Do not
+     fan out before this decision is made.
+  2. Spawn subagents with a **self-contained prompt**: the file paths it owns, the
+     Protocol/interface it implements, the specific TRACKER §5 acceptance tests it is
+     responsible for, and the relevant HARD RULES below inlined — a subagent has no memory
+     of this file and must never be assumed to have read TRACKER.md or ADAPTATION.md on its
+     own. State plainly whether it should write code or only research.
+  3. Prefer running non-blocking subagents in the background so the lead session can keep
+     working rather than stalling, and never fabricate a subagent's result before it
+     reports back.
+  4. Review every subagent's diff yourself before integrating it — a subagent's summary
+     describes what it intended to do, not necessarily what it did.
+  5. Integrate all diffs into one working tree, run the full gate once (backend's four
+     checks, plus frontend's if touched), then commit — one commit per deliverable still
+     applies (TRACKER §5's "Commit shape"), even if several subagents contributed to it.
+
+Every HARD RULE below applies to every subagent, not only the lead session — never read
+`../jiva/`, never use the work GitHub account, no placeholders, C12's UI-in-the-same-
+milestone rule, C13's design tokens. A subagent prompt that omits these is a subagent that
+can violate them without anyone having decided it should.
 
 ------------------------------------------------------------------------------
 WHAT THIS PROJECT IS
