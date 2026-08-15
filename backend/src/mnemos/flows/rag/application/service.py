@@ -23,6 +23,7 @@ from mnemos.core.errors import NotFoundError, UpstreamError
 from mnemos.core.logging import get_logger
 from mnemos.core.types import MessageRole
 from mnemos.features.chat.application.ports import ChatRepository
+from mnemos.features.chat.application.titles import title_session_from_first_message
 from mnemos.features.chat.domain import (
     AssistantDone,
     AssistantError,
@@ -78,6 +79,9 @@ class RagFlow:
             raise NotFoundError(f"chat session {session_id} not found")
 
         await self._chat.append_user_message(org_id=org_id, session_id=session_id, content=content)
+        await title_session_from_first_message(
+            repository=self._chat, org_id=org_id, session=session, content=content
+        )
 
         candidates = await self._knowledge.retrieve(
             org_id=org_id, caller_tags=caller_tags, query=content, k=self._retrieval_k
