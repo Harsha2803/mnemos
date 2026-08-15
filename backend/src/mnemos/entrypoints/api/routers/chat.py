@@ -25,7 +25,7 @@ from fastapi import APIRouter, Depends, Query, Request, status
 from fastapi.responses import StreamingResponse
 from pydantic import BaseModel, Field
 
-from mnemos.core.errors import NotFoundError
+from mnemos.core.errors import NotFoundError, ValidationError
 from mnemos.entrypoints.api.security import require_caller
 from mnemos.features.chat.application.service import ChatService
 from mnemos.features.chat.domain import (
@@ -38,6 +38,7 @@ from mnemos.features.chat.domain import (
     CitationRecord,
 )
 from mnemos.features.identity.application.principals import AuthenticatedCaller
+from mnemos.flows.nl2sql.application import Nl2SqlFlow
 from mnemos.flows.rag.application import RagFlow
 
 router = APIRouter(prefix="/chat", tags=["chat"])
@@ -103,9 +104,15 @@ class RenameSessionRequest(BaseModel):
 
 class SendMessageRequest(BaseModel):
     content: str = Field(min_length=1, max_length=32_000)
-    #: Manual for now — `A4`'s classifier replaces this with real routing
-    #: (TRACKER §5 deliverable 5's explicit, written-down provisionality).
+    #: Manual for now — `A4`'s classifier replaces both this and
+    #: `use_datasource` with real routing (TRACKER §5 deliverable 5's
+    #: explicit, written-down provisionality).
     use_documents: bool = False
+    #: Same provisionality, for `A3`'s NL2SQL flow. There is exactly one
+    #: registered datasource in this build (no registry UI — TRACKER §5,
+    #: "explicitly not in A3"), so this selects *that one*, not a specific
+    #: slug.
+    use_datasource: bool = False
 
 
 def _session_response(summary: ChatSessionSummary) -> ChatSessionResponse:
@@ -164,6 +171,14 @@ def _rag(request: Request) -> RagFlow:
     flow = getattr(request.app.state, "rag_flow", None)
     if not isinstance(flow, RagFlow):  # pragma: no cover - the lifespan sets it
         msg = "the RAG flow is not configured"
+        raise RuntimeError(msg)
+    return flow
+
+
+def _nl2sql(request: Request) -> Nl2SqlFlow:
+    flow = getattr(request.app.state, "nl2sql_flow", None)
+    if not isinstance(flow, Nl2SqlFlow):  # pragma: no cover - the lifespan sets it
+        msg = "the NL2SQL flow is not configured"
         raise RuntimeError(msg)
     return flow
 
@@ -255,8 +270,22 @@ async def send_message(
     caller: Annotated[AuthenticatedCaller, Depends(require_caller)],
     service: Annotated[ChatService, Depends(_service)],
     rag: Annotated[RagFlow, Depends(_rag)],
+    nl2sql: Annotated[Nl2SqlFlow, Depends(_nl2sql)],
 ) -> StreamingResponse:
-    if body.use_documents:
+    if body.use_documents and body.use_datasource:
+        raise ValidationError(
+            "use_documents and use_datasource are mutually exclusive until A4's router "
+            "can combine flows",
+            field="use_datasource",
+        )
+    if body.use_datasource:
+        events = nl2sql.stream_reply(
+            org_id=caller.principal.org_id,
+            user_id=caller.principal.principal_id,
+            session_id=_parse_session_id(session_id),
+            content=body.content,
+        )
+    elif body.use_documents:
         events = rag.stream_reply(
             org_id=caller.principal.org_id,
             user_id=caller.principal.principal_id,
@@ -313,7 +342,12 @@ def _event_payload(
     if isinstance(event, AssistantToken):
         return "token", {"text": event.text}
     if isinstance(event, AssistantDone):
-        return "done", {"message": _message_response(event.message).model_dump()}
+        payload: dict[str, Any] = {"message": _message_response(event.message).model_dump()}
+        if event.extra is not None:
+            # `flows/nl2sql`'s SQL/verdict/rows payload — see `AssistantDone.extra`'s
+            # docstring for why it rides the terminal frame instead of a refetch.
+            payload["nl2sql"] = event.extra
+        return "done", payload
     return "error", {"message": event.message}
 
 

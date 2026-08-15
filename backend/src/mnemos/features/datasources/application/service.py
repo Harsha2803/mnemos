@@ -14,9 +14,11 @@ from mnemos.core.logging import get_logger
 from mnemos.features.datasources.application.ports import (
     DatasourceRecord,
     DatasourceRepository,
+    ExecutionOutcome,
     GlossaryRepository,
     SchemaIntrospector,
     SchemaObjectRepository,
+    SqlExecutor,
 )
 from mnemos.features.datasources.domain import (
     GlossaryTermRow,
@@ -37,12 +39,14 @@ class DatasourceService:
         introspector: SchemaIntrospector,
         cipher: DsnCipher,
         glossary: GlossaryRepository,
+        executor: SqlExecutor,
     ) -> None:
         self._datasources = datasources
         self._schema_objects = schema_objects
         self._introspector = introspector
         self._cipher = cipher
         self._glossary = glossary
+        self._executor = executor
 
     async def register(
         self,
@@ -135,3 +139,39 @@ class DatasourceService:
         )
         glossary_terms = await self._glossary.list_terms(org_id=org_id, datasource_id=datasource.id)
         return render_schema_context(schema_objects=schema_objects, glossary_terms=glossary_terms)
+
+    async def execute(
+        self,
+        *,
+        org_id: OrgId,
+        slug: str,
+        sql: str,
+        statement_timeout_ms: int,
+        max_rows: int,
+    ) -> ExecutionOutcome:
+        """Run an already-`ALLOWED` statement as the datasource's read-only
+        role. **Never call this with anything `guard_sql` has not verdicted
+        `ALLOWED`** — this method does not guard, it only decrypts the DSN
+        and delegates, the same trust boundary `refresh_schema` draws around
+        `self._introspector`.
+
+        The decrypted DSN never leaves this method: `flows/nl2sql` gets an
+        `ExecutionOutcome` back, never the connection string, keeping
+        `DsnCipher` a `features/datasources`-internal concern the same way
+        `refresh_schema` already does.
+        """
+        datasource = await self.require_datasource(org_id=org_id, slug=slug)
+        dsn = self._cipher.decrypt(datasource.dsn_encrypted)
+        outcome = await self._executor.execute(
+            dsn=dsn, sql=sql, statement_timeout_ms=statement_timeout_ms, max_rows=max_rows
+        )
+        log.info(
+            "datasources.sql_executed",
+            org_id=str(org_id),
+            datasource_slug=slug,
+            row_count=outcome.row_count,
+            truncated=outcome.truncated,
+            duration_ms=outcome.duration_ms,
+            error_code=outcome.error_code,
+        )
+        return outcome

@@ -26,6 +26,27 @@ NL2SQL_SYSTEM_PROMPT = (
 _FENCE = re.compile(r"```(?:sql)?\s*(.*?)```", re.IGNORECASE | re.DOTALL)
 
 
+def build_repair_prompt(*, previous_sql: str, detail: str | None) -> str:
+    """The user turn a repair attempt (deliverable 4, `Settings.
+    sql_repair_attempts`) adds after a rejected candidate, telling the model
+    exactly what it wrote and exactly why the guard would not run it.
+
+    Deliberately quotes `detail` verbatim rather than paraphrasing it — the
+    guard's own wording ("contains Insert — Mnemos only reads") is already
+    the most precise available description of the problem, and paraphrasing
+    it risks losing the specific node/table name a repair needs to fix.
+    """
+    reason = detail or "it was not a single read-only SELECT statement"
+    return (
+        "That statement was rejected by Mnemos's read-only SQL guard.\n\n"
+        f"Reason: {reason}\n\n"
+        "Write a corrected, single read-only SELECT statement that still answers "
+        "the original question. Respond with the SQL statement alone, inside a "
+        "single ```sql code fence, and nothing else — no explanation before or "
+        "after it."
+    )
+
+
 def extract_sql_statement(response_text: str) -> str:
     """Pull the candidate statement out of the model's raw completion text.
 

@@ -41,6 +41,7 @@ from mnemos.core.crypto import DsnCipher
 from mnemos.core.errors import MnemosError, NotFoundError, ValidationError
 from mnemos.core.ids import DEFAULT_ID_GENERATOR
 from mnemos.core.security import PasswordHasher
+from mnemos.features.datasources.adapters.executor import PostgresExecutor
 from mnemos.features.datasources.adapters.introspection import PostgresIntrospector
 from mnemos.features.datasources.adapters.repository import (
     DatasourceRepository,
@@ -50,7 +51,7 @@ from mnemos.features.datasources.adapters.repository import (
 )
 from mnemos.features.datasources.application.generation import SqlGenerationService
 from mnemos.features.datasources.application.service import DatasourceService
-from mnemos.features.datasources.domain import GlossaryTermRow
+from mnemos.features.datasources.domain import DEFAULT_DATASOURCE_SLUG, GlossaryTermRow
 from mnemos.features.identity.adapters.bootstrap_store import SqlBootstrapStore
 from mnemos.features.identity.adapters.models import Org
 from mnemos.features.identity.application.bootstrap import (
@@ -68,7 +69,10 @@ from mnemos.platform.db import Database
 #: The one warehouse this build ships. A datasource registry UI is out of
 #: scope for `A3` (TRACKER §5) — registration is this CLI command, same shape
 #: as `bootstrap` creating the one org an operator needs to get started.
-DEMO_DATASOURCE_SLUG = "sales-warehouse"
+#: Shared with `entrypoints/api/main.py`'s `Nl2SqlFlow` via `features.
+#: datasources.domain.DEFAULT_DATASOURCE_SLUG` — one definition, not two
+#: string literals that can drift.
+DEMO_DATASOURCE_SLUG = DEFAULT_DATASOURCE_SLUG
 DEMO_DATASOURCE_NAME = "Sales Warehouse (demo)"
 DEMO_DATASOURCE_DESCRIPTION = (
     "The seeded analytics.* schema (deploy/postgres/init/02-analytics-seed.sql): "
@@ -325,6 +329,7 @@ def _datasource_service(db: Database, settings: Settings) -> DatasourceService:
         introspector=PostgresIntrospector(),
         cipher=DsnCipher(settings.dsn_encryption_key.get_secret_value()),
         glossary=GlossaryRepository(db, DEFAULT_ID_GENERATOR),
+        executor=PostgresExecutor(),
     )
 
 

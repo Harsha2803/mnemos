@@ -6,6 +6,7 @@ from __future__ import annotations
 
 from dataclasses import dataclass
 
+from mnemos.core.types import JsonValue
 from mnemos.features.chat.domain.models import ChatMessageRecord
 
 
@@ -17,6 +18,15 @@ class AssistantToken:
 @dataclass(frozen=True, slots=True)
 class AssistantDone:
     message: ChatMessageRecord
+    #: Flow-specific payload merged into the `done` SSE frame verbatim.
+    #: `RagFlow` leaves this `None` — citations are read back from the session
+    #: refetch, not carried here. `flows/nl2sql` is the first flow that needs
+    #: it: the SQL, verdict, rows and truncation flag are only ever produced
+    #: once, in the same request that produces `message`, so shipping them in
+    #: the terminal SSE frame is the one place they cannot be lost to a
+    #: refetch race. `features/chat` stays ignorant of the shape inside —
+    #: only `dict[str, JsonValue]` is guaranteed, never a `datasources` type.
+    extra: dict[str, JsonValue] | None = None
 
 
 @dataclass(frozen=True, slots=True)

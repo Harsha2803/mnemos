@@ -30,6 +30,7 @@ from fastapi.responses import JSONResponse
 import mnemos.platform.models  # noqa: F401
 from mnemos.core.clock import SYSTEM_CLOCK
 from mnemos.core.config import Settings, get_settings
+from mnemos.core.crypto import DsnCipher
 from mnemos.core.errors import MnemosError
 from mnemos.core.ids import DEFAULT_ID_GENERATOR
 from mnemos.core.logging import configure_logging, get_logger, request_id_var
@@ -40,6 +41,17 @@ from mnemos.entrypoints.api.routers import knowledge as knowledge_router
 from mnemos.entrypoints.api.security import enforce_authentication, public_route_paths
 from mnemos.features.chat.adapters.repository import SqlChatRepository
 from mnemos.features.chat.application.service import ChatService
+from mnemos.features.datasources.adapters.executor import PostgresExecutor
+from mnemos.features.datasources.adapters.introspection import PostgresIntrospector
+from mnemos.features.datasources.adapters.repository import (
+    DatasourceRepository,
+    GlossaryRepository,
+    SchemaObjectRepository,
+    SqlRunRepository,
+)
+from mnemos.features.datasources.application.generation import SqlGenerationService
+from mnemos.features.datasources.application.service import DatasourceService
+from mnemos.features.datasources.domain import DEFAULT_DATASOURCE_SLUG
 from mnemos.features.identity.adapters.directory import SqlOrgDirectory, SqlUserDirectory
 from mnemos.features.identity.adapters.login_state import RedisLoginStateStore
 from mnemos.features.identity.adapters.principals import SqlPrincipalRepository
@@ -59,6 +71,7 @@ from mnemos.features.knowledge.adapters.retrieval import SqlRetriever
 from mnemos.features.knowledge.application.service import KnowledgeService
 from mnemos.features.knowledge.domain import HashingEmbedder, HeuristicTokenizer
 from mnemos.features.llm.adapters.ollama import OllamaChatModel
+from mnemos.flows.nl2sql.application import Nl2SqlFlow
 from mnemos.flows.rag.application import RagFlow
 from mnemos.platform.cache import Cache
 from mnemos.platform.db import Database
@@ -172,6 +185,36 @@ async def lifespan(app: FastAPI) -> AsyncIterator[None]:
         model=app.state.chat_model,
         token_budget=settings.default_token_budget,
         retrieval_k=settings.retrieval_k,
+    )
+
+    # --- datasources + nl2sql: generation behind the AST guard, execution as
+    # `mnemos_ro`, narration. Two independent `SqlRunRepository` instances
+    # below (one inside `SqlGenerationService`, one handed to `Nl2SqlFlow`
+    # directly) are the same pattern as `chat_repository` above: cheap
+    # adapters over the same `Database`, not shared state.
+    app.state.datasource_service = DatasourceService(
+        datasources=DatasourceRepository(app.state.db, DEFAULT_ID_GENERATOR),
+        schema_objects=SchemaObjectRepository(app.state.db, DEFAULT_ID_GENERATOR),
+        introspector=PostgresIntrospector(),
+        cipher=DsnCipher(settings.dsn_encryption_key.get_secret_value()),
+        glossary=GlossaryRepository(app.state.db, DEFAULT_ID_GENERATOR),
+        executor=PostgresExecutor(),
+    )
+    app.state.sql_generation_service = SqlGenerationService(
+        datasources=app.state.datasource_service,
+        model=app.state.chat_model,
+        sql_runs=SqlRunRepository(app.state.db, DEFAULT_ID_GENERATOR),
+    )
+    app.state.nl2sql_flow = Nl2SqlFlow(
+        chat_repository=SqlChatRepository(app.state.db, DEFAULT_ID_GENERATOR),
+        datasources=app.state.datasource_service,
+        generation=app.state.sql_generation_service,
+        sql_runs=SqlRunRepository(app.state.db, DEFAULT_ID_GENERATOR),
+        model=app.state.chat_model,
+        datasource_slug=DEFAULT_DATASOURCE_SLUG,
+        statement_timeout_ms=settings.sql_statement_timeout_ms,
+        max_rows=settings.sql_max_rows,
+        repair_attempts=settings.sql_repair_attempts,
     )
 
     log.info("api.startup", env=str(settings.env), api_prefix=settings.api_prefix)

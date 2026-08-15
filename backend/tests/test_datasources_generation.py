@@ -23,6 +23,7 @@ import mnemos.platform.models  # noqa: F401
 from mnemos.core.crypto import DsnCipher
 from mnemos.core.ids import Uuid7Generator, uuid7
 from mnemos.core.types import SqlVerdict
+from mnemos.features.datasources.adapters.executor import PostgresExecutor
 from mnemos.features.datasources.adapters.introspection import PostgresIntrospector
 from mnemos.features.datasources.adapters.repository import (
     DatasourceRepository,
@@ -134,6 +135,7 @@ def datasource_service(db: Database) -> DatasourceService:
         introspector=PostgresIntrospector(),
         cipher=DsnCipher(DSN_KEY),
         glossary=GlossaryRepository(db, ids),
+        executor=PostgresExecutor(),
     )
 
 

@@ -2,9 +2,11 @@
 
 from __future__ import annotations
 
+from mnemos.features.datasources.domain.constants import DEFAULT_DATASOURCE_SLUG
 from mnemos.features.datasources.domain.context import render_schema_context
 from mnemos.features.datasources.domain.generation import (
     NL2SQL_SYSTEM_PROMPT,
+    build_repair_prompt,
     extract_sql_statement,
 )
 from mnemos.features.datasources.domain.glossary import GlossaryTermRow
@@ -18,6 +20,7 @@ from mnemos.features.datasources.domain.schema import (
 )
 
 __all__ = [
+    "DEFAULT_DATASOURCE_SLUG",
     "NL2SQL_SYSTEM_PROMPT",
     "DatasourceId",
     "GlossaryTermRow",
@@ -26,6 +29,7 @@ __all__ = [
     "IntrospectedTable",
     "SchemaObjectDraft",
     "SqlRunId",
+    "build_repair_prompt",
     "build_schema_objects",
     "extract_sql_statement",
     "guard_sql",

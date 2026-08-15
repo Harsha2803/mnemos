@@ -242,6 +242,13 @@ def _to_sql_run_record(row: SqlRun) -> SqlRunRecord:
         verdict_detail=row.verdict_detail,
         authorized_tables=list(row.authorized_tables),
         denied_tables=list(row.denied_tables),
+        message_id=row.message_id,
+        executed=row.executed,
+        row_count=row.row_count,
+        truncated=row.truncated,
+        duration_ms=row.duration_ms,
+        error_code=row.error_code,
+        error_detail=row.error_detail,
     )
 
 
@@ -282,3 +289,42 @@ class SqlRunRepository:
             await session.flush()
             await session.refresh(row)
             return _to_sql_run_record(row)
+
+    async def record_execution(
+        self,
+        *,
+        org_id: OrgId,
+        sql_run_id: SqlRunId,
+        executed: bool,
+        row_count: int | None,
+        truncated: bool,
+        duration_ms: int | None,
+        error_code: str | None,
+        error_detail: str | None,
+    ) -> SqlRunRecord:
+        async with self._db.session(org_id=org_id) as session:
+            row = await session.scalar(
+                select(SqlRun).where(SqlRun.org_id == org_id, SqlRun.id == sql_run_id)
+            )
+            if row is None:
+                raise LookupError(f"no sql_run {sql_run_id} for org {org_id}")
+            row.executed = executed
+            row.row_count = row_count
+            row.truncated = truncated
+            row.duration_ms = duration_ms
+            row.error_code = error_code
+            row.error_detail = error_detail
+            await session.flush()
+            await session.refresh(row)
+            return _to_sql_run_record(row)
+
+    async def attach_to_message(
+        self, *, org_id: OrgId, sql_run_id: SqlRunId, message_id: uuid.UUID
+    ) -> None:
+        async with self._db.session(org_id=org_id) as session:
+            row = await session.scalar(
+                select(SqlRun).where(SqlRun.org_id == org_id, SqlRun.id == sql_run_id)
+            )
+            if row is None:
+                raise LookupError(f"no sql_run {sql_run_id} for org {org_id}")
+            row.message_id = message_id

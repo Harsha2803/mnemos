@@ -111,6 +111,21 @@ class SqlRunRecord:
     verdict_detail: str | None
     authorized_tables: list[str]
     denied_tables: list[str]
+    #: Unset until `SqlRunRepository.attach_to_message` runs, after the
+    #: assistant message it belongs to is persisted (deliverable 4) — the
+    #: same "message must exist first" sequencing `add_citations` already
+    #: follows for `flows/rag`.
+    message_id: uuid.UUID | None = None
+    #: Execution outcome, filled in by `record_execution` for an `ALLOWED`
+    #: verdict only. A `REJECTED_*` record keeps every field below at its
+    #: default — `executed=False` is the fact the security invariant rests
+    #: on, not an unset placeholder.
+    executed: bool = False
+    row_count: int | None = None
+    truncated: bool = False
+    duration_ms: int | None = None
+    error_code: str | None = None
+    error_detail: str | None = None
 
 
 class SqlRunRepository(Protocol):
@@ -134,8 +149,87 @@ class SqlRunRepository(Protocol):
         attach to yet (`flows/nl2sql/`, deliverable 4, is what will pass a
         real one) — every attempt is still recorded, just not yet linked to a
         conversation turn. `attempt` is supplied by the caller rather than
-        computed here, so a future repair loop (deliverable 4,
+        computed here, so a repair loop (deliverable 4,
         `Settings.sql_repair_attempts`) can record attempt 2, 3, ... against
         the same question without this port changing shape.
+        """
+        ...
+
+    async def record_execution(
+        self,
+        *,
+        org_id: OrgId,
+        sql_run_id: SqlRunId,
+        executed: bool,
+        row_count: int | None,
+        truncated: bool,
+        duration_ms: int | None,
+        error_code: str | None,
+        error_detail: str | None,
+    ) -> SqlRunRecord:
+        """Fill in the six execution columns `adapters/models.py`'s `SqlRun`
+        has carried, unused, since `M2`. Called at most once per attempt,
+        only for a run whose verdict was already `ALLOWED` — deliverable 4's
+        flow never calls this for a `REJECTED_*` record, which is what makes
+        `executed=False` on a rejected row a fact the guard produced rather
+        than a value this method happened not to set.
+        """
+        ...
+
+    async def attach_to_message(
+        self, *, org_id: OrgId, sql_run_id: SqlRunId, message_id: uuid.UUID
+    ) -> None:
+        """Link a recorded attempt to the assistant message it produced.
+
+        Called after `ChatRepository.append_assistant_message` returns, the
+        same ordering `add_citations` uses and for the same reason: a message
+        id cannot exist before the message does, so persisting the message
+        and linking to it are always two sequential calls, never one.
+        """
+        ...
+
+
+#: What a SQL cell can hold once every Postgres type the demo schema and a
+#: model-generated `SELECT` can plausibly produce (numeric, text, boolean,
+#: date/time, `Decimal`, `UUID`, `None`, ...) is normalised to something a
+#: JSON response and a `ChatTurn` narrating over it can both hold without
+#: either needing to know the original column type.
+SqlCellValue = str | int | float | bool | None
+
+
+@dataclass(frozen=True, slots=True)
+class ExecutionOutcome:
+    """What running one `ALLOWED` statement as `mnemos_ro` produced.
+
+    `error_code`/`error_detail` are set only when Postgres itself rejected
+    the statement at execution time (a semantic error the guard has no way
+    to see, e.g. a column name the model invented) — the guard already
+    proved this is not a *write*, so a runtime failure here is always about
+    correctness, never about safety.
+    """
+
+    columns: list[str]
+    rows: list[list[SqlCellValue]]
+    row_count: int
+    truncated: bool
+    duration_ms: int
+    error_code: str | None = None
+    error_detail: str | None = None
+
+
+class SqlExecutor(Protocol):
+    async def execute(
+        self, *, dsn: str, sql: str, statement_timeout_ms: int, max_rows: int
+    ) -> ExecutionOutcome:
+        """Run exactly the statement it is given, once, against `dsn`.
+
+        `sql` must already be an `ALLOWED` `guard_sql` verdict — this port
+        does not guard, does not parse, and does not modify what it is
+        handed (no `LIMIT` appended by string-building): capping rows is the
+        caller fetching at most `max_rows + 1` from the cursor, not rewriting
+        the statement guarded upstream. A statement that runs past
+        `statement_timeout_ms` is cancelled by Postgres itself and surfaces
+        as an `ExecutionOutcome` with `error_code="statement_timeout"`, never
+        as a hung connection.
         """
         ...

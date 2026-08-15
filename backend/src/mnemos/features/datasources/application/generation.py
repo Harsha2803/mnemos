@@ -11,16 +11,21 @@ tests and different fakes; composing `DatasourceService` (for
 `flows/rag/application/service.py`'s `RagFlow` composes `KnowledgeService`
 rather than adding a `stream_reply` method to it.
 
-Not `flows/nl2sql/`, though the shape rhymes with `RagFlow`: TRACKER §5 is
-explicit that deliverables 3-4 are "more of this feature, not a new one",
-and `flows/` is reserved for deliverable 4, where streaming and the chat
-integration actually require it. `generate()` here is one blocking call —
-`ChatModel.complete`, not `.stream` — because nothing can be guarded, let
-alone shown, before the whole statement has arrived; the port docstring
-already anticipates exactly this kind of non-streaming caller.
+Not `flows/nl2sql/`, though the shape rhymes with `RagFlow`: TRACKER §5 was
+explicit that deliverables 3-4 are "more of this feature, not a new one" —
+deliverable 4's repair loop (below) is still reasoned about entirely inside
+`features/datasources`, one call to `generate()` per attempt; `flows/
+nl2sql/` is where the loop itself lives, because *stopping* the loop and
+deciding what to execute is a fact about the chat turn, not about
+generation. `generate()` here is one blocking call — `ChatModel.complete`,
+not `.stream` — because nothing can be guarded, let alone shown, before the
+whole statement has arrived; the port docstring already anticipates exactly
+this kind of non-streaming caller.
 """
 
 from __future__ import annotations
+
+from dataclasses import dataclass
 
 from mnemos.core.logging import get_logger
 from mnemos.core.types import MessageRole
@@ -28,6 +33,7 @@ from mnemos.features.datasources.application.ports import SqlRunRecord, SqlRunRe
 from mnemos.features.datasources.application.service import DatasourceService
 from mnemos.features.datasources.domain import (
     NL2SQL_SYSTEM_PROMPT,
+    build_repair_prompt,
     extract_sql_statement,
     guard_sql,
 )
@@ -36,9 +42,18 @@ from mnemos.features.llm.domain.model import ChatModel, ChatTurn
 
 log = get_logger(__name__)
 
-#: No repair loop yet (`Settings.sql_repair_attempts` is deliverable 4's) —
-#: every deliverable-3 call is a single, one-shot attempt at the question.
-_FIRST_ATTEMPT = 1
+
+@dataclass(frozen=True, slots=True)
+class RepairContext:
+    """What a repair attempt (attempt 2, 3, ...) adds to the prompt: the
+    statement the guard just rejected and why. `Nl2SqlFlow` builds one from
+    the previous attempt's own `SqlRunRecord` — never from anything the
+    guard has not already verdicted, so a repair prompt can never quote SQL
+    this service has not itself seen and recorded.
+    """
+
+    previous_sql: str
+    detail: str | None
 
 
 class SqlGenerationService:
@@ -49,9 +64,24 @@ class SqlGenerationService:
         self._model = model
         self._sql_runs = sql_runs
 
-    async def generate(self, *, org_id: OrgId, slug: str, question: str) -> SqlRunRecord:
+    async def generate(
+        self,
+        *,
+        org_id: OrgId,
+        slug: str,
+        question: str,
+        attempt: int = 1,
+        repair: RepairContext | None = None,
+    ) -> SqlRunRecord:
         """Generate one candidate statement for `question`, guard it, and
         record the attempt regardless of the verdict.
+
+        `attempt` and `repair` default to a single, one-shot attempt — every
+        deliverable-3 call site (the CLI, existing tests) is unaffected.
+        `Nl2SqlFlow`'s repair loop (deliverable 4) is the caller that passes
+        `attempt=2` and a `RepairContext` built from attempt 1's rejected
+        record, and does so as its own new call to `generate()` — this
+        method still does not loop internally.
 
         Raises `LookupError` for an unregistered slug, or one registered to
         a different org — `require_datasource`'s lookup is `org_id`-scoped,
@@ -67,6 +97,19 @@ class SqlGenerationService:
             ChatTurn(role=MessageRole.SYSTEM, content=schema_context),
             ChatTurn(role=MessageRole.USER, content=question),
         ]
+        if repair is not None:
+            turns.append(
+                ChatTurn(role=MessageRole.ASSISTANT, content=f"```sql\n{repair.previous_sql}\n```")
+            )
+            turns.append(
+                ChatTurn(
+                    role=MessageRole.USER,
+                    content=build_repair_prompt(
+                        previous_sql=repair.previous_sql, detail=repair.detail
+                    ),
+                )
+            )
+
         completion = await self._model.complete(turns)
         candidate_sql = extract_sql_statement(completion.content)
         verdict = guard_sql(candidate_sql)
@@ -75,7 +118,7 @@ class SqlGenerationService:
             org_id=org_id,
             datasource_id=datasource.id,
             message_id=None,
-            attempt=_FIRST_ATTEMPT,
+            attempt=attempt,
             question=question,
             generated_sql=candidate_sql,
             verdict=verdict.verdict,
@@ -87,6 +130,7 @@ class SqlGenerationService:
             "datasources.sql_generated",
             org_id=str(org_id),
             datasource_slug=slug,
+            attempt=attempt,
             verdict=verdict.verdict.value,
         )
         return record
