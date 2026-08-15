@@ -64,44 +64,61 @@ describe("the composer", () => {
     expect(onStop).toHaveBeenCalledTimes(1);
   });
 
-  it("test_the_use_documents_toggle_is_a_real_checkbox_and_reports_its_changes", async () => {
+  it("test_the_answer_mode_control_is_a_real_radiogroup_and_reports_its_changes", async () => {
     const onUseDocumentsChange = vi.fn();
     renderComposer({ onUseDocumentsChange });
 
-    // By role, so this fails if it is ever "simplified" into a styled div —
+    // By role, so this fails if it is ever "simplified" into styled divs —
     // which would be unreachable by keyboard and silent to a screen reader.
-    const toggle = screen.getByRole("checkbox", { name: "Use documents" });
-    expect(toggle).not.toBeChecked();
+    // `chat` is selected by default: a real, nameable third state, not the
+    // absence of a choice.
+    expect(screen.getByRole("radio", { name: "Chat" })).toHaveAttribute("aria-checked", "true");
+    const documents = screen.getByRole("radio", { name: "Use documents" });
+    expect(documents).toHaveAttribute("aria-checked", "false");
 
-    await userEvent.click(toggle);
+    await userEvent.click(documents);
 
     expect(onUseDocumentsChange).toHaveBeenCalledWith(true);
   });
 
-  it("test_the_use_datasource_toggle_is_a_real_checkbox_and_reports_its_changes", async () => {
+  it("test_the_use_datasource_option_reports_its_changes", async () => {
     const onUseDatasourceChange = vi.fn();
     renderComposer({ onUseDatasourceChange });
 
-    const toggle = screen.getByRole("checkbox", { name: "Ask your data" });
-    expect(toggle).not.toBeChecked();
+    const toggle = screen.getByRole("radio", { name: "Ask your data" });
+    expect(toggle).toHaveAttribute("aria-checked", "false");
 
     await userEvent.click(toggle);
 
     expect(onUseDatasourceChange).toHaveBeenCalledWith(true);
   });
 
-  it("the two datasource toggles are mutually exclusive", () => {
+  it("the three answer modes are mutually exclusive by construction", () => {
     // Reflects the backend's own rule: sending both `use_documents` and
-    // `use_datasource` as `true` is a 422. Selecting one disables the other
-    // rather than allowing an impossible combination to be built in the UI.
+    // `use_datasource` as `true` is a 422. A `radiogroup` cannot represent
+    // two selections at once, so there is no separate "disable the sibling"
+    // logic to test — the control itself makes the impossible state
+    // unbuildable.
     const usingDocuments = renderComposer({ useDocuments: true });
-    expect(screen.getByRole("checkbox", { name: "Ask your data" })).toBeDisabled();
-    expect(screen.getByRole("checkbox", { name: "Use documents" })).toBeEnabled();
+    expect(screen.getByRole("radio", { name: "Use documents" })).toHaveAttribute(
+      "aria-checked",
+      "true",
+    );
+    expect(screen.getByRole("radio", { name: "Ask your data" })).toHaveAttribute(
+      "aria-checked",
+      "false",
+    );
     usingDocuments.unmount();
 
     renderComposer({ useDatasource: true });
-    expect(screen.getByRole("checkbox", { name: "Use documents" })).toBeDisabled();
-    expect(screen.getByRole("checkbox", { name: "Ask your data" })).toBeEnabled();
+    expect(screen.getByRole("radio", { name: "Ask your data" })).toHaveAttribute(
+      "aria-checked",
+      "true",
+    );
+    expect(screen.getByRole("radio", { name: "Use documents" })).toHaveAttribute(
+      "aria-checked",
+      "false",
+    );
   });
 
   it("test_the_composer_has_no_axe_violations", async () => {
