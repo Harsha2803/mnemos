@@ -22,7 +22,76 @@ wrote it.
 **Branch right now:** none open. `main`'s tip is the squashed `A3` merge plus this session's
 docs-only commit (no code changed).
 
-> ### 2026-08-16 — per-session log files (dev tooling, not on the roadmap)
+> ### 2026-08-16 — seven frontend UI fixes (product polish, not on the roadmap)
+>
+> Another out-of-band request from the project owner, unrelated to `B1`/`B2`/… — same
+> shape as the per-session-log-files note directly below, and for the same reason it does
+> not move `B1`'s "next task" status. Branch `feat/frontend-ui-fixes`, off `main` (after
+> the log-files PR merged), PR #18.
+>
+> **What was asked, and what was built, in order:**
+>
+>   1. *Conversation naming.* Every session stayed titled "New chat" forever unless a
+>      user renamed it by hand. `features/chat/application/titles.py` is new: the first
+>      message persisted into a session (`last_message_at` still `None` at the moment it
+>      arrives) derives that session's title from its own content, one line, cut at a
+>      word boundary at 60 chars. Shared by all three answer flows —
+>      `ChatService.stream_reply`, `flows/rag`, `flows/nl2sql` — rather than duplicated
+>      three times, so a fourth flow cannot forget to call it.
+>   2. *Rename and delete.* The rename/delete API and client (`renameSession`/
+>      `deleteSession`) already existed end to end from earlier work and had no UI.
+>      `ChatSessionList.tsx` now gives every row always-visible rename (inline text
+>      field, Enter commits via blur, Escape cancels without sending anything) and
+>      delete (a named confirmation dialog, the same pattern `DocumentList`'s delete
+>      already used) controls — built as siblings of the navigating link rather than
+>      inside it, since `ListItem`'s `href` form would otherwise nest a `<button>`
+>      inside an `<a>`. Deleting the open conversation navigates back to `/chat`.
+>   3. *Upload size limit.* `Settings.max_upload_bytes` (25 MB) was already enforced
+>      server-side with no client-side check at all — an oversized file uploaded in
+>      full before being refused. `UploadControl.tsx` now checks the same limit before
+>      sending anything, and states it in the drop zone's own copy.
+>   4. *Multiple files at once.* The picker and drop zone accept several files now. Each
+>      is its own request — concurrency across them is whatever `docker-compose.yml`'s
+>      `api` service actually runs (one uvicorn worker, unchanged, since bumping that
+>      touches the process model for reasons wider than this request), not a limit the
+>      frontend imposes. `Promise.allSettled` means one bad file no longer blocks the
+>      rest, and each failure is named against the file it came from.
+>   5. *Chat window padding.* An open conversation read at the same `measure`
+>      (46rem)/`px-6 py-8` gutter every document-shaped route uses, leaving a wide empty
+>      margin on anything wider than a laptop. New token `--chat-measure` (64rem,
+>      `globals.css` §2.2) plus a tighter `px-4 py-4` gutter apply only to
+>      `/chat/[sessionId]`; each message bubble still clamps to the original 46rem
+>      `measure` on its own, so a line of text is never wider even though the column
+>      around it is.
+>   6. *Resizable panel boundaries.* Both the sidebar/content and content/inspector
+>      boundaries are now draggable, via the ARIA "window splitter" pattern (a focusable
+>      `role="separator"` with live `aria-value*`); the arrow keys do the same clamped
+>      resize. The inspector's handle sits on its own leading edge, so the same
+>      rightward drag that grows the sidebar has to shrink the inspector — the one sign
+>      flip `AppShell.tsx`'s `invert` prop exists for.
+>   7. *Sidebar open/close.* The sidebar could only be hidden below 768px, as a sheet.
+>      It now collapses/reopens from the toolbar exactly like the inspector already did
+>      (`sidebarPinned`, mirroring `inspectorPinned`) — same `aria-expanded`/
+>      `aria-controls` shape, same collapsing-width-not-unmount behaviour.
+>
+> **Evidence:** `pytest` — 378 passed (366 prior on `main` + 12 new: three for the
+> title-derivation behaviour in `test_chat_endpoints.py`, plus the RAG/NL2SQL flow
+> suites re-run unchanged). `ruff check`/`ruff format --check` clean, `mypy --strict`
+> clean — no schema touched, no migration needed. Frontend: `npm run lint`/
+> `npx tsc --noEmit` clean, `npm run test` — 109 passed (18 files, up from 97/16),
+> including new coverage for rename/delete, the client-side size limit and multi-file
+> partial-failure behaviour, and the resize handles under both simulated pointer drag
+> and keyboard. `npm run build` (production) succeeds.
+>
+> **Not done: real-browser verification.** `docker-compose.yml` pins `name: mnemos`
+> (line 12) — every git worktree of this repo, not only the primary checkout, resolves
+> to the *same* running compose project. The stack was mid-use by the concurrent session
+> building the per-session-log-files work above (its `api`/`worker`/`realtime` had just
+> been rebuilt from *its* backend changes) while this session ran, and rebuilding those
+> same services from this branch would have overwritten containers another session was
+> actively relying on. Automated coverage above is real; a manual pass through
+> `docker compose up -d --build` once the stack is free is the one thing this note
+> cannot claim.
 >
 > A request from the project owner, out of band from the `B1`/`B2`/… plan above: every
 > authenticated request's log lines should also land in a file named by that request's

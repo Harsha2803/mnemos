@@ -364,6 +364,21 @@ gitignored. Full detail, including a `cache_logger_on_first_use` correctness bug
 surfaced in `configure_logging` itself, is in
 [TRACKER's dated note](../TRACKER.md) for 2026-08-16.
 
+### Product polish — seven frontend UI fixes (2026-08-16, not a milestone)
+
+Also out-of-band, also no milestone id. A session is now titled from its own first
+message rather than staying "New chat" forever (`features/chat/application/titles.py`,
+shared by `ChatService`/`flows/rag`/`flows/nl2sql`); the sidebar's conversation rows
+gained rename and delete controls; document uploads are checked against
+`Settings.max_upload_bytes` client-side before anything is sent, and the picker/drop
+zone now accept several files at once (one request per file, each failure named
+separately); an open conversation reads at a new, wider `--chat-measure` token with a
+tighter gutter instead of the document-route `measure`; and the sidebar now collapses/
+resizes exactly like the inspector already did, plus draggable-and-keyboard-resizable
+boundaries for both panels (the ARIA "window splitter" pattern). No schema change, no
+migration. Full detail and evidence is in
+[TRACKER's dated note](../TRACKER.md) for 2026-08-16.
+
 ### F0 — app shell ✅
 
 The one task with no backend half, because `frontend/` was an empty directory and there
