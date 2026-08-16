@@ -108,3 +108,13 @@ class ConnectorService:
         record = await self.require_source(org_id=org_id, slug=slug)
         connector = self._factory.build(record)
         return await connector.list_items()
+
+    async def fetch_item(self, *, org_id: OrgId, slug: str, uri: str) -> tuple[str, bytes]:
+        """Returns `(source_kind, content)` — the source's own kind travels
+        with the fetched bytes because `Document.source_kind` (`B1`
+        deliverable 4's worker) records where content actually came from,
+        not just that it arrived."""
+        record = await self.require_source(org_id=org_id, slug=slug)
+        connector = self._factory.build(record)
+        data = await connector.fetch(uri)
+        return record.kind, data

@@ -6,23 +6,107 @@
 > **and [`docs/ADAPTATION.md`](docs/ADAPTATION.md)** *in the same commit* — a stale
 > tracker is worse than none.
 
-**Last updated:** 2026-08-16 — `B1` deliverable 3 built: the realtime gateway's
-JWT-validated WS handshake and org-derived channel scoping (`entrypoints/realtime/
-main.py`). Deliverables 4-5 (the worker's real job-processing path, the sources UI)
-remain — see §5.
+**Last updated:** 2026-08-16 — `B1` deliverable 4 built: the worker claims and processes a
+real `ingest_job` end to end (extract/chunk/embed, reusing the factored-out body from
+`upload_document`), publishing to both the event bus and the now-authenticated realtime
+channel deliverable 3 built. Deliverable 5 (the sources UI) remains — see §5.
 **Phase:** **A — make it a chatbot.** `A0` ✅, `A1` ✅, `A2` ✅, `A3` ✅ — all merged to
 `main`. Phase A is complete. Build order deviates from phase order once: `B1`/`B2` come
 next, before `A4` (2026-08-15 evening re-sequencing note below).
-**Next task:** `B1` deliverable 4 — the worker claims and processes a real `ingest_job`
-(extract/chunk/embed, reusing the factored-out body from `upload_document`), publishing to
-both the event bus and the now-authenticated realtime channel deliverable 3 built.
-Deliverables 1-3 are done and on the branch (evidence below and in §3). Deliverables 4-5
-are **fully specified in §5**, unchanged from the original brief except deliverables 1-3's
-own entries, which now record what was actually built rather than what was planned.
-**Branch right now:** `feat/b1-connectors`, PR open (draft — `B1`'s PR stays in draft
-until deliverable 5's sources UI exists, per C12). Deliverables 1-3's commits are on it;
-`main` is unchanged.
+**Next task:** `B1` deliverable 5 — the sources UI (`frontend/src/app/(app)/sources/`):
+connect a source, browse and select items, ingest them, and watch the live
+queued/running/succeeded/failed feed over the now-real, now-authenticated pipeline
+deliverables 1-4 built. **Fully specified in §5.** This is the deliverable that takes PR
+#16 out of draft (C12).
+**Branch right now:** `feat/b1-connectors`, PR open (draft — until deliverable 5 lands).
+Deliverables 1-4's commits are on it; `main` is unchanged.
 
+> ### 2026-08-16 — `B1` deliverable 4 built: the worker claims and processes a real
+> `ingest_job`
+>
+> Picked up right where deliverable 3 left off, on the same branch. **Note on how this
+> session started:** the handoff prompt in `prompt.txt` was the deliverable-2 handoff
+> (written before deliverable 3 existed), not a fresh one — deliverable 3 had been built and
+> committed (`32aed9e`) in a session that skipped writing a new handoff. This file (TRACKER,
+> read fresh from disk rather than trusted from the stale prompt) was internally consistent
+> and already recorded deliverable 3 as done, so this session verified that against
+> `git log`/`gh pr view 16`/the actual code before doing anything else, then continued from
+> the true state — deliverable 4 — rather than either redoing deliverable 3 or blindly
+> trusting either document. Recorded here so the next handoff is written fresh rather than
+> compounding the gap.
+>
+> **What's built:** `entrypoints/worker/main.py`'s poll loop now claims one `queued`
+> `ingest_job` at a time (`FOR UPDATE SKIP LOCKED`, the same concurrency shape the reaper
+> already used) via `IngestJobRepository.claim_next`, drains the queue each tick rather than
+> pacing one job per `POLL_INTERVAL_S`, and processes it: `ConnectorService.fetch_item`
+> (new — resolves a registered source, decrypts its config, fetches the item, and returns
+> the source's own `kind` alongside the bytes) feeds
+> `KnowledgeService.ingest_connector_item` (new — the extract/chunk/embed body factored out
+> of `upload_document` into a shared `_ingest`, so neither path duplicates the pipeline; the
+> manual-upload path's behaviour is unchanged, only its internals moved). Every transition
+> (`queued -> running`, `running -> succeeded`/`failed`) writes an `ingest_job_event` row and
+> publishes twice — to the Redis Streams `EventBus` (durable) and to
+> `mnemos:org:{org_id}:ingestion` (live) — matching deliverable 2's "both, not either"
+> decision and deliverable 3's exact channel contract verbatim. `mnemosctl connector ingest
+> --org-slug X --slug Y --uri Z` (new CLI command) is the real, demonstrable producer until
+> deliverable 5's UI exists — idempotent per item (`idempotency_key`), refuses a `uri` that
+> is not currently listed.
+>
+> **The trust-tier question §5 flagged, closed as already resolved:** deliverable 1's own
+> dated note had already worked this out — `core/types.py`'s `TrustTier` has no rung below
+> `RETRIEVED` (10), already the floor and already what a manual upload gets, so connector
+> content passes `TrustTier.RETRIEVED` too. Confirmed by re-reading `ThreatModel.md` §4
+> before writing the line, not reused unexamined; `KnowledgeService.ingest_connector_item`'s
+> docstring records the reasoning inline so a future reader does not have to re-derive it.
+>
+> **A real, latent bug found and fixed, not scope creep:** `reap_stuck_jobs` ran inside an
+> unscoped `db.session()` — no `org_id`, so the `app.current_org` GUC was never set. Under
+> `FORCE ROW LEVEL SECURITY` (migration `0004`) and an unprivileged `mnemos_app` connection
+> (migration `0005`), the org-isolation policy's `org_id = NULL` comparison is never true, so
+> **the reaper saw zero rows on any real Postgres, always** — regardless of how many jobs
+> were actually stuck. Nothing had caught this because nothing had ever run it against a
+> real, RLS-enforced database (no test existed for it before this session). Found while
+> building the worker's own claim query, which is the same cross-tenant shape for the same
+> reason: a single worker polls across every org's queue, so there is no one `org_id` to
+> scope a session to until after a claim returns one. Both now use
+> `db.elevated_session()` — `platform/db.py`'s own comment already reserved this as the
+> second of "two callers, ever" (the first is bootstrap), which is exactly the shape of
+> problem it exists for: a query that is legitimately cross-tenant, not a query that forgot
+> to scope itself. `test_reap_stuck_jobs_reclaims_an_expired_lease_under_real_rls` is the
+> regression test — it would have asserted `reclaimed == 0` against the old code, on a real
+> Postgres, no matter how expired the lease was.
+>
+> **Live-verified against the running compose stack, not just the test suite:** rebuilt and
+> restarted `api`/`worker`; registered a real `local_fs` connector against fixture files
+> present in both containers' filesystems (they do not share a volume), ran
+> `connector ingest`, and watched the worker's own log go `worker.job_claimed` ->
+> `worker.job_succeeded` within one poll tick. Confirmed directly via `psql`: the
+> `ingest_job` row `succeeded` with a real `document_id`, two `ingest_job_event` rows
+> (`queued->running`, `running->succeeded`), the `document` row with `source_kind='local_fs'`,
+> `source_uri` the item's own uri, `trust_tier=10`, `uploaded_by` null, and one real `chunk`
+> row. Confirmed directly via `redis-cli XRANGE` on the real Streams entry: both transitions
+> present with matching fields. Also verified live: re-`connector ingest`-ing the same item
+> is refused (idempotency), ingesting an unlisted uri is refused before a job is ever
+> created, and a job pointed at a file deleted out from under it (inserted directly via
+> `psql`, bypassing the CLI's own listing check) is claimed, fails with
+> `error_code=NotFoundError`, and its event history/publishes both reflect `failed` — the
+> worker's tick kept running afterward rather than crashing on the exception.
+>
+> **Evidence:** `make test` — 410 passed (403 prior + 7 new, `tests/test_worker_ingestion.py`
+> — `claim_next`'s FIFO ordering and its `FOR UPDATE SKIP LOCKED` exclusivity under real
+> concurrent claimers, idempotent enqueue, the full success path against real Postgres +
+> Redis with every assertion above also made in-suite, the missing-item failure path, and
+> the RLS regression test for the `elevated_session` fix). `make lint` / `make types` clean.
+> `make check` (`alembic check`) clean — no migration needed; `ingest_job`/`ingest_job_event`/
+> `document.source_kind` all already existed from `M2`/`A2`. No frontend change; deliverable
+> 4 has no UI surface of its own, same as deliverables 1-3 — the sources UI (deliverable 5)
+> is next and is what takes PR #16 out of draft.
+>
+> **Not done, deliberately — deliverable 5, exactly as `B1`'s original brief specifies it.**
+> No frontend. Heartbeat/backoff retry depth beyond one immediate failure and a per-job
+> progress percentage are `B2`, not touched here, matching every prior deliverable's "explicitly
+> not `B1`" boundary.
+>
 > ### 2026-08-16 — `B1` deliverable 3 built: the realtime gateway's JWT-validated WS
 > handshake and org-derived channel scoping
 >
@@ -895,7 +979,7 @@ order" list is the authoritative next-up sequence; the note above it explains wh
 
 | ID | What it builds | You can now… | Status |
 |---|---|---|---|
-| **B1** | Object storage · source connectors (MinIO/S3, local FS, HTTP) · Redis Streams event bus · sources UI | **connect a source, browse it, and watch ingestion events arrive live** | 🟡 **deliverable 3/5 done** — connectors, event bus, realtime auth; worker, UI remain |
+| **B1** | Object storage · source connectors (MinIO/S3, local FS, HTTP) · Redis Streams event bus · sources UI | **connect a source, browse it, and watch ingestion events arrive live** | 🟡 **deliverable 4/5 done** — connectors, event bus, realtime auth, the worker's real job-processing path; only the UI remains |
 | **B2** | Ingestion jobs at scale: heartbeat, retries, status history, stuck-job reaper · per-job progress UI | **ingest a folder and watch every job's progress — including one that dies, surfaced as stuck rather than silently lost** | ⬜ **after `B1`** |
 | **B3** | MCP tool runtime: registry, per-user credentials, trust tiers, approval gates · tool console | **register a tool, have the assistant call it, and approve a gated call** — with a denial that names the offending source on screen | ⬜ |
 | **B4** | Agent flow: bounded state machine over tools, checkpoints, step trace | **give it a multi-step task and watch it plan, call tools and finish — with every step inspectable** | ⬜ |
@@ -947,13 +1031,13 @@ discarded. If you find a reference to an old ID anywhere, this is the translatio
 | `M13` frontend | dissolved into `F0` + a UI slice per milestone | Unchanged by this re-plan |
 | `M14` realtime + e2e + docs | `D1` | |
 
-### 🟡 B1 — connect a source and watch it ingest, deliverable 3/5 done 2026-08-16
+### 🟡 B1 — connect a source and watch it ingest, deliverable 4/5 done 2026-08-16
 
-**Deliverables 1-3 — the `SourceConnector` port + factory, the `EventBus` port + Redis
-Streams adapter, and the realtime gateway's JWT-validated WS handshake — are done;
-deliverables 4-5 are not.** Branch `feat/b1-connectors`, PR open in draft (stays draft
-until deliverable 5's sources UI exists, per C12 — deliverables 1-4 have no product UI by
-design).
+**Deliverables 1-4 — the `SourceConnector` port + factory, the `EventBus` port + Redis
+Streams adapter, the realtime gateway's JWT-validated WS handshake, and the worker's real
+job-processing path — are done; deliverable 5 (the sources UI) is not.** Branch
+`feat/b1-connectors`, PR open in draft (stays draft until deliverable 5 exists, per C12 —
+deliverables 1-4 have no product UI by design).
 
 What's built (deliverable 1): `features/connectors/domain/port.py` (`SourceItem`,
 `SourceConnector` protocol), three adapters (`s3.py` over the extended `ObjectStore` port,
@@ -987,15 +1071,30 @@ brief left open (subprotocol vs. query parameter; the channel naming scheme deli
 4-5 must match) and the live verification against the running compose stack, is in the
 dated note near the top of this file ("`B1` deliverable 3 built").
 
-**Evidence:** `make test` — 403 passed (391 prior + 12 new: deliverable 3's WS handshake
-tests against a real Redis via testcontainers, including a token for org A never receiving
-what is published on org B's real derived channel, and the hand-typed-channel attack the
-brief named refused before `accept()`). `make lint` / `make types` clean. `make check`
-(`alembic check`) clean — no migration touched. No frontend change; not claimed as done.
+What's built (deliverable 4): `entrypoints/worker/main.py`'s poll loop claims one `queued`
+`ingest_job` at a time (`IngestJobRepository.claim_next`, `FOR UPDATE SKIP LOCKED`) and
+processes it — `ConnectorService.fetch_item` (new) resolves and fetches the item,
+`KnowledgeService.ingest_connector_item` (new, sharing `upload_document`'s factored-out
+`_ingest` body) extracts/chunks/embeds it at `TrustTier.RETRIEVED`, same as a manual
+upload. Every transition writes an `ingest_job_event` row and publishes to both the
+`EventBus` (durable) and `mnemos:org:{org_id}:ingestion` (live, deliverable 3's exact
+contract). `mnemosctl connector ingest` is the CLI producer until deliverable 5's UI
+exists. **A real RLS bug found and fixed along the way:** `reap_stuck_jobs` ran in an
+unscoped session and so saw zero rows on any real Postgres, always — fixed with
+`db.elevated_session()`, the second of the "two callers, ever" `platform/db.py` already
+reserved for exactly this cross-tenant shape of query. Full detail, including the live
+verification against the running compose stack (rebuilt `api`/`worker`, a real ingest
+watched `queued -> running -> succeeded` via `psql`/`redis-cli`, plus the failure and
+idempotency paths), is in the dated note near the top of this file ("`B1` deliverable 4
+built").
 
-**Not done:** the worker's real job-processing path and the sources UI — deliverables 4-5,
-fully specified in §5, unstarted. `entrypoints/worker/main.py`'s stuck-job reaper still has
-nothing real to claim.
+**Evidence:** `make test` — 410 passed (403 prior + 7 new: `tests/test_worker_ingestion.py`
+— claim exclusivity under real concurrency, the full connector-ingest success path against
+real Postgres + Redis, the missing-item failure path, and the RLS regression test for the
+`elevated_session` fix). `make lint` / `make types` clean. `make check` (`alembic check`)
+clean — no migration needed. No frontend change; not claimed as done.
+
+**Not done:** the sources UI — deliverable 5, fully specified in §5, unstarted.
 
 ### ✅ A3 — ask about your data, verified end to end 2026-08-15, PR #15
 
@@ -2426,49 +2525,41 @@ Recorded so they are not rediscovered as surprises:
 real browser against the real stack. Full evidence is in the dated note near the top of
 this file ("`A3` deliverables 4-5 done") and in §3's `A3` entry.
 
-**`B1` deliverables 1-2 are done.** Deliverable 1 (the `SourceConnector` port + factory):
-full evidence in the "2026-08-15 (evening)" dated note near the top of this file and in
-§3's `B1` entry. `features/connectors/` now has real `domain`/`adapters`/`application`
-content (not the three empty `__init__.py` files the brief below still describes
-finding), `platform/objectstore/port.py`'s `ObjectStore` protocol gained a fourth method
-(`list(prefix) -> Sequence[ObjectMeta]`, implemented in `S3ObjectStore`), `content_source`
-is a real table with RLS, and `mnemosctl connector register`/`list-items` work end to end
-against a real filesystem/bucket/URL list. The one thing to know going in:
-`ConnectorService.list_items(org_id, slug)` is how deliverable 4's worker should reach a
-connector, not by importing `ConnectorFactory` directly — the service is what resolves a
-slug to a record and decrypts its config; skip it and you are re-deriving `require_source`
-inline.
+**`B1` deliverables 1-4 are done.** Full evidence for each is in its own dated note near the
+top of this file ("2026-08-15 (evening)" for 1, "2026-08-15 (night)" for 2, "2026-08-16" —
+the earlier of the two same-dated notes — for 3, and the deliverable-4 note above this one
+— for 4) and in §3's `B1` entry. **Deliverable 5 below (the sources UI) is unchanged from
+the original brief** — it was written before deliverables 1-4 existed, but nothing in it
+assumed a shape for `SourceConnector`/`ConnectorFactory`/`EventBus`/the realtime handshake/
+the worker beyond what got built, so it still applies as written. What the sources UI needs
+to know about each, in one place:
 
-Deliverable 2 (the `EventBus` port + Redis Streams adapter): full evidence in the
-"2026-08-15 (night)" dated note near the top of this file and in §3's `B1` entry.
-`platform/events/port.py`'s `EventBus` (`publish`/`ensure_group`/`read_group`/`ack`) and
-`platform/events/redis_streams.py`'s `RedisStreamsEventBus` exist and are tested against a
-real Redis. **Deliverable 4's worker should call `EventBus.publish` at every `ingest_job`
-transition, in addition to — not instead of — the existing `Cache.client.publish` to the
-`mnemos:{channel}` pub/sub topic the realtime gateway already relays**; that "both, not
-either" split is the design decision deliverable 2's dated note records as settled.
-
-**`B1` deliverable 3 is done.** Full evidence in the "2026-08-16" dated note near the top
-of this file and in §3's `B1` entry. `entrypoints/realtime/main.py`'s `/ws/{channel}` now
-validates the platform JWT (through the same `PlatformTokenCodec` + `PrincipalResolver`
-the HTTP API uses) offered as a `Sec-WebSocket-Protocol` value, and the channel a caller
-reaches is always `mnemos:org:{org_id}:{kind}` with `org_id` read only from the resolved
-token. **Two things deliverable 4 must match exactly, decided in deliverable 3 and
-recorded nowhere else:** the worker's `Cache.client.publish` calls must target
-`f"mnemos:org:{org_id}:ingestion"` (that literal `kind` string — the gateway's
-`ALLOWED_CHANNEL_KINDS` allow-list in `entrypoints/realtime/main.py` refuses anything
-else), and nothing about deliverable 4 touches the WS handshake itself — the worker only
-ever publishes to Redis, it never opens a socket.
-
-**Deliverables 4-5 below are unchanged from the original brief** — they were written
-before deliverables 1-3 existed, but nothing in them assumed a shape for
-`SourceConnector`/`ConnectorFactory`/`EventBus`/the realtime handshake beyond what got
-built, so they still apply as written.
-
-**The worker and the frontend are still exactly as `A3` left them** — deliverable 3 did
-not touch either. `entrypoints/worker/main.py`'s stuck-job reaper still has nothing real
-to claim. `entrypoints/realtime/main.py` is authenticated now; deliverable 4 is what will
-make it carry a real event for the first time.
+- **Deliverable 1** (`SourceConnector` port + factory): `ConnectorService` (`register`,
+  `list_sources`, `list_items`, `fetch_item`) is the one thing to call — never
+  `ConnectorFactory` directly. `features/connectors/api/` is still three empty files; the
+  sources UI's backend slice is HTTP routes there, over this service. Connector kinds are
+  `s3`/`minio`/`local_fs`/`http`, each with its own config shape (`_connector_config` in
+  `entrypoints/cli.py` shows the exact fields per kind).
+- **Deliverable 2** (`EventBus`): not the sources UI's concern directly — it is deliverable
+  4's worker that publishes to it. The UI only ever reads the live pub/sub relay (below).
+- **Deliverable 3** (realtime auth): the UI's WS client connects to `/ws/ingestion`
+  (`entrypoints/realtime/main.py`, real `realtime` container on port 8001) offering
+  `Sec-WebSocket-Protocol: ["bearer", "<access token>"]` — **not** a query parameter. It
+  receives `{"type": "subscribed", "channel": "ingestion"}` once accepted, then whatever is
+  published on `mnemos:org:{org_id}:ingestion` (its own org, derived server-side — the
+  client never names an org). A denied handshake closes with code `1008`, no reason on the
+  wire.
+- **Deliverable 4** (the worker): `mnemosctl connector ingest --org-slug X --slug Y --uri Z`
+  is today's only producer of an `ingest_job` — the sources UI's ingest action is the
+  second, so it needs an HTTP route in `features/connectors/api/` that does what that CLI
+  command does (`IngestJobRepository.enqueue`, kind `CONNECTOR_INGEST_KIND` from
+  `features.knowledge.domain`, payload `{"source_slug", "item_uri", "item_name",
+  "content_type"}`, `idempotency_key=f"{slug}:{uri}"`). Every publish on the WS channel
+  above is JSON shaped `{"type": "ingest_job", "job_id", "status", "kind", "document_id",
+  "error_code", "occurred_at"}` — `status` is one of `queued`/`running`/`succeeded`/`failed`
+  (the job's `queued` insert itself is never published; the UI's own "ingest requested"
+  optimistic state covers that gap until the worker's first `running` publish arrives,
+  typically within one `POLL_INTERVAL_S` — 5 seconds today).
 
 ### `B1` — connect a source and watch it ingest
 
@@ -2570,27 +2661,43 @@ matching how `A3`'s deliverables were committed:**
    verification against the running compose stack (rebuilt container, real session, real
    Redis publish/relay, real refusal of a hand-typed cross-org channel). `make
    lint`/`make types` clean; `make check` clean (no migration touched).
-4. **The worker claims and processes a real job.** Extend `entrypoints/worker/main.py`'s
-   poll loop: claim one `queued` `ingest_job` (`FOR UPDATE SKIP LOCKED`, mirroring the
-   reaper's own claim style) → `running` + heartbeat → call the factored-out extract/chunk/
-   embed body (deliverable 1's note above) against the connector-fetched bytes → `done`, or
-   `failed` with `error_code`/`error_detail` on the first exception (no retry-with-backoff
-   yet — that is `B2`) → an `ingest_job_event` row and a live publish at every transition.
-   Connector-sourced documents get a `trust_tier` **assigned per ThreatModel.md §4's "layer
-   1" rule — external connectors ≥ 4** — not `knowledge/application/service.py`'s
-   `DEFAULT_TRUST_TIER = 10` reused unexamined; read that table before picking the number,
-   since it is a security-relevant constant, not a cosmetic one.
+4. ✅ **Done (2026-08-16). The worker claims and processes a real job.** Built exactly as
+   specified: `entrypoints/worker/main.py`'s poll loop claims one `queued` `ingest_job` at a
+   time (`IngestJobRepository.claim_next`, `FOR UPDATE SKIP LOCKED`, mirroring the reaper's
+   own claim style) → `running` (heartbeat set at claim; no periodic renewal — that depth is
+   `B2`) → the factored-out extract/chunk/embed body
+   (`KnowledgeService.ingest_connector_item`) against the connector-fetched bytes → `succeeded`
+   **(one naming note: the brief above said `done`; the actual terminal status is
+   `succeeded`, matching `core/types.py`'s existing `JobStatus` enum rather than inventing a
+   new label — the sources UI (deliverable 5) should treat `succeeded` as the "done" state,
+   not wait for a status literally spelled `done`)**, or `failed` with `error_code`/
+   `error_detail` on the first exception (no retry-with-backoff yet — `B2`). An
+   `ingest_job_event` row and a live publish (both `EventBus` and pub/sub) at every
+   transition. Connector-sourced documents get `trust_tier=TrustTier.RETRIEVED` (10) — the
+   trust-tier question was already resolved in deliverable 1's dated note (see above), not
+   `ThreatModel.md` §4's literal "≥ 4", which was written against a retired 0-6 scale; the
+   4-rung `TrustTier` enum has no rung below `RETRIEVED` to assign. **A real RLS bug found
+   and fixed alongside this:** `reap_stuck_jobs` ran unscoped and so reclaimed nothing on a
+   real Postgres, ever — fixed via `db.elevated_session()`. Evidence: 7 new tests
+   (`tests/test_worker_ingestion.py`) against real Postgres + Redis, plus live verification
+   against the rebuilt compose stack. Full detail in the dated note above.
 5. **The sources UI, `frontend/src/app/(app)/sources/`.** Connect a source (a form per
    connector kind), browse its listed items in a table, select some and ingest them, then
-   watch a live event feed of `queued`/`running`/`done`/`failed` transitions arrive over the
-   now-authenticated WebSocket with no page refresh. Each state pairs an icon with a
+   watch a live event feed of `queued`/`running`/`succeeded`/`failed` transitions arrive over
+   the now-authenticated WebSocket with no page refresh — `succeeded`, not `done` (see item
+   4's naming note just above; a `queued` transition is never itself published, only implied
+   by the ingest request the UI itself just made). Each state pairs an icon with a
    plain-word label, never colour alone — the same accessible-state discipline
    `SqlPanel.tsx` already established and `test_no_component_hardcodes_a_colour` already
-   enforces (DesignSystem tokens only). New Playwright coverage: register the local-
-   filesystem connector against a small fixture directory (no real S3 bucket or live URL
-   needed in CI — the point of doing local filesystem first in this deliverable list is that
-   it is the one connector kind a CI runner can exercise for free), ingest one file, and
-   observe its job reach `done` live.
+   enforces (DesignSystem tokens only). `features/connectors/api/` (still three empty files)
+   is where this deliverable's backend routes belong — list sources, list items, enqueue an
+   ingest (mirroring `mnemosctl connector register`/`list-items`/`ingest`, see §5's
+   deliverable-4 recap above for the exact contract each route needs to match). New
+   Playwright coverage: register the local-filesystem connector against a small fixture
+   directory (no real S3 bucket or live URL needed in CI — the point of doing local
+   filesystem first in this deliverable list is that it is the one connector kind a CI
+   runner can exercise for free), ingest one file, and observe its job reach `succeeded`
+   live.
 
 **Explicitly NOT `B1`, so nobody drifts into building it early:** heartbeat/backoff retry
 depth beyond one immediate failure, a per-job progress percentage or partial-chunk count,

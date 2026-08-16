@@ -67,6 +67,8 @@ from mnemos.features.identity.application.bootstrap import (
     OidcSettings,
 )
 from mnemos.features.identity.domain import OrgId
+from mnemos.features.knowledge.adapters.jobs_repository import IngestJobRepository
+from mnemos.features.knowledge.domain import CONNECTOR_INGEST_KIND
 from mnemos.features.llm.adapters.ollama import OllamaChatModel
 from mnemos.platform.db import Database
 
@@ -507,6 +509,45 @@ async def _connector_list_items(args: argparse.Namespace) -> int:
     return 0
 
 
+async def _connector_ingest(args: argparse.Namespace) -> int:
+    """Enqueue a `queued` `ingest_job` for one browsed item — `B1` deliverable
+    4's real, demonstrable producer, the same "operator/inspection tool, not
+    a product screen" shape `datasource generate` was for deliverable 3.
+    `entrypoints/worker/main.py` is the consumer; nothing else creates a job
+    yet (deliverable 5's sources UI is the future second producer)."""
+    settings = get_settings()
+    db = Database(settings)
+    http_client = httpx.AsyncClient()
+    try:
+        org_id = await _resolve_org_id(db, args.org_slug)
+        service = _connector_service(db, settings, http_client)
+        items = await service.list_items(org_id=org_id, slug=args.slug)
+        match = next((i for i in items if i.uri == args.uri), None)
+        if match is None:
+            raise NotFoundError(f"{args.uri!r} is not a currently listed item of {args.slug!r}")
+
+        jobs = IngestJobRepository(db, DEFAULT_ID_GENERATOR)
+        job_id = await jobs.enqueue(
+            org_id=org_id,
+            kind=CONNECTOR_INGEST_KIND,
+            payload={
+                "source_slug": args.slug,
+                "item_uri": match.uri,
+                "item_name": match.name,
+                "content_type": match.content_type,
+            },
+            idempotency_key=f"{args.slug}:{match.uri}",
+        )
+    finally:
+        await http_client.aclose()
+        await db.dispose()
+
+    print(f"ingest job       : {job_id}")
+    print("status           : queued")
+    print(f"item             : {match.uri}")
+    return 0
+
+
 def main() -> int:
     parser = argparse.ArgumentParser(prog="mnemosctl", description="Mnemos operations")
     sub = parser.add_subparsers(dest="group", required=True)
@@ -647,6 +688,18 @@ def main() -> int:
     conn_list_items.add_argument("--org-slug", required=True, help="Org that owns the source")
     conn_list_items.add_argument("--slug", required=True, help="Source slug")
 
+    conn_ingest = conn_sub.add_parser(
+        "ingest",
+        help="enqueue a queued ingest_job for one item currently listed by the source",
+        description=(
+            "Enqueues one ingest_job for a worker to claim (entrypoints/worker/main.py). "
+            "The item must be one `list-items` currently returns for this source."
+        ),
+    )
+    conn_ingest.add_argument("--org-slug", required=True, help="Org that owns the source")
+    conn_ingest.add_argument("--slug", required=True, help="Source slug")
+    conn_ingest.add_argument("--uri", required=True, help="Item uri, as shown by list-items")
+
     args = parser.parse_args()
 
     if args.group == "bootstrap":
@@ -707,6 +760,14 @@ def main() -> int:
         except (MnemosError, LookupError) as exc:
             message = exc.message if isinstance(exc, MnemosError) else str(exc)
             print(f"connector list-items failed: {message}", file=sys.stderr)
+            return 2
+
+    if args.group == "connector" and args.command == "ingest":
+        try:
+            return asyncio.run(_connector_ingest(args))
+        except (MnemosError, LookupError) as exc:
+            message = exc.message if isinstance(exc, MnemosError) else str(exc)
+            print(f"connector ingest failed: {message}", file=sys.stderr)
             return 2
 
     parser.print_help()

@@ -24,11 +24,12 @@ class KnowledgeRepository(Protocol):
         self,
         *,
         org_id: OrgId,
-        user_id: UserId,
+        user_id: UserId | None,
         title: str,
         media_type: str,
         byte_size: int,
         content_sha256: str,
+        source_kind: str,
         source_uri: str,
         object_key: str,
     ) -> DocumentSummary: ...
