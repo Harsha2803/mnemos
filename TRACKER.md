@@ -22,6 +22,38 @@ wrote it.
 **Branch right now:** none open. `main`'s tip is the squashed `A3` merge plus this session's
 docs-only commit (no code changed).
 
+> ### 2026-08-16 (later) — chat transcript scrollbar (product polish, not on the roadmap)
+>
+> A further out-of-band request from the project owner while the concurrent session below
+> built `B1` deliverable 3 on `feat/b1-connectors` — same non-milestone shape as the two
+> notes below it. Same branch as the seven UI fixes, `feat/frontend-ui-fixes`, PR #18 (not
+> a new branch/PR — the branch was still open).
+>
+> The transcript pane (`chat/[sessionId]/page.tsx`) scrolled with the bare OS scrollbar —
+> thick, opaque, unrelated to the token palette. New `.scrollbar-thin` class in
+> `globals.css`: transparent track, a rounded thumb built from the existing
+> `--fill-secondary`/`--fill` tokens (hover darkens, matching every other control's hover
+> state), with a `--bg`-matched inset border so the thumb floats off the track edge —
+> ChatGPT's transcript scrollbar shape. Firefox gets the same read via `scrollbar-color`;
+> there is no inset-border equivalent there, so it renders a hair thicker by default.
+> Applied only to the transcript pane, not globally — the request named that one surface.
+>
+> **Evidence:** `npm run lint`/`npx tsc --noEmit`/`npm run test` (109 passed, unchanged —
+> no test targets a scrollbar's rendered pixels) / `npm run build` all clean. Live-verified
+> in a real browser, both themes: the compose stack's `web` container was briefly stopped
+> to free port 3000 for a dev server carrying this change (the registered Keycloak
+> redirect URI and the API's CORS allow-list are both pinned to port 3000, so a dev server
+> on another port cannot complete a real sign-in) — the same `docker-compose.yml`
+> `name: mnemos` pin the seven-UI-fixes note below flags, so this **did** touch the
+> concurrent session's shared containers. `docker compose up -d web` afterward recreated
+> `postgres`/`api` (compose reconciling drift against `main`'s compose file, not a
+> `--build`) — no volume was removed, `/readyz` came back fully green, and no image was
+> rebuilt from this branch's code, so the concurrent session's in-progress work on
+> `entrypoints/realtime/` was not touched. Worth flagging rather than burying: a future
+> out-of-band frontend request during a concurrent backend session should use a second
+> compose project (`-p`/`COMPOSE_PROJECT_NAME`) rather than the shared one, to avoid this
+> class of container-recreate side effect entirely.
+>
 > ### 2026-08-16 — seven frontend UI fixes (product polish, not on the roadmap)
 >
 > Another out-of-band request from the project owner, unrelated to `B1`/`B2`/… — same

@@ -383,6 +383,18 @@ real 26 MB file being refused client-side alongside a small file that uploaded
 successfully. Full detail and evidence is in
 [TRACKER's dated note](../TRACKER.md) for 2026-08-16.
 
+### Product polish — chat transcript scrollbar (2026-08-16, not a milestone)
+
+Also out-of-band, also no milestone id, same `feat/frontend-ui-fixes`/PR #18. The chat
+transcript's scroll container (`chat/[sessionId]/page.tsx`) now carries a `.scrollbar-thin`
+class (`globals.css`): a transparent track and a rounded, token-built thumb (`--fill-
+secondary` at rest, `--fill` on hover, a `--bg`-matched inset border) instead of the bare
+OS scrollbar — the shape ChatGPT's transcript scrollbar uses. Token-driven, so it tracks
+light/dark like everything else; applied to the one pane the request named, not globally.
+Live-verified in both themes. Full detail, including a note on the shared-compose-project
+side effect this session's verification pass had on the concurrent `B1` session, is in
+[TRACKER's dated note](../TRACKER.md) for 2026-08-16 (later).
+
 ### F0 — app shell ✅
 
 The one task with no backend half, because `frontend/` was an empty directory and there
