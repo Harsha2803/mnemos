@@ -192,8 +192,8 @@ export function ChatSessionList() {
         }}
       >
         <Dialog.Portal>
-          <Dialog.Overlay className="fixed inset-0 z-30 bg-label-quaternary" />
-          <Dialog.Content className="fixed left-1/2 top-1/2 z-40 w-[min(28rem,90vw)] -translate-x-1/2 -translate-y-1/2 rounded-xl border border-separator bg-bg p-6 shadow-lg">
+          <Dialog.Overlay className="dialog-overlay fixed inset-0 z-30 bg-label-quaternary" />
+          <Dialog.Content className="dialog-content fixed left-1/2 top-1/2 z-40 w-[min(28rem,90vw)] -translate-x-1/2 -translate-y-1/2 rounded-xl border border-separator bg-bg p-6 shadow-lg">
             <Dialog.Title className="text-title-3 font-semibold tracking-title text-label">
               Delete “{pendingDelete?.title}”?
             </Dialog.Title>

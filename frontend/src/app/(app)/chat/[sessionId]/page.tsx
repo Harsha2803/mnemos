@@ -71,7 +71,7 @@ export default function ChatSessionPage() {
 
     setMessages((prev) => [
       ...prev,
-      { id: userMessageId, role: "user", content },
+      { id: userMessageId, role: "user", content, justSent: true },
       { id: assistantMessageId, role: "assistant", content: "", streaming: true },
     ]);
     setStreaming(true);
