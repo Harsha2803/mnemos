@@ -154,7 +154,7 @@ export default function ChatSessionPage() {
 
   return (
     <div className="-mx-4 -my-4 flex h-[calc(100dvh-3.5rem)] flex-col">
-      <div className="min-h-0 flex-1 overflow-y-auto">
+      <div className="min-h-0 flex-1 overflow-y-auto scrollbar-thin">
         {isPending ? (
           <div className="flex flex-col gap-4 px-4 py-6" aria-hidden="true">
             <Skeleton className="ml-auto h-16 w-2/3" />
