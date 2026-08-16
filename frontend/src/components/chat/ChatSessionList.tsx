@@ -10,6 +10,7 @@ import { useEffect, useRef, useState, type KeyboardEvent } from "react";
 import { Button } from "@/components/ui/Button";
 import { EmptyState } from "@/components/ui/EmptyState";
 import { List } from "@/components/ui/List";
+import { MarqueeText } from "@/components/ui/MarqueeText";
 import { Skeleton } from "@/components/ui/Skeleton";
 import {
   createSession,
@@ -153,7 +154,7 @@ export function ChatSessionList() {
                       aria-current={pathname === href ? "page" : undefined}
                       className="hit-target flex min-w-0 flex-1 items-center px-4 py-2 text-callout text-label transition-colors duration-150 ease-standard hover:bg-fill-tertiary aria-[current=page]:bg-fill-secondary aria-[current=page]:font-semibold"
                     >
-                      <span className="min-w-0 flex-1 truncate">{session.title}</span>
+                      <MarqueeText text={session.title} className="min-w-0 flex-1" />
                     </Link>
                   )}
 
