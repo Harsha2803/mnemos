@@ -22,6 +22,49 @@ wrote it.
 **Branch right now:** none open. `main`'s tip is the squashed `A3` merge plus this session's
 docs-only commit (no code changed).
 
+> ### 2026-08-16 (later still) — hover-marquee titles + a motion pass (product polish, not
+> ### on the roadmap)
+>
+> A third out-of-band request in the same session as the scrollbar note directly below,
+> same branch (`feat/frontend-ui-fixes`, PR #18), same non-milestone shape.
+>
+> **Hover-marquee conversation titles.** The sidebar's rows truncated a long title with no
+> way to read the rest. New `MarqueeText` (`components/ui/`): measures its own overflow
+> against the rendered box (not guessed from character count, so it survives font/zoom
+> changes) and only engages when that overflow is real; hovering slides the title left at a
+> constant speed (so a long title is not rushed and a short overflow does not crawl)
+> rather than a fixed duration, and mouse-out slides it back. `ChatSessionList.tsx` is the
+> first use; built as a reusable primitive since a fixed-width row holding free-form text
+> is not unique to it.
+>
+> **A subtle motion pass.** Three named keyframes in `globals.css`
+> (`fade-in-up`/`dialog-overlay-in`/`dialog-content-in`), opacity/transform only, so the
+> existing `prefers-reduced-motion` block collapses them the same way it already collapses
+> every transition — no special case needed. `Button` (`ui/`) gained a small `active:scale`
+> press, which fans out to every button in the app from one place; both delete-confirmation
+> dialogs (`ChatSessionList`, `DocumentList`) fade/scale in and out via Radix's
+> `data-state`, which `Presence` already uses to delay unmounting until the animation
+> finishes on close; `EmptyState` settles in with a fade+rise instead of just appearing;
+> and the citation-marker button in `MessageBubble` picked up the `transition-colors` its
+> hover state was missing. The one judgment call: only the user's own freshly-sent turn
+> animates in (`page.tsx` now marks it `justSent`) — the assistant's reply does not, on
+> purpose, because it mounts once empty and fills token by token (its own entrance
+> already), and its `id` is swapped for the server's once the stream finishes
+> (`onDone`); animating that bubble too would replay the entrance a second time right as
+> the swap remounts it.
+>
+> **Evidence:** `npm run lint`/`npx tsc --noEmit`/`npm run test` (109 passed, unchanged) /
+> `npm run build` all clean. Live-verified in a real browser: the marquee measured and slid
+> correctly on a title renamed long enough to overflow, then back on mouse-out; the delete
+> dialog opened with the fade/scale visible; the composer round-trip (send → streaming →
+> done) still worked with no console errors. Same `web`-container rebuild/redeploy approach
+> as the scrollbar note below — built the image from this worktree, tagged `mnemos-web:
+> latest`, recreated only `web` via `docker compose up -d --no-deps --no-build web` from
+> the main checkout (not this worktree, whose `docker-compose.yml` is stale relative to
+> `feat/b1-connectors` — see the scrollbar note's flag below for why that distinction
+> matters) — no drift on `postgres`/`api` this time, confirmed via `docker compose ps`
+> before and after.
+>
 > ### 2026-08-16 (later) — chat transcript scrollbar (product polish, not on the roadmap)
 >
 > A further out-of-band request from the project owner while the concurrent session below

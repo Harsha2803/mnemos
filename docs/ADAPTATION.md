@@ -383,6 +383,20 @@ real 26 MB file being refused client-side alongside a small file that uploaded
 successfully. Full detail and evidence is in
 [TRACKER's dated note](../TRACKER.md) for 2026-08-16.
 
+### Product polish — hover-marquee titles + a motion pass (2026-08-16, not a milestone)
+
+Also out-of-band, also no milestone id, same `feat/frontend-ui-fixes`/PR #18. Two pieces.
+A long sidebar conversation title now scrolls into view on hover instead of staying
+truncated forever — `MarqueeText` (`components/ui/`) measures real overflow and slides at
+a constant speed, used first by `ChatSessionList.tsx`. Separately, a small, consistent
+motion pass: every `Button` gets a press animation; both delete-confirmation dialogs
+(chat and knowledge) fade/scale in and out via Radix's `data-state`; `EmptyState` settles
+in with a fade+rise; a freshly-sent chat message does too, but its assistant reply
+deliberately does not (it already arrives token by token, and its `id` swap on stream
+completion would replay a mount animation a second time). All of it opacity/transform
+only, so it collapses under `prefers-reduced-motion` for free. Full detail is in
+[TRACKER's dated note](../TRACKER.md) for 2026-08-16 (later still).
+
 ### Product polish — chat transcript scrollbar (2026-08-16, not a milestone)
 
 Also out-of-band, also no milestone id, same `feat/frontend-ui-fixes`/PR #18. The chat
