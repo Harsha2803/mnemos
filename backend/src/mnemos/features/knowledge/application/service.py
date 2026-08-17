@@ -69,6 +69,67 @@ class KnowledgeService:
         media_type: str,
         data: bytes,
     ) -> DocumentSummary:
+        return await self._ingest(
+            org_id=org_id,
+            user_id=user_id,
+            title=title,
+            media_type=media_type,
+            data=data,
+            source_kind="local_fs",
+            source_uri=None,
+            trust_tier=DEFAULT_TRUST_TIER,
+        )
+
+    async def ingest_connector_item(
+        self,
+        *,
+        org_id: OrgId,
+        title: str,
+        media_type: str,
+        data: bytes,
+        source_kind: str,
+        source_uri: str,
+        trust_tier: int,
+    ) -> DocumentSummary:
+        """The worker's entry point (`B1` deliverable 4) — same body as
+        `upload_document`, reused rather than duplicated, parametrized by the
+        connector's own kind/uri instead of the object-store key and no
+        `user_id` (nobody is signed in; the row this produces has
+        `uploaded_by = NULL`, same as any other system-originated write).
+
+        `trust_tier` is the caller's decision, not this method's: `Threat
+        Model.md` §4's "external connectors ≥ 4" rule was written against
+        `_v1/core.py`'s retired 0-6 scale, and `core/types.py`'s current
+        4-rung `TrustTier` has no member below `RETRIEVED` (10) — already
+        the floor, and already what a manual upload gets. Connector content
+        is not more trusted than an upload, and the schema cannot express
+        less; `TRACKER.md`'s `B1` deliverable 1 note records this
+        reconciliation, so callers pass `TrustTier.RETRIEVED` rather than a
+        new constant invented here.
+        """
+        return await self._ingest(
+            org_id=org_id,
+            user_id=None,
+            title=title,
+            media_type=media_type,
+            data=data,
+            source_kind=source_kind,
+            source_uri=source_uri,
+            trust_tier=trust_tier,
+        )
+
+    async def _ingest(
+        self,
+        *,
+        org_id: OrgId,
+        user_id: UserId | None,
+        title: str,
+        media_type: str,
+        data: bytes,
+        source_kind: str,
+        source_uri: str | None,
+        trust_tier: int,
+    ) -> DocumentSummary:
         content_sha256 = hashlib.sha256(data).hexdigest()
         existing = await self._repository.find_by_content_hash(
             org_id=org_id, content_sha256=content_sha256
@@ -87,7 +148,8 @@ class KnowledgeService:
             media_type=media_type,
             byte_size=len(data),
             content_sha256=content_sha256,
-            source_uri=object_key,
+            source_kind=source_kind,
+            source_uri=source_uri or object_key,
             object_key=object_key,
         )
 
@@ -113,7 +175,7 @@ class KnowledgeService:
                 vectors=vectors,
                 model_name=self._embedder.name,
                 acl_tag_ids=[],
-                trust_tier=DEFAULT_TRUST_TIER,
+                trust_tier=trust_tier,
             )
         detail = await self._repository.get_document(org_id=org_id, document_id=document.id)
         if detail is None:  # pragma: no cover - written immediately above

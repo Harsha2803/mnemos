@@ -92,6 +92,19 @@ class RateLimitError(MnemosError):
     code = "rate_limited"
 
 
+class SsrfRejectedError(ValidationError):
+    """A connector URL resolved to (or was itself) a denied address range.
+
+    Subclasses `ValidationError` rather than adding a new status code: from
+    the caller's point of view this is the same kind of thing — an
+    operator-supplied value that fails a check — and `expose_details = True`
+    is exactly right here too, since the offending host/address is not a
+    secret and naming it is the useful answer (ThreatModel.md §3⑥).
+    """
+
+    code = "ssrf_rejected"
+
+
 class UpstreamError(MnemosError):
     """A dependency we do not control failed (Ollama, MinIO, an MCP server)."""
 

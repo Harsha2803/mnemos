@@ -1,339 +1,70 @@
-You are picking up an in-progress project called Mnemos, at
-/home/shreeharsha/Personal/Projects/Resume_001/mnemos
+You are picking up Mnemos at:
 
-This file was rewritten on 2026-08-16, by a session that did **no feature code** — it built
-and merged two out-of-band requests (per-session log files, seven frontend UI fixes) on
-their own branches, and is now only syncing this handoff file to match TRACKER.md and
-docs/ADAPTATION.md, which it already updated in their own commits. It replaces the
-2026-08-15 (later) version of itself, whose most important claim is now **wrong**: it said
-"this session should start building `B1` directly" as if unclaimed. `B1` is **not**
-unclaimed — a separate, concurrent session has been building it since, on its own branch,
-and got three of five deliverables in before this file was rewritten. **Read the next
-section before doing anything else, including before reading TRACKER.md** — the single
-most important thing this rewrite does is stop you from creating a second `B1` branch next
-to the one that already exists.
+  /home/shreeharsha/Personal/Projects/Resume_001/mnemos
 
-------------------------------------------------------------------------------
-FIRST, BEFORE ANYTHING ELSE: CHECK WHAT IS ALREADY OPEN
+Current date of this handoff: 2026-08-17.
 
-  gh auth status                 # confirm Harsha2803 is active
-  gh pr list --state open        # THE decision this makes for you — read every row
+Start from `main`.
 
-As of this rewrite that lists:
+Read first, in order:
 
-  - **PR #16, `feat/b1-connectors`, draft.** `B1` — connect a source and watch it ingest.
-    Deliverables 1-3 of 5 committed as of this file's rewrite (`SourceConnector` port +
-    factory, the Redis Streams event bus, the realtime gateway's JWT auth fix); 4-5
-    (worker job-claiming, the sources UI) not yet started. **This branch may have moved
-    further by the time you read this** — the session building it rewrites its own
-    `prompt.txt` on that branch after every deliverable, which is the authoritative
-    handoff for continuing it, not this file. If that PR is still open: `git fetch && git
-    checkout feat/b1-connectors && git pull`, read *that* branch's `prompt.txt` and
-    TRACKER.md, and continue `B1` from wherever it actually left off. **Do not run `git
-    checkout -b feat/b1-connectors` from `main`** — the branch already exists remotely;
-    checking it out is `git checkout feat/b1-connectors`, not `-b`.
-  - **PR #18, `feat/frontend-ui-fixes`, ready, CI green, real-browser-verified.** Seven
-    unrelated frontend polish items the project owner asked for directly (conversation
-    naming, rename/delete, upload size limit, multi-file upload, chat layout padding,
-    resizable panels, sidebar collapse) plus the small backend change one of them needed
-    (session auto-titling). Out-of-band, like the log-files work below — does not touch
-    `B1` and was built on its own branch off `main` specifically so it would not collide
-    with `feat/b1-connectors`. Full detail is that branch's own TRACKER.md dated note —
-    **it has not merged yet, so `main`'s TRACKER.md (which this file's own reading
-    instructions below point you to) does not have it either; read it on
-    `feat/frontend-ui-fixes` itself, or in the PR #18 description.** **This PR has not
-    been merged** — the project owner has not asked for that yet. If you are picking this
-    file up specifically to merge it, that is the one action this file authorizes without
-    further discussion; otherwise leave it open and do not duplicate its work.
+  1. TRACKER.md — it is the live source of truth. Read the header, the 2026-08-17
+     `B1` deliverable-5 note near the top, §3's `B1` entry, and §5's "Then, in
+     order" list.
+  2. docs/ADAPTATION.md — read §7's `B1` row, §8's `B1` subsection, and the
+     "Not started" list.
+  3. Only then read code for the next milestone.
 
-If `gh pr list` is empty or looks different from the above by the time you read this,
-trust the live output over this paragraph — PRs merge and close between rewrites of this
-file, and this file is not re-read by anything automatically.
+Current state:
 
-------------------------------------------------------------------------------
-READ NEXT, IN THIS ORDER — once you know which of the above applies to you
+  - `A0` through `A3` are done and merged to `main`.
+  - `B1` is done and merged to `main`: source connectors, Redis Streams,
+    authenticated ingestion WebSocket, the worker's real connector-ingest path,
+    backend connector routes, the Sources UI, local-fs fixture wiring, and the
+    Playwright sources spec.
+  - The out-of-band frontend polish PR #18 is also merged to `main`: conversation
+    naming, rename/delete, upload limits and multi-file upload, chat layout
+    padding, resizable panels, sidebar collapse, hover marquee titles, motion
+    polish, and the transcript scrollbar.
+  - The per-session log-file work from PR #17 is already merged.
+  - As of this handoff there should be no open PRs. If `gh pr list --state open`
+    says otherwise, trust the live output and inspect that PR before starting
+    new work.
 
-  1. TRACKER.md            — section 0 (rule 9 is in force — one task, then stop), the
-                              header, the 2026-08-16 (per-session log files) dated note near
-                              the top — the only 2026-08-16 note `main`'s copy has; the
-                              seven-UI-fixes one is on `feat/frontend-ui-fixes` until PR #18
-                              merges — then **section 5 in full — the `B1` brief**.
-                              Deliverables 1-3's entries there describe what was actually
-                              built, if `feat/b1-connectors`'s own docs have not already
-                              told you something more current.
-  2. docs/ADAPTATION.md    — §7's `B1` row, §8's `B1` subsection and the per-session-log-
-                              files out-of-band subsection directly before it (also not on
-                              the milestone list, same reasoning; the UI-fixes one is on
-                              `feat/frontend-ui-fixes` for the same reason as above).
-  3. docs/ThreatModel.md   — the connector/SSRF row (§3⑥) and the trust-tier rule for
-                              external connectors (§4, "layer 1") if you are continuing
-                              `B1` — both are load-bearing for its deliverable 1 and are
-                              constraints on the code, not optional background reading.
-  4. README.md             — public framing and the benchmark numbers. Unchanged by
-                              anything above — none of it touches the retrieval/compile
-                              path README measures.
-  5. docs/CodingStandards.md / docs/DesignSystem.md — before writing backend / frontend
-                              code, whichever task you end up on.
+Verification evidence for completed `B1`:
 
-TRACKER.md is authoritative over this file for anything the two disagree about — this file
-is a pointer to it and to the branches above, not a duplicate of any of them.
+  - `docker compose up -d --build` rebuilt the stack.
+  - `curl localhost:8000/readyz` returned `postgres`, `redis`, `ollama`, and
+    `objectstore` all `ok`.
+  - In Chromium, signed in as org `mnemos`, user `analyst@mnemos.local` /
+    `analyst`, opened Sources, registered a `local_fs` connector against
+    `/fixtures/sources`, browsed to `handbook.txt`, selected and ingested it, and
+    watched the live feed reach `Succeeded` without a page reload.
+  - `cd frontend && npx playwright test e2e/sources.spec.ts` passed; a separate
+    headed Chromium run of the same spec also passed.
+  - After merging PR #18 first and resolving `B1` against the updated `main`:
+    backend `make test` — 429 passed; `make lint`, `make types`, and `make check`
+    clean.
+  - Frontend after the same resolution: `npm run lint`, `npx tsc --noEmit`,
+    `npm run test` — 111 passed, and `npm run build` clean.
+  - The rebuilt combined compose stack reported `/readyz` fully green and
+    `npx playwright test e2e/sources.spec.ts` passed again.
 
-------------------------------------------------------------------------------
-EXACTLY WHERE THIS WAS LEFT — read this before touching anything
+Important rules:
 
-**`A3` is done and merged.** Unchanged for two rewrites now — see TRACKER §3. Not
-re-summarized here; nothing about it changed.
+  - Never use the work GitHub account or email (`harshaJKT`, `@jktech.com`).
+    Confirm `Harsha2803` before any push.
+  - `.claude/` is local tooling state and must not be committed.
+  - Do not read or copy from `../jiva/`; it is the author's employer's proprietary
+    codebase.
+  - Do not run `pkill -f mnemos`; it can match the agent shell. Kill by port or PID.
+  - Zero monetary cost forever: free, self-hosted defaults; Ollama is the default
+    model path; no paid cloud pub/sub.
 
-**Per-session log files: done and merged (PR #17), 2026-08-16.** An out-of-band dev-tooling
-request, unrelated to `B1` — every authenticated request's log lines also land in
-`logs/sessions/{session_id}.log` when `Settings.session_log_enabled` is on (the `api`
-service only, via `docker-compose.yml`). No product UI, none needed. Full detail is
-TRACKER's 2026-08-16 (per-session log files) dated note.
+What is next:
 
-**Seven frontend UI fixes: done, PR #18 open, not yet merged, 2026-08-16.** Also
-out-of-band — see the PR list section above. The full seven-item list and its
-real-browser-verification evidence is a TRACKER dated note **on `feat/frontend-ui-fixes`
-itself**, not on `main` — it lands here when PR #18 merges.
-
-**`B1` — connect a source and watch it ingest — is in progress, not "fully specified but
-zero percent built" as the previous version of this file said.** See the PR list section
-above: `feat/b1-connectors`, PR #16, draft, deliverables 1-3 of 5 committed as of this
-rewrite. The original five-deliverable brief is still TRACKER §5 and is not repeated here.
-In one sentence, unchanged from the original brief: `SourceConnector` port + factory
-(deliverable 1, done) → the Redis Streams event bus (deliverable 2, done) → close the
-realtime auth gap (deliverable 3, done as of this rewrite) → the worker actually claims and
-processes a job for the first time (deliverable 4, not started) → the sources UI with a
-live event feed (deliverable 5, not started).
-
-------------------------------------------------------------------------------
-WHAT TO DO, IN ORDER, THE MOMENT YOU START
-
-  1. `gh auth status` — confirm `Harsha2803` is active. If `harshaJKT` (the work account)
-     is active instead, run `gh auth switch --user Harsha2803` before anything else.
-  2. `gh pr list --state open` — this is the real decision point; see the section above.
-     Do not skip straight to "read TRACKER §5 and start `B1` deliverable 1" the way the
-     previous version of this file told you to — that instruction is exactly what would
-     now create a duplicate, conflicting `feat/b1-connectors`.
-  3. If continuing `B1`: `git fetch && git checkout feat/b1-connectors && git pull`, then
-     read that branch's own `prompt.txt` and TRACKER.md — they are more current than this
-     file about deliverable-level `B1` state, by construction (this file only tracks
-     `main`).
-  4. If merging PR #18, or doing something unrelated to both of the above: `git fetch &&
-     git checkout main && git pull --ff-only` first, and branch from there.
-  5. Bring up a stack if you need one to verify against: `docker compose up -d --build`,
-     `curl localhost:8000/readyz` until fully green. **`docker-compose.yml` pins `name:
-     mnemos`** (line 12) — every git worktree of this repo, not only whichever one you are
-     in, resolves to the *same* running compose project and the *same* containers.
-     Rebuilding `api`/`worker`/`realtime`/`web` from your worktree replaces whatever code
-     another concurrent session's containers were running. Check `docker compose ps` and
-     whether another session looks actively mid-verification before you rebuild — the
-     2026-08-16 UI-fixes session hit exactly this and waited rather than disrupt it.
-  6. Follow the ordinary one-task-per-session rule (TRACKER §0 rule 9) regardless of which
-     branch you end up on.
-
-------------------------------------------------------------------------------
-A NOTE ON MULTI-AGENT WORKFLOWS, IF YOU USE THEM HERE
-
-`A3` established the pattern worth repeating: **settle the contract before spawning a
-background agent.** For `B1`, the analogous contract is the `SourceConnector` protocol
-(deliverable 1, now stable and committed on `feat/b1-connectors`) and the `EventBus` port
-shape (deliverable 2, also stable) — the sources UI (deliverable 5) is genuinely
-independent frontend work a background agent could build against them, the same way
-deliverable 5's SQL panel was built against `A3`'s SSE contract once it stopped moving.
-Keep every git commit and every decision with security weight (the realtime auth fix, the
-SSRF deny-list, the trust-tier assignment for connector content) single-threaded through
-you; review any subagent's diff before trusting it.
-
-------------------------------------------------------------------------------
-WHAT THIS PROJECT IS
-
-An enterprise AI assistant. One conversation surface; a router (`A4`, scheduled *after*
-`B1`/`B2`) will decide whether an answer needs documents (RAG, `A2`), a database (NL2SQL,
-`A3`), a tool (MCP, `B3`), memory, or a combination. Underneath, every message will have an
-inspectable, budgeted context bundle (`C4`) and a governed memory layer distinguishing
-current facts from superseded ones (also `C4`) — the project's one deep technical claim,
-measured on the v0.1 kernel and not yet re-measured on Postgres.
-
-It is a portfolio project. Production practices, single-node scale, zero paid dependencies
-in the default path, ever.
-
-**Phase A is complete** (`A0`–`A3`, all ✅). "The thing this project is for" — sign in, talk
-to it, ask about your documents, ask about your data — exists and is demonstrable end to
-end. `B1` is the first step of Phase B: turning it from a chatbot into a platform, and is
-already partway built on `feat/b1-connectors` (see above).
-
-------------------------------------------------------------------------------
-HARD RULES — violating any of these is worse than doing nothing
-
-* ZERO MONETARY COST. Every component free and self-hosted. No API key for any capability
-  in the default path. Ollama is the default model forever. Redis Streams, not a cloud
-  pub/sub service, for `B1`'s event bus — this is a **locked decision** (ADAPTATION §9), not
-  a choice to re-litigate.
-
-* NEVER READ OR COPY FROM ../jiva/. That directory is the author's EMPLOYER'S proprietary
-  codebase. Not a reference, not a source, not to be cited. Every file in Mnemos is written
-  fresh. See ADAPTATION.md section 2 and constraint C11.
-
-* NEVER use the work GitHub account or email (harshaJKT, @jktech.com). Two accounts are
-  authenticated in `gh` on this machine. Confirm `Harsha2803` is active before any push —
-  check every time, do not assume the last session left it right.
-
-* NO PLACEHOLDERS, NO TODOs, NO STUBBED RETURNS. Split a task rather than stub it.
-
-* EVERY FEATURE SHIPS ITS UI IN THE SAME MILESTONE (C12). `A3` is the model of this done
-  right; the seven-UI-fixes PR is another. For `B1`: deliverables 1-4 have no product UI
-  and PR #16 stays in draft until deliverable 5's sources screen exists and the whole
-  "connect a source, watch it ingest" sentence is true in a browser.
-
-* THE UI FOLLOWS docs/DesignSystem.md (C13). Tokens are the only source of colour, type,
-  spacing and radius. `test_no_component_hardcodes_a_colour` enforces this in CI. The sources
-  UI's live-event states (queued/running/done/failed) pair an icon with a plain-word label,
-  never colour alone — the same discipline `A3`'s `SqlPanel.tsx` already established.
-
-* DO NOT re-litigate settled decisions (TRACKER section 2, ADAPTATION section 9). If you
-  think one is wrong, write an ADR superseding it — do not silently deviate.
-
-* DO NOT run `pkill -f mnemos` — it matches the agent's own shell. Kill by port or PID.
-
-* Never leave uncommitted work, and never leave a genuinely finished PR open. Push, open a
-  PR the moment a branch has its first commit, merge it the moment it is actually done and
-  green — verified in a real browser, not only CI-green, before calling anything done.
-
-* NEVER SHIP A SECOND DEFENCE AS IF IT WERE THE FIRST. `B1`'s realtime-auth fix (deliverable
-  3, done) is exactly this shape: prove a token for org A cannot subscribe to org B's
-  ingestion channel by connecting around the code path entirely (dial the WebSocket
-  directly with a hand-typed channel name), not just by checking the one call site you
-  think enforces it.
-
-* THE HTTP SOURCE CONNECTOR NEVER CRAWLS AND NEVER FETCHES AN ARBITRARY USER-SUPPLIED URL.
-  Only an operator-curated list, and every URL is checked against the SSRF deny-list
-  (link-local/loopback/private ranges, DNS-rebinding guard — ThreatModel.md §3⑥) before
-  fetching. This is a security control, not a nice-to-have; test that a loopback URL is
-  actually refused, not merely that the deny-list function exists.
-
-* BEFORE REBUILDING/RESTARTING SHARED CONTAINERS: `docker-compose.yml` pins `name: mnemos`
-  — check `docker compose ps` and whether another session's work is live in them first. See
-  "WHAT TO DO" step 5 above.
-
-------------------------------------------------------------------------------
-HOW TO WORK
-
-Commits: one logical change per commit, conventional format, explaining why not just what.
-Never a bulk commit of unrelated files. One commit per numbered `B1` deliverable, matching
-how `A3`'s five deliverables were each their own commit(s) — `feat/b1-connectors` is
-already following this.
-
-Every change ends with ALL of:
-  - make test            (363 passed on `main` as of this rewrite — PR #16 and #18 each
-                          add more on their own branches; this will grow further with `B1`
-                          4-5)
-  - make lint / make types / make check       (make check must show any new migration
-                                                applying cleanly)
-  - frontend (if touched): npm run lint && npx tsc --noEmit && npm run test && npm run build
-  - TRACKER.md updated in the same commit as the work — status, evidence, next task
-  - docs/ADAPTATION.md updated in the same commit — section 7 position, section 8 state
-  - README numbers updated ONLY if the retrieval or compile path moved
-  - the branch pushed with its PR open and CI green before you call anything done
-  - real browser verification before claiming a UI works, not just a passing test suite —
-    the same bar `A3` and the seven-UI-fixes PR both set. If the shared compose stack is in
-    active use by another session, either wait, or note honestly (as the UI-fixes PR did)
-    that automated coverage is real but the browser pass is pending.
-
-Report honestly. Claim something works only after you have run it and seen the output.
-
-------------------------------------------------------------------------------
-RUNNING IT
-
-  gh auth status                                 # confirm Harsha2803 is active
-  docker compose up -d --build                   # nine services — see the shared-stack
-                                                  # warning above before you do this
-  docker compose ps
-  curl localhost:8000/readyz                     # postgres/redis/ollama/objectstore all "ok"
-  docker compose exec -e MNEMOS_BOOTSTRAP_ADMIN_PASSWORD=<pw> api mnemosctl bootstrap \
-      --org-slug mnemos --org-name Mnemos --admin-email admin@mnemos.local
-                                                  # idempotent
-  docker compose exec -e MNEMOS_BOOTSTRAP_ADMIN_PASSWORD=<pw> api mnemosctl datasource \
-      introspect --org-slug mnemos              # registers + caches the demo warehouse
-  docker compose exec -e MNEMOS_BOOTSTRAP_ADMIN_PASSWORD=<pw> api mnemosctl datasource \
-      seed-glossary --org-slug mnemos           # seeds the four curated glossary terms
-
-  cd backend && ../.venv/bin/python -m pytest -q
-  make lint && make types && make check
-
-  # Code changes require a rebuild before `docker compose exec`/the running container will
-  # see them — neither the api nor the web image has a bind mount:
-  docker compose build api && docker compose up -d api
-  docker compose build web && docker compose up -d web
-
-Sign in at http://localhost:3000 as org `mnemos`, then on Keycloak's form use
-`analyst@mnemos.local` / `analyst` (or `user@mnemos.local` / `user`) — NOT
-`admin@mnemos.local` / `admin` (TRACKER §4 item 40). If sign-in fails with an "already
-belongs to a different subject" error after a fresh `docker compose down && up --build`, it
-is Keycloak's own container config: `start-dev --import-realm` has no persistent volume, so
-every full rebuild mints fresh subject UUIDs while the app's Postgres volume still points a
-JIT-provisioned `app_user` row at the old one. Fix: `DELETE FROM app_user WHERE email = '...'
-AND external_subject = '<the stale one, from the failing log line>'`, then sign in again —
-disposable dev data, not a regression.
-
-To ask a question about the data in the browser: open a chat session, select "Ask your
-data" in the composer's mode control, and ask something about the seeded
-`analytics.region`/`.customer`/`.sales_order`/`.product` tables.
-
-Host ports (unchanged since M1): postgres 15432, redis 6380, api 8000, realtime 8001,
-keycloak 8080, minio 9000/9001, ollama 11434. Python venv is at .venv/ in the repo root; the
-package lives in backend/.
-
-------------------------------------------------------------------------------
-WHERE THINGS ARE (current, on `main` — `feat/b1-connectors` has more; see above)
-
-  backend/src/mnemos/
-    core/          config, errors, logging, clock, ids, crypto (DsnCipher — the pattern B1's
-                   connector-config encryption reuses, with its own key), plus
-                   `session_id_var` from the per-session-log-files work
-    platform/      db engine + tenant-scoped sessions, cache.py (Redis — pub/sub on `main`;
-                   `feat/b1-connectors` adds Streams in `platform/events/`, not yet merged),
-                   objectstore (S3/MinIO), models
-    features/      identity, chat — **on `main`** every session still stays titled "New
-                   chat" forever; `application/titles.py` (auto-titling from the first
-                   message, shared by chat/RAG/NL2SQL) is PR #18, not merged yet —
-                   llm (Ollama gateway), knowledge (RAG), memory, context,
-                   connectors (still just layered empty `__init__.py`s **on `main`** — real
-                   content is on `feat/b1-connectors`, not merged yet), datasources (NL2SQL,
-                   complete since A3), tools, prompts, observability
-    flows/         rag (A2), nl2sql (A3), agent, router (both still unbuilt)
-    entrypoints/   api, worker (main.py's reaper works; real job-claiming is `B1` deliverable
-                   4, not started), realtime (auth fix is on `feat/b1-connectors`, not
-                   merged — still unauthenticated on `main`), cli
-    _v1/           the SQLite kernel. Retrieval was ported OUT of it in A2. Memory + the
-                   six-phase compiler are still only in here, ported in C4.
-  backend/migrations/    alembic revisions — none merged to `main` since A0/M2;
-                          `feat/b1-connectors`'s `content_source` migration is the first,
-                          not yet merged
-  frontend/src/
-    app/(app)/chat/, app/(app)/knowledge/    the built screens, **on `main`** — no
-                   `measure-chat` token, no chat-column widening yet; that is on
-                   `feat/frontend-ui-fixes` (PR #18), not merged.
-    components/chat/       SqlPanel.tsx, Composer.tsx, ChatSessionList.tsx — **on `main`**
-                   this is still the plain session list with no rename/delete controls;
-                   PR #18 adds them, not merged yet.
-    components/shell/      AppShell.tsx — **on `main`** the sidebar is still a fixed-width
-                   column with no collapse or resize; PR #18 adds both (to match the
-                   inspector's existing collapse), not merged yet.
-    lib/chat/stream.ts
-  frontend/e2e/           chat.spec.ts, knowledge.spec.ts, nl2sql.spec.ts, auth.spec.ts — all
-                          green as of A3. `feat/b1-connectors` will add a sources flow spec.
-  deploy/                 postgres init SQL, keycloak realm
-  docs/                   architecture, schema, API contract, threat model, ADRs
-
-Layering rule: domain (pure) <- application <- adapters/api. `features` must never import
-`flows`; `flows` may import multiple `features`.
-
-------------------------------------------------------------------------------
-START HERE
-
-Run `gh pr list --state open` now, before reading anything else in this repo. It tells you
-which of the two branches above is relevant to what you were asked to do — continue `B1` on
-`feat/b1-connectors`, merge PR #18, or something unrelated to both, in which case branch
-from `main`. Then read TRACKER.md's header and its dated note(s) — one on `main` now, a
-second on `feat/frontend-ui-fixes` until PR #18 merges — and proceed per "WHAT TO DO, IN
-ORDER" above. Do not create a new `feat/b1-connectors`-shaped branch — one already exists.
+  - The next milestone is `B2`, not `A4`: heartbeat, retries, richer status
+    history, stuck-job surfacing, replay/progress depth, and per-job progress UI
+    over the job machinery `B1` introduced.
+  - Ordinary one-task-per-session discipline is back in force. Do not start `B2`
+    in the same session that only intended to merge cleanup PRs.

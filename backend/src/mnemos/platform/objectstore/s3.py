@@ -8,12 +8,15 @@ argument `PasswordHasher` makes for argon2id.
 
 from __future__ import annotations
 
+from collections.abc import Sequence
+
 import anyio
 import boto3
 from botocore.client import Config
 from botocore.exceptions import ClientError
 
 from mnemos.core.errors import DependencyUnavailableError, NotFoundError, UpstreamError
+from mnemos.platform.objectstore.port import ObjectMeta
 
 
 class S3ObjectStore:
@@ -72,6 +75,24 @@ class S3ObjectStore:
 
     def _delete_sync(self, key: str) -> None:
         self._client.delete_object(Bucket=self._bucket, Key=key)
+
+    async def list(self, prefix: str = "") -> Sequence[ObjectMeta]:
+        try:
+            return await anyio.to_thread.run_sync(self._list_sync, prefix)
+        except ClientError as exc:
+            raise UpstreamError("object storage rejected the listing", reason=str(exc)) from exc
+
+    def _list_sync(self, prefix: str) -> Sequence[ObjectMeta]:
+        items: list[ObjectMeta] = []
+        paginator = self._client.get_paginator("list_objects_v2")
+        for page in paginator.paginate(Bucket=self._bucket, Prefix=prefix):
+            for obj in page.get("Contents", ()):
+                items.append(
+                    ObjectMeta(
+                        key=obj["Key"], size_bytes=obj["Size"], modified_at=obj["LastModified"]
+                    )
+                )
+        return items
 
     async def health(self) -> None:
         """Confirm the configured bucket exists and is reachable."""

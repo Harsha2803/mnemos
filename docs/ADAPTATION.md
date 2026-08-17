@@ -4,9 +4,10 @@
 > self-contained: architecture, the capability inventory, schema, milestones, and current
 > state. [`TRACKER.md`](../TRACKER.md) holds live task status; this holds the design.
 
-**Last updated:** 2026-08-15 — `A3` in progress on `feat/a3-nl2sql` (PR #15, draft):
-deliverables 1-3 of 5 done (schema introspection, business glossary, generation + the AST
-read-only guard); execution/narration and the SQL panel UI (4-5) remain — see §7/§8
+**Last updated:** 2026-08-17 — `B1` is done and merged to `main`: source connectors,
+Redis Streams, authenticated ingestion realtime, the worker's real connector-ingest path,
+and the sources UI are all built and browser-verified. The out-of-band frontend polish PR
+#18 is merged too. `B2` is next before `A4`.
 
 ---
 
@@ -247,7 +248,7 @@ authoritative for sequencing, not these tables' phase grouping.
 
 | ID | What it builds | You can now… | Status |
 |---|---|---|---|
-| **B1** | Object storage · source connectors (MinIO/S3, local FS, HTTP) · Redis Streams event bus · sources UI | **connect a source, browse it, and watch ingestion events arrive live** | ⬜ **next — brief written 2026-08-15, [TRACKER §5](../TRACKER.md#5-next-task)** |
+| **B1** | Object storage · source connectors (MinIO/S3, local FS, HTTP) · Redis Streams event bus · sources UI | **connect a source, browse it, and watch ingestion events arrive live** | ✅ 2026-08-17 — all 5/5 deliverables done, browser-verified against the rebuilt stack |
 | **B2** | Ingestion jobs at scale: heartbeat, retries, status history, stuck-job reaper · per-job progress UI | **ingest a folder and watch every job's progress — including one that dies, surfaced as stuck rather than silently lost** | ⬜ **after `B1`** |
 | **B3** | MCP tool runtime: registry, per-user credentials, trust tiers, approval gates · tool console | **register a tool, have the assistant call it, and approve a gated call** — with a denial that names the offending source on screen | ⬜ |
 | **B4** | Agent flow: bounded state machine over tools, checkpoints, step trace | **give it a multi-step task and watch it plan, call tools and finish — with every step inspectable** | ⬜ |
@@ -305,36 +306,11 @@ own system — its own accent, neutrals and identity — informed by Apple's des
 for typography, spatial rhythm, materials and motion character. §0 there records which
 Apple assets are off-limits (SF Pro as a webfont, SF Symbols) and what is used instead.
 
-**Current position.** `main`'s tip has `A0` (PR #11), `A1` (PR #13) and `A2` (PR #14) — all
-merged. `docker compose up -d` brings up nine services with upload → ask → cite working end
-to end; verified against the merged image, not just the branch, via the real
-`frontend/e2e/knowledge.spec.ts` Playwright suite.
-
-**`A3` is in progress on `feat/a3-nl2sql`, PR #15 (draft, CI green, not merged).**
-Deliverables 1-3 of 5 are done: `mnemosctl datasource introspect` registers the seeded
-`mnemos_analytics` warehouse per org and caches its schema, connecting as `mnemos_ro` (the
-same role generated SQL executes as); `mnemosctl datasource seed-glossary` writes four
-curated business-vocabulary terms; `DatasourceService.render_context` renders the cached
-schema plus glossary into the text block the generation prompt uses; and
-`SqlGenerationService.generate()` calls the model once, parses the result with `sqlglot`,
-walks the whole AST for anything that is not a single read (`guard_sql`,
-`features/datasources/domain/guard.py`), and records every attempt — allowed or refused —
-as a `sql_run` row, demonstrable now via `mnemosctl datasource generate`. **Both of `A3`'s
-two independent read-only defences are now built and proven independently of each other**:
-the guard, and `mnemos_ro`'s inability to write at all
-(`test_the_readonly_role_refuses_a_write_the_guard_somehow_allowed`, which bypasses the
-guard entirely). Live evidence against a real local model is in
-[TRACKER §3](../TRACKER.md#-a3--ask-about-your-data-in-progress-35-pr-15-draft-2026-08-15):
-`qwen2.5:3b-instruct`, asked an adversarial question, complied and emitted a real `DELETE`
-— the guard, not the system prompt's wording, is what actually stopped it. Nothing about
-`A3` is visible in the *product* yet — no execution, no narration, no SQL panel — so the PR
-stays draft per C12 until deliverable 5 lands. Remaining scope: execution as `mnemos_ro`
-with the timeout/row-cap, narration, the repair loop, and the SQL panel UI, fully specified
-in [TRACKER §5](../TRACKER.md#5-next-task). **After `A3` is fully testable, the next
-milestone is `B1` (ingestion), not `A4`** — the plan was re-sequenced 2026-08-15 so
-ingestion, a materially new capability, lands before the router, which mostly changes how
-existing flows are triggered rather than adding one. See TRACKER's 2026-08-15 (evening)
-note for the full reasoning.
+**Current position.** `main` has `A0` (PR #11), `A1` (PR #13), `A2` (PR #14), `A3`
+(PR #15), `B1` (PR #16), the per-session log files (PR #17), and the out-of-band frontend
+polish work (PR #18). `B1`'s Sources screen was verified against the rebuilt compose stack
+on 2026-08-17. The next milestone is `B2` (ingestion at scale), still before `A4` per the
+2026-08-15 re-sequencing.
 
 `M3`'s exit criterion "RLS blocks cross-org" turned out to be unmet by `M2` rather than
 merely untested; that is written up in §8 and in
@@ -898,6 +874,103 @@ the whole `up`. It does now, so plain `docker compose up -d` brings the frontend
 everything else and `web` has a healthcheck of its own — a stack whose UI needs a
 remembered extra flag is a stack whose UI does not get looked at.
 
+### B1 — connect a source and watch it ingest ✅ verified 2026-08-17
+
+Deliverable 1, the `SourceConnector` port + factory, is built and on `feat/b1-connectors`
+(PR open, draft). `features/connectors/` now has real `domain`/`adapters`/`application`
+content: `domain/port.py`'s `SourceItem` + `SourceConnector` protocol; three adapters
+(`s3.py` over the `ObjectStore` port — extended with `list(prefix)` — `local_fs.py`
+default-deny outside an operator-approved root, `http.py` over an operator-curated URL
+list with a real SSRF deny-list and DNS-rebinding-safe address pinning in
+`ssrf_guard.py`); the `content_source` table + RLS (migration `0007`, the first since
+`M2`); and `mnemosctl connector register`/`list-items`. Full detail, including two
+pre-existing migration bugs found and fixed (`0004`/`0006` importing the live
+`ORG_SCOPED_TABLES` instead of a frozen copy — harmless until a new org-scoped table was
+added, which `content_source` now is) and the trust-tier reconciliation deliverable 4
+needs, is in [TRACKER's dated note](../TRACKER.md) for 2026-08-15 (evening).
+
+Deliverable 2, the `EventBus` port + Redis Streams adapter, is also built, same branch.
+`platform/events/port.py`'s `EventBus` (`publish`/`ensure_group`/`read_group`/`ack`) and
+`platform/events/redis_streams.py`'s `RedisStreamsEventBus` — `XADD`/consumer-group
+`XREADGROUP`, chosen over `platform/cache.py`'s pub/sub for the durability/replay
+guarantee pub/sub cannot give (ADAPTATION §3, §9 — a locked decision). Tested against a
+real Redis via `testcontainers`, not a fake: backlog delivery to a group created after
+publish, idempotent group creation, no redelivery of an already-delivered message,
+competing-consumer semantics, and `ack` clearing `XPENDING`, are all proved directly.
+The open design question from the original brief — how a Streams entry reaches a
+browser — is now resolved: deliverable 4's worker will publish to *both* this adapter
+(durable) and the existing pub/sub channel the realtime gateway already relays (live),
+so the gateway needs no new code for `B1`; a consumer-group reader inside the gateway
+itself (replay-on-reconnect) is left for `B2`. Full detail is in
+[TRACKER's dated note](../TRACKER.md) for 2026-08-15 (night).
+
+Deliverable 3, the realtime gateway's JWT-validated WS handshake and org-derived channel
+scoping, is also built, same branch. `entrypoints/realtime/main.py`'s `/ws/{channel}` now
+resolves the caller through the identical `PlatformTokenCodec` + `PrincipalResolver`
+`entrypoints/api/main.py` builds (the gateway gained its own `Database` to do this), with
+the token offered as a `Sec-WebSocket-Protocol` value (`["bearer", token]`) rather than a
+query parameter — no credential ever appears in a URL, an access log or browser history,
+the same discipline `web_signin_complete_url` already enforces for the refresh cookie
+exchange. The channel a caller reaches is always `mnemos:org:{org_id}:{kind}`, with
+`org_id` read only from the resolved token and `kind` checked against a closed allow-list
+(`{"ingestion"}` today) — a channel string that tries to name another org, typed directly
+into the WS URL, is refused before `accept()`, proved against a real Redis
+(`tests/test_realtime_auth.py`, 12 tests) and live-verified against the running compose
+stack. Deliverable 4's worker must publish to exactly `f"mnemos:org:{org_id}:ingestion"`
+for the gateway to relay it — that channel-naming contract is deliverable 3's, recorded in
+[TRACKER's dated note](../TRACKER.md) for 2026-08-16, which has the full detail.
+
+Deliverable 4, the worker's first real job-processing path, is also built, same branch.
+`entrypoints/worker/main.py`'s poll loop claims one `queued` `ingest_job` at a time
+(`IngestJobRepository.claim_next`, `FOR UPDATE SKIP LOCKED`) and processes it:
+`ConnectorService.fetch_item` (new) resolves and fetches the item, and
+`KnowledgeService.ingest_connector_item` (new) runs the same extract/chunk/embed body
+`upload_document` uses, factored into a shared `_ingest` so the two paths do not duplicate
+the pipeline — the manual-upload path's own behaviour is unchanged. Connector-sourced
+documents get `TrustTier.RETRIEVED` (10), the reconciliation deliverable 1's dated note
+already worked out (the current 4-rung `TrustTier` has no rung below it, and `ThreatModel
+.md` §4's literal "external connectors ≥ 4" was written against a retired 0-6 scale).
+Every transition writes an `ingest_job_event` row and publishes to both the `EventBus`
+(durable) and `mnemos:org:{org_id}:ingestion` (live) — deliverable 3's exact channel
+contract, matched verbatim. `mnemosctl connector ingest --org-slug X --slug Y --uri Z` is
+the CLI producer until deliverable 5's UI exists.
+
+**A real RLS bug found and fixed while building the claim path:** `reap_stuck_jobs` ran
+inside an unscoped `db.session()` — no `org_id`, so the org-isolation policy's `org_id =
+NULL` comparison was never true, and the reaper reclaimed nothing on any real,
+RLS-enforced Postgres, regardless of how many jobs were actually stuck. Nothing had
+caught this because nothing had ever tested it against a real database. Fixed with
+`db.elevated_session()` — `platform/db.py`'s own comment already reserved this as the
+second of "two callers, ever" (the first is bootstrap), exactly the shape of problem it
+exists for: a query that is legitimately cross-tenant, not a query that forgot to scope
+itself. The worker's own claim uses the same escape hatch for the same reason. Full
+detail, including the regression test and the live verification against the rebuilt
+compose stack, is in [TRACKER's dated note](../TRACKER.md) for 2026-08-16 (the deliverable
+4 entry, above deliverable 3's own same-dated note).
+
+Deliverable 5 — the sources UI — is done (2026-08-17). `entrypoints/api/routers/connectors.py`
+(register/list/browse/ingest, over the same `ConnectorService`/`IngestJobRepository`
+deliverables 1 and 4 already built) is wired into `entrypoints/api/main.py`.
+`frontend/src/app/(app)/sources/` (a page, four components, an API client, and a
+`useIngestionFeed` WebSocket hook matching deliverable 3's `Sec-WebSocket-Protocol`
+contract exactly) is built and exposed through a `destinations.tsx` nav entry.
+`e2e-fixtures/sources/` plus the `docker-compose.yml` volume mounts and
+`MNEMOS_LOCAL_FS_ALLOWED_ROOTS` give the local-fs connector something real to register
+against in dev and CI, and `frontend/e2e/sources.spec.ts` scripts the full flow.
+
+Live evidence: after `docker compose up -d --build`, `/readyz` reported postgres, redis,
+ollama and objectstore all `ok`; the API container had the `/fixtures/sources` allowed
+root and the mounted `handbook.txt` fixture. In Chromium, signed in as
+`analyst@mnemos.local`, the Sources screen registered a local filesystem connector,
+browsed to `handbook.txt`, selected and ingested it, and the live feed reached
+`Succeeded` without a page reload. The same spec passed in a headed Chromium run and in
+the normal `npx playwright test e2e/sources.spec.ts` run. After merging #18 first and
+resolving `B1` against the updated `main`, final gates were: backend `make test` 429
+passed, `make lint` / `make types` / `make check` clean; frontend `npm run lint`,
+`npx tsc --noEmit`, `npm run test` 111 passed, and `npm run build` clean with `/sources`
+in the route table; `frontend/e2e/sources.spec.ts` passed against the rebuilt combined
+stack.
+
 ### A3 — ask about your data ✅ verified end to end 2026-08-15
 
 All five deliverables done and, as of 2026-08-15, verified in a real browser against the
@@ -1107,17 +1180,30 @@ here on signs in as `analyst@mnemos.local` instead.
 
 ### Not started
 
-**All of B, C and D** — §7. Phase A is complete as of `A3` (2026-08-15). Concretely, and
+**B2 through D** — §7. Phase A is complete as of `A3` (2026-08-15), and `B1` is complete
+as of 2026-08-17. Concretely, and
 stated plainly because the gap between what `docs/` describes and what runs is the thing
 this file exists to keep honest:
 
-- **There is no source connector, event bus, or sources UI.** Documents still arrive only
-  through `A2`'s manual upload form; `features/connectors/` is three empty `__init__.py`
-  files and `platform/events/` does not exist. `B1` — its full five-deliverable brief is in
-  [TRACKER §5](../TRACKER.md#5-next-task), written 2026-08-15 (later), not yet built.
-- **The realtime WebSocket gateway is unauthenticated.** It relays any channel to any
-  connection; nothing has needed it enough to close that gap yet. `B1` is the first feature
-  that does, and its brief calls this out explicitly.
+- **`B1` is done.** There is a source connector abstraction, an event bus, an authenticated
+  realtime channel, a worker that actually processes ingestion jobs, and a browser-verified
+  Sources UI. `features/connectors/` owns the port/factory and S3/local-fs/HTTP adapters,
+  `platform/events/` owns the Redis Streams adapter, `entrypoints/realtime/main.py` owns
+  the JWT-validated ingestion WebSocket, `entrypoints/worker/main.py` owns the real
+  claim-and-process loop, and `entrypoints/api/routers/connectors.py` +
+  `frontend/src/app/(app)/sources/` make the flow usable from the app. Full evidence is in
+  [TRACKER's 2026-08-17 dated note](../TRACKER.md).
+- **There is no `B2` ingestion-at-scale depth yet.** The job machinery exists and one
+  connector item can be ingested live, but heartbeat renewal, retry/backoff depth, richer
+  status history, explicit stuck-job surfacing, replay/progress depth, and the per-job
+  progress UI are still the next milestone.
+- ~~The realtime WebSocket gateway is unauthenticated.~~ **Closed in `B1` deliverable 3
+  (2026-08-16):** the WS handshake now validates the platform JWT and derives the
+  subscribed channel from the caller's own org, never from client-supplied path data.
+- ~~The worker's stuck-job reaper has nothing real to claim.~~ **Closed in `B1` deliverable
+  4 (2026-08-16):** the worker claims and processes real `ingest_job` rows end to end. The
+  reaper itself also had a latent bug fixed alongside this — it ran unscoped and so
+  reclaimed nothing under RLS, ever; see the dated note in TRACKER for detail.
 - **There is no router.** A person still has to tick "Use documents" or "Ask your data" to
   get a grounded answer; nothing classifies a message to a flow on its own. `A4` — moved
   after `B1`/`B2` in the 2026-08-15 (evening) re-sequencing — and both provisional selectors

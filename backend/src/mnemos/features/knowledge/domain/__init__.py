@@ -6,6 +6,7 @@ from mnemos.features.knowledge.domain.chunking import RawChunk, chunk_text
 from mnemos.features.knowledge.domain.document import DocumentSummary
 from mnemos.features.knowledge.domain.embedder import Embedder, HashingEmbedder
 from mnemos.features.knowledge.domain.ids import ChunkId, DocumentId
+from mnemos.features.knowledge.domain.job import CONNECTOR_INGEST_KIND, ClaimedIngestJob, JobId
 from mnemos.features.knowledge.domain.retrieval import (
     DedupReport,
     FusedChunk,
@@ -17,7 +18,9 @@ from mnemos.features.knowledge.domain.retrieval import (
 from mnemos.features.knowledge.domain.tokenizer import HeuristicTokenizer, Tokenizer
 
 __all__ = [
+    "CONNECTOR_INGEST_KIND",
     "ChunkId",
+    "ClaimedIngestJob",
     "DedupReport",
     "DocumentId",
     "DocumentSummary",
@@ -25,6 +28,7 @@ __all__ = [
     "FusedChunk",
     "HashingEmbedder",
     "HeuristicTokenizer",
+    "JobId",
     "RawChunk",
     "RetrievedChunk",
     "Tokenizer",

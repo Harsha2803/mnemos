@@ -18,6 +18,7 @@ from mnemos.features.chat.adapters.models import (
     Folder,
     MessageCitation,
 )
+from mnemos.features.connectors.adapters.models import ContentSource
 from mnemos.features.context.adapters.models import BundleItem, ContextBundle, ContextPlan
 from mnemos.features.datasources.adapters.models import (
     GlossaryTerm,
@@ -83,6 +84,7 @@ ORG_SCOPED_TABLES: tuple[str, ...] = (
     "chunk_embedding",
     "ingest_job",
     "ingest_job_event",
+    "content_source",
     "folder",
     "chat_session",
     "chat_message",
@@ -120,6 +122,7 @@ __all__ = [
     "Chunk",
     "ChunkEmbedding",
     "Collection",
+    "ContentSource",
     "ContextBundle",
     "ContextPlan",
     "Document",

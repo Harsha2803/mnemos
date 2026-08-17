@@ -32,6 +32,10 @@ DEV_JWT_SECRET: Final = "dev-only-change-me-not-for-production-use"
 #: `_reject_the_dev_secret_in_production` needs a literal to compare against.
 DEV_DSN_ENCRYPTION_KEY: Final = "zqQeIteGh6YP2kybnsto8GE8W38N_u9yJhINMNKDpMg="
 
+#: Same reasoning as `DEV_DSN_ENCRYPTION_KEY`, for `content_source.config_encrypted`
+#: — a distinct key so rotating one secret does not force rotating the other.
+DEV_SOURCE_ENCRYPTION_KEY: Final = "zyE7WKGQXXwuWC7pvMVZ3qbkXUliL3BRmD8Lzk89qu4="
+
 
 class Settings(BaseSettings):
     model_config = SettingsConfigDict(
@@ -164,6 +168,22 @@ class Settings(BaseSettings):
     # operator cannot reason about.
     dsn_encryption_key: SecretStr = SecretStr(DEV_DSN_ENCRYPTION_KEY)
 
+    # -- connectors ---------------------------------------------------------
+    # Fernet, same reasoning as `dsn_encryption_key` — a registered
+    # `content_source`'s config (a bucket/prefix, a filesystem root, an HTTP
+    # allowlist) is stored encrypted at rest, with its own key.
+    source_encryption_key: SecretStr = SecretStr(DEV_SOURCE_ENCRYPTION_KEY)
+    # The allowlisted root(s) a *deployment operator* has approved for the
+    # local-filesystem connector — a second, deployment-time boundary around
+    # what any org's `connector register --kind local_fs --root ...` may ever
+    # point to. The per-registration `root` alone is not enough: it is
+    # supplied by whoever can call the CLI/API for one org, and this setting
+    # is the thing that keeps that call from being able to name `/etc` or the
+    # container's own root. Empty by default — default-deny, same discipline
+    # `allowed_schemas` enforces — so local-fs connectors are refused until an
+    # operator opts a real path in.
+    local_fs_allowed_roots: list[str] = []
+
     # -- limits -----------------------------------------------------------
     max_upload_bytes: int = 25 * 1024 * 1024
     chat_history_turns: int = 12
@@ -206,6 +226,11 @@ class Settings(BaseSettings):
             self.dsn_encryption_key.get_secret_value() == DEV_DSN_ENCRYPTION_KEY
         ):
             msg = "MNEMOS_DSN_ENCRYPTION_KEY is still the development default; set a real key"
+            raise ValueError(msg)
+        if self.env is Environment.PRODUCTION and (
+            self.source_encryption_key.get_secret_value() == DEV_SOURCE_ENCRYPTION_KEY
+        ):
+            msg = "MNEMOS_SOURCE_ENCRYPTION_KEY is still the development default; set a real key"
             raise ValueError(msg)
         return self
 
