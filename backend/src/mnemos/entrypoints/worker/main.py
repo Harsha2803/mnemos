@@ -59,6 +59,7 @@ from sqlalchemy import text
 import mnemos.platform.models  # noqa: F401
 from mnemos.core.clock import SYSTEM_CLOCK
 from mnemos.core.config import get_settings
+from mnemos.core.errors import MnemosError
 from mnemos.core.ids import DEFAULT_ID_GENERATOR
 from mnemos.core.logging import configure_logging, get_logger
 from mnemos.core.types import TrustTier
@@ -110,6 +111,10 @@ class ReapedJobTransition:
     error_detail: str | None
 
 
+class JobLeaseLostError(RuntimeError):
+    """Stop an obsolete worker attempt from writing after its lease is lost."""
+
+
 def _owner_id() -> str:
     return f"{socket.gethostname()}:{os.getpid()}"
 
@@ -144,7 +149,8 @@ async def reap_stuck_jobs(db: Database) -> list[ReapedJobTransition]:
                            heartbeat_at = NULL,
                            lease_expires_at = NULL,
                            error_code = 'lease_expired',
-                           error_detail = 'worker stopped heartbeating; lease reclaimed'
+                           error_detail = 'worker stopped heartbeating; lease reclaimed',
+                           updated_at = :now
                       FROM expired e
                      WHERE j.id = e.id
                  RETURNING j.id, j.org_id, j.kind, j.document_id, j.attempts, j.max_attempts,
@@ -155,13 +161,13 @@ async def reap_stuck_jobs(db: Database) -> list[ReapedJobTransition]:
                   FROM stuck
                 """
             ),
-            {"cutoff": cutoff},
+            {"cutoff": cutoff, "now": now},
         )
         stuck_rows = list(result.mappings())
         rows = []
         for row in stuck_rows:
-            next_attempts = int(row["attempts"]) + 1
-            next_status = "failed" if next_attempts >= int(row["max_attempts"]) else "queued"
+            attempts = int(row["attempts"])
+            next_status = "failed" if attempts >= int(row["max_attempts"]) else "queued"
             await session.execute(
                 text(
                     """
@@ -176,18 +182,18 @@ async def reap_stuck_jobs(db: Database) -> list[ReapedJobTransition]:
                     """
                     UPDATE ingest_job
                        SET status = :status,
-                           attempts = :attempts,
                            lease_expires_at = :retry_at,
-                           finished_at = :finished_at
+                           finished_at = :finished_at,
+                           updated_at = :now
                      WHERE id = :id
                     """
                 ),
                 {
                     "id": row["id"],
                     "status": next_status,
-                    "attempts": next_attempts,
                     "retry_at": retry_at if next_status == "queued" else None,
                     "finished_at": now if next_status == "failed" else None,
+                    "now": now,
                 },
             )
             await session.execute(
@@ -206,7 +212,7 @@ async def reap_stuck_jobs(db: Database) -> list[ReapedJobTransition]:
                     else "max attempts exhausted after expired lease",
                 },
             )
-            rows.append({**row, "status": next_status, "attempts": next_attempts})
+            rows.append({**row, "status": next_status})
 
     reclaimed = [
         ReapedJobTransition(
@@ -302,20 +308,38 @@ async def _heartbeat_until_stopped(
     job: ClaimedIngestJob,
     owner: str,
     stop: asyncio.Event,
+    lease_lost: asyncio.Event,
 ) -> None:
     while not stop.is_set():
         with contextlib.suppress(TimeoutError):
             await asyncio.wait_for(stop.wait(), timeout=HEARTBEAT_INTERVAL_S)
             return
-        renewed = await jobs.heartbeat(
-            job_id=job.id,
-            org_id=job.org_id,
-            owner_id=owner,
-            lease_seconds=LEASE_DURATION_S,
-        )
+        try:
+            renewed = await jobs.heartbeat(
+                job_id=job.id,
+                org_id=job.org_id,
+                owner_id=owner,
+                lease_seconds=LEASE_DURATION_S,
+            )
+        except Exception as exc:
+            lease_lost.set()
+            log.error(
+                "worker.heartbeat_failed",
+                job_id=str(job.id),
+                org_id=str(job.org_id),
+                error_type=type(exc).__name__,
+                error=str(exc),
+            )
+            return
         if not renewed:
+            lease_lost.set()
             log.warning("worker.heartbeat_lost", job_id=str(job.id), org_id=str(job.org_id))
             return
+
+
+def _public_error_detail(exc: Exception) -> str:
+    """Keep arbitrary exception text out of the authenticated API and WebSocket."""
+    return exc.message if isinstance(exc, MnemosError) else "ingestion failed"
 
 
 async def process_next_job(
@@ -335,7 +359,16 @@ async def process_next_job(
         return False
 
     log.info("worker.job_claimed", job_id=str(job.id), org_id=str(job.org_id), kind=job.kind)
-    await jobs.record_progress(job_id=job.id, org_id=job.org_id, done_units=0, total_units=4)
+    progress_recorded = await jobs.record_progress(
+        job_id=job.id,
+        org_id=job.org_id,
+        owner_id=owner,
+        done_units=0,
+        total_units=4,
+    )
+    if not progress_recorded:
+        log.warning("worker.claim_lost", job_id=str(job.id), org_id=str(job.org_id))
+        return True
     await _publish_transition(
         cache=cache,
         event_bus=event_bus,
@@ -350,18 +383,24 @@ async def process_next_job(
     )
 
     heartbeat_stop = asyncio.Event()
-    heartbeat_task = asyncio.create_task(
-        _heartbeat_until_stopped(jobs=jobs, job=job, owner=owner, stop=heartbeat_stop)
-    )
+    lease_lost = asyncio.Event()
+    progress_done = 0
+    progress_total = 4
 
     async def progress(done_units: int, total_units: int, detail: str) -> None:
-        await jobs.record_progress(
+        nonlocal progress_done, progress_total
+        recorded = await jobs.record_progress(
             job_id=job.id,
             org_id=job.org_id,
+            owner_id=owner,
             done_units=done_units,
             total_units=total_units,
             detail=detail,
         )
+        if not recorded:
+            raise JobLeaseLostError("job lease is no longer owned by this worker")
+        progress_done = done_units
+        progress_total = total_units
         await _publish_transition(
             cache=cache,
             event_bus=event_bus,
@@ -375,31 +414,61 @@ async def process_next_job(
             total_units=total_units,
         )
 
-    try:
-        source_slug = job.payload["source_slug"]
-        item_uri = job.payload["item_uri"]
-        item_name = job.payload.get("item_name") or item_uri
-        content_type = job.payload.get("content_type") or "application/octet-stream"
+    summary = None
+    processing_error: Exception | None = None
+    async with asyncio.TaskGroup() as tasks:
+        tasks.create_task(
+            _heartbeat_until_stopped(
+                jobs=jobs,
+                job=job,
+                owner=owner,
+                stop=heartbeat_stop,
+                lease_lost=lease_lost,
+            )
+        )
+        try:
+            source_slug = job.payload["source_slug"]
+            item_uri = job.payload["item_uri"]
+            item_name = job.payload.get("item_name") or item_uri
+            content_type = job.payload.get("content_type") or "application/octet-stream"
 
-        source_kind, data = await connectors.fetch_item(
-            org_id=job.org_id, slug=source_slug, uri=item_uri
-        )
-        summary = await knowledge.ingest_connector_item(
-            org_id=job.org_id,
-            title=item_name,
-            media_type=content_type,
-            data=data,
-            source_kind=source_kind,
-            source_uri=item_uri,
-            trust_tier=int(TrustTier.RETRIEVED),
-            progress=progress,
-        )
-    except Exception as exc:
-        error_code = type(exc).__name__
-        error_detail = str(exc)
+            source_kind, data = await connectors.fetch_item(
+                org_id=job.org_id, slug=source_slug, uri=item_uri
+            )
+            summary = await knowledge.ingest_connector_item(
+                org_id=job.org_id,
+                title=item_name,
+                media_type=content_type,
+                data=data,
+                source_kind=source_kind,
+                source_uri=item_uri,
+                trust_tier=int(TrustTier.RETRIEVED),
+                progress=progress,
+            )
+        except Exception as exc:
+            processing_error = exc
+        finally:
+            heartbeat_stop.set()
+
+    if processing_error is not None:
+        error_code = type(processing_error).__name__
+        diagnostic_error = str(processing_error)
+        error_detail = _public_error_detail(processing_error)
         next_status = await jobs.mark_attempt_failed(
-            job_id=job.id, org_id=job.org_id, error_code=error_code, error_detail=error_detail
+            job_id=job.id,
+            org_id=job.org_id,
+            owner_id=owner,
+            error_code=error_code,
+            error_detail=error_detail,
         )
+        if next_status is None:
+            log.warning(
+                "worker.failure_ignored_after_lease_loss",
+                job_id=str(job.id),
+                org_id=str(job.org_id),
+                error_type=error_code,
+            )
+            return True
         await _publish_transition(
             cache=cache,
             event_bus=event_bus,
@@ -411,23 +480,35 @@ async def process_next_job(
             error_detail=error_detail,
             attempts=job.attempts,
             max_attempts=job.max_attempts,
-            done_units=0,
-            total_units=4,
+            done_units=progress_done,
+            total_units=progress_total,
         )
         log.error(
             "worker.job_failed" if next_status == "failed" else "worker.job_retry_queued",
             job_id=str(job.id),
             org_id=str(job.org_id),
             error_code=error_code,
-            error_detail=error_detail,
+            error_detail=diagnostic_error,
             next_status=next_status,
         )
         return True
-    finally:
-        heartbeat_stop.set()
-        await heartbeat_task
 
-    await jobs.mark_succeeded(job_id=job.id, org_id=job.org_id, document_id=summary.id)
+    if summary is None:  # pragma: no cover - success assigns it above
+        raise RuntimeError("ingestion finished without a document summary")
+    succeeded = await jobs.mark_succeeded(
+        job_id=job.id,
+        org_id=job.org_id,
+        owner_id=owner,
+        document_id=summary.id,
+    )
+    if not succeeded:
+        log.warning(
+            "worker.completion_ignored_after_lease_loss",
+            job_id=str(job.id),
+            org_id=str(job.org_id),
+            heartbeat_reported_loss=lease_lost.is_set(),
+        )
+        return True
     await _publish_transition(
         cache=cache,
         event_bus=event_bus,

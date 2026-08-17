@@ -915,15 +915,23 @@ to the authenticated ingestion WebSocket path and Redis Streams. The stuck-job r
 surfaces expired leases as `running -> stuck -> queued/failed`, so a dead worker is visible in
 history instead of being silently rewritten back to the queue.
 
+The final review tightened the concurrency contract: only a claim increments `attempts`, and
+all progress/failure/success mutations are fenced by both `status = running` and the current
+`owner_id`. An obsolete worker therefore cannot overwrite the attempt that replaced it after
+lease reclamation. Retry claims clear stale progress/error state, job mutations advance
+`updated_at`, event reads are explicitly tenant-filtered and deterministically ordered, and
+unexpected internal exception detail is logged rather than returned over the API/WebSocket.
+
 The product slice is `GET /connectors/jobs`, `GET /connectors/jobs/{job_id}`, and the Sources
 activity feed. The feed hydrates recent jobs after reload before merging WebSocket events, and
-each row now shows a labelled `stuck` state, attempts, a progress bar, and error detail. The
-generated frontend schema was regenerated from the edited FastAPI OpenAPI document rather than
-hand-edited.
+rejects an older hydration response if a newer live transition already arrived. Each row now
+shows a labelled `stuck` state, attempts, a progress bar, and error detail. The generated
+frontend schema was regenerated from the edited FastAPI OpenAPI document rather than hand-edited.
 
-Evidence: focused backend tests for worker/repository/router — 16 passed; full backend
-`make test` — 433 passed; `make lint`, `make types`, and `make check` clean. Frontend:
-`npm run test` — 112 passed; `npm run lint`, `npx tsc --noEmit`, and `npm run build` clean.
+Evidence after the final review: focused backend tests for worker/repository/router — 17
+passed; full backend `make test` — 434 passed; `make lint`, `make types`, and `make check`
+clean. Frontend: `npm run test -- --run` — 114 passed; `npm run lint`, `npx tsc --noEmit`,
+and `npm run build` clean.
 After `docker compose up -d --build`, `/readyz` returned postgres, redis, ollama and
 objectstore all `ok`, and `npx playwright test e2e/sources.spec.ts` passed against the rebuilt
 stack.

@@ -73,7 +73,7 @@ export function EventFeed({ jobs }: EventFeedProps) {
     <div className="flex flex-col gap-3">
       <div className="flex flex-wrap gap-1" role="group" aria-label="Filter ingestion activity">
         {(["all", "active", "failed", "succeeded"] as const).map((value) => (
-          <button key={value} type="button" aria-pressed={filter === value} onClick={() => setFilter(value)} className="hit-target !min-h-9 rounded-full px-3 text-footnote font-semibold capitalize text-label-secondary hover:bg-fill-tertiary aria-pressed:bg-accent-tint aria-pressed:text-accent">
+          <button key={value} type="button" aria-pressed={filter === value} onClick={() => setFilter(value)} className="hit-target rounded-full px-3 text-footnote font-semibold capitalize text-label-secondary hover:bg-fill-tertiary aria-pressed:bg-accent-tint aria-pressed:text-accent">
             {value}
           </button>
         ))}
@@ -124,7 +124,7 @@ function JobDetails({ job, copied, onCopy }: { job: FeedJob; copied: boolean; on
     <div className="border-t border-separator px-4 py-4">
       <div className="mb-4 flex items-center justify-between gap-2">
         <code className="min-w-0 truncate text-caption text-label-secondary">{job.jobId}</code>
-        <Button rank="plain" aria-label="Copy job ID" className="!min-h-9 !px-2 text-footnote" onClick={onCopy}>
+        <Button rank="plain" aria-label="Copy job ID" className="!px-2 text-footnote" onClick={onCopy}>
           {copied ? <Check className="size-4" aria-hidden="true" /> : <Copy className="size-4" aria-hidden="true" />}{copied ? "Copied" : "Copy ID"}
         </Button>
       </div>

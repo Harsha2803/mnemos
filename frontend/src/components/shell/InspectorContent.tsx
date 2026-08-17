@@ -74,7 +74,7 @@ function InspectorTab({ label, active, onClick }: { label: string; active: boole
       type="button"
       aria-current={active ? "page" : undefined}
       onClick={onClick}
-      className="hit-target !min-h-9 flex-1 rounded-md px-2 text-footnote font-semibold text-label-secondary hover:bg-fill-tertiary aria-[current=page]:bg-accent-tint aria-[current=page]:text-accent"
+      className="hit-target flex-1 rounded-md px-2 text-footnote font-semibold text-label-secondary hover:bg-fill-tertiary aria-[current=page]:bg-accent-tint aria-[current=page]:text-accent"
     >
       {label}
     </button>

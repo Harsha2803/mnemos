@@ -85,11 +85,9 @@ export function MessageBubble({
       </span>
       <div
         aria-live={message.streaming === true ? "polite" : undefined}
-        onClick={!isUser && onMessageSelect ? onMessageSelect : undefined}
         className={[
           "measure whitespace-pre-wrap rounded-lg px-4 py-3 text-body leading-relaxed",
           isUser ? "bg-accent-tint text-label" : "bg-bg-secondary text-label",
-          !isUser && onMessageSelect ? "cursor-pointer" : "",
         ].join(" ")}
       >
         {message.content.length > 0 ? (
@@ -101,14 +99,14 @@ export function MessageBubble({
       {!isUser && message.content.length > 0 && message.streaming !== true && (
         <div className="flex flex-wrap items-center gap-1 px-1">
           {onMessageSelect && (
-            <Button rank="plain" className="!min-h-9 !min-w-9 !px-2 text-footnote" onClick={onMessageSelect}>
+            <Button rank="plain" className="!px-2 text-footnote" onClick={onMessageSelect}>
               <Search className="size-4" strokeWidth={1.5} aria-hidden="true" />
               Inspect answer
             </Button>
           )}
           <Button
             rank="plain"
-            className="!min-h-9 !min-w-9 !px-2 text-footnote"
+            className="!px-2 text-footnote"
             aria-label="Copy answer"
             onClick={() => void copyAnswer()}
           >
@@ -125,7 +123,7 @@ export function MessageBubble({
               type="button"
               onClick={() => onCitationClick?.(citation)}
               className={[
-                "hit-target !min-h-9 rounded-full border px-3 text-footnote font-semibold transition-colors",
+                "hit-target rounded-full border px-3 text-footnote font-semibold transition-colors",
                 citation.id === selectedCitationId
                   ? "border-accent bg-accent-tint text-accent"
                   : "border-separator bg-bg-secondary text-label-secondary hover:bg-fill-tertiary",

@@ -70,7 +70,7 @@ export function AppShell({ children }: { children: ReactNode }) {
 
   const [sidebarWidth, setSidebarWidth] = useState(DEFAULT_SIDEBAR_WIDTH);
   const [inspectorWidth, setInspectorWidth] = useState(DEFAULT_INSPECTOR_WIDTH);
-  const restoredPreferences = useRef(false);
+  const [preferencesHydrated, setPreferencesHydrated] = useState(false);
 
   useEffect(() => {
     const saved = readLayoutPreferences();
@@ -78,13 +78,13 @@ export function AppShell({ children }: { children: ReactNode }) {
     if (saved.inspectorPinned !== undefined) setInspectorPinned(saved.inspectorPinned);
     if (saved.sidebarWidth !== undefined) setSidebarWidth(clamp(saved.sidebarWidth, SIDEBAR_MIN_WIDTH, SIDEBAR_MAX_WIDTH));
     if (saved.inspectorWidth !== undefined) setInspectorWidth(clamp(saved.inspectorWidth, INSPECTOR_MIN_WIDTH, INSPECTOR_MAX_WIDTH));
-    restoredPreferences.current = true;
+    setPreferencesHydrated(true);
   }, []);
 
   useEffect(() => {
-    if (!restoredPreferences.current) return;
+    if (!preferencesHydrated) return;
     writeLayoutPreferences({ sidebarPinned, inspectorPinned, sidebarWidth, inspectorWidth });
-  }, [sidebarPinned, inspectorPinned, sidebarWidth, inspectorWidth]);
+  }, [preferencesHydrated, sidebarPinned, inspectorPinned, sidebarWidth, inspectorWidth]);
 
   const sidebarShowing = sidebarIsInline ? sidebarPinned : sidebarSheetOpen;
   const inspectorShowing = inspectorIsInline ? inspectorPinned : inspectorSheetOpen;

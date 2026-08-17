@@ -69,7 +69,7 @@ export function SqlPanel({ result }: SqlPanelProps) {
         <summary className="hit-target flex cursor-pointer items-center justify-between px-3 text-footnote font-semibold text-label">Generated SQL <span className="text-label-tertiary group-open:hidden">Show</span><span className="hidden text-label-tertiary group-open:inline">Hide</span></summary>
         <div className="border-t border-separator">
           <div className="flex justify-end p-1">
-            <Button rank="plain" className="!min-h-9 !px-2 text-footnote" aria-label="Copy SQL" onClick={() => void copy("sql", result.sql)}>
+            <Button rank="plain" className="!px-2 text-footnote" aria-label="Copy SQL" onClick={() => void copy("sql", result.sql)}>
               {copied === "sql" ? <Check className="size-4" aria-hidden="true" /> : <Copy className="size-4" aria-hidden="true" />}{copied === "sql" ? "Copied" : "Copy SQL"}
             </Button>
           </div>
@@ -86,7 +86,7 @@ export function SqlPanel({ result }: SqlPanelProps) {
       {result.executed && result.rows.length > 0 && (
         <>
           <div className="flex justify-end">
-            <Button rank="plain" className="!min-h-9 !px-2 text-footnote" aria-label="Copy result table" onClick={() => void copy("table", tableAsTsv(result))}>
+            <Button rank="plain" className="!px-2 text-footnote" aria-label="Copy result table" onClick={() => void copy("table", tableAsTsv(result))}>
               {copied === "table" ? <Check className="size-4" aria-hidden="true" /> : <Copy className="size-4" aria-hidden="true" />}{copied === "table" ? "Copied" : "Copy table"}
             </Button>
           </div>

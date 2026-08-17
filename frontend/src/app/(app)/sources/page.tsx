@@ -46,7 +46,7 @@ export default function SourcesPage() {
     setJobs((current) => {
       const next = { ...current };
       for (const job of recentJobs.data) {
-        next[job.id] = mergeJob(next[job.id], feedJobFromRecord(job));
+        next[job.id] = mergeJob(next[job.id], feedJobFromRecord(job), true);
       }
       return next;
     });
@@ -229,7 +229,10 @@ function feedJobFromRecord(job: IngestJob): FeedJob {
   };
 }
 
-function mergeJob(previous: FeedJob | undefined, next: FeedJob): FeedJob {
+function mergeJob(previous: FeedJob | undefined, next: FeedJob, rejectOlder = false): FeedJob {
+  if (rejectOlder && previous && Date.parse(previous.updatedAt) > Date.parse(next.updatedAt)) {
+    return previous;
+  }
   return {
     ...next,
     itemName: previous?.itemName ?? next.itemName,

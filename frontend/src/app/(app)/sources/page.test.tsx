@@ -2,7 +2,7 @@ import { screen, waitFor } from "@testing-library/react";
 import userEvent from "@testing-library/user-event";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 
-import { jsonResponse, stubRouter } from "@/test/http";
+import { deferred, jsonResponse, stubRouter } from "@/test/http";
 import { renderWithProviders } from "@/test/render";
 import { resetSessionForTests, setAccessToken } from "@/lib/auth/session";
 
@@ -216,6 +216,45 @@ describe("the sources screen", () => {
     expect(screen.getByRole("progressbar", { name: "handbook.txt progress" })).toHaveAttribute(
       "aria-valuenow",
       "50",
+    );
+  });
+
+  it("test_stale_reload_data_cannot_roll_back_a_newer_live_transition", async () => {
+    const jobsResponse = deferred<Response>();
+    stubRouter((call) => {
+      if (call.method === "GET" && call.path === SOURCES_PATH) {
+        return jsonResponse(200, [aSource()]);
+      }
+      if (call.method === "GET" && call.path === JOBS_PATH) return jobsResponse.promise;
+      return jsonResponse(404, { error: { code: "not_found", message: "not found" } });
+    });
+
+    renderWithProviders(<SourcesPage />);
+    await waitFor(() => expect(FakeWebSocket.instances.length).toBeGreaterThan(0));
+    FakeWebSocket.instances.at(-1)?.emitMessage({
+      type: "ingest_job",
+      job_id: "job-1",
+      status: "succeeded",
+      kind: "connector_ingest",
+      document_id: "019fe000-0000-7000-8000-00000000000b",
+      error_code: null,
+      error_detail: null,
+      attempts: 1,
+      max_attempts: 3,
+      done_units: 4,
+      total_units: 4,
+      occurred_at: "2026-08-16T12:05:00Z",
+    });
+
+    const feed = await screen.findByRole("list", { name: "Ingestion activity" });
+    await waitFor(() => expect(feed).toHaveTextContent("Succeeded"));
+
+    jobsResponse.resolve(jsonResponse(200, [aJob()]));
+    await waitFor(() => expect(feed).toHaveTextContent("Succeeded"));
+    expect(feed).not.toHaveTextContent("Running");
+    expect(screen.getByRole("progressbar", { name: "job-1 progress" })).toHaveAttribute(
+      "aria-valuenow",
+      "100",
     );
   });
 });

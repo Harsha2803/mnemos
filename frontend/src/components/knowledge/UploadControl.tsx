@@ -73,7 +73,7 @@ export function UploadControl({ onUploaded }: UploadControlProps) {
         <div className="rounded-lg border border-separator" role={pending > 0 ? "status" : undefined} aria-label={pending === 1 ? "Processing the document" : pending > 1 ? `Processing ${pending} documents` : "Upload summary"}>
           <div className="flex items-center justify-between border-b border-separator px-4 py-2 text-footnote text-label-secondary">
             <span>{pending > 0 ? `${pending} processing` : `${done} uploaded`}{failed > 0 ? ` · ${failed} failed` : ""}</span>
-            {pending === 0 && <Button rank="plain" className="!min-h-9 !px-2 text-footnote" onClick={() => setQueue([])}>Clear</Button>}
+            {pending === 0 && <Button rank="plain" className="!px-2 text-footnote" onClick={() => setQueue([])}>Clear</Button>}
           </div>
           <ul className="divide-y divide-separator">
             {queue.map((item) => <QueueRow key={item.id} item={item} onRetry={() => void retry(item)} onRemove={() => setQueue((current) => current.filter((entry) => entry.id !== item.id))} />)}

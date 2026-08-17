@@ -88,7 +88,7 @@ class IngestJobRepository:
                            started_at, finished_at, error_code, error_detail, created_at, updated_at
                       FROM ingest_job
                      WHERE org_id = :org_id
-                     ORDER BY created_at DESC
+                     ORDER BY updated_at DESC, created_at DESC
                      LIMIT :limit
                     """
                 ),
@@ -96,7 +96,7 @@ class IngestJobRepository:
             )
             rows = list(result.mappings())
             events = await self._events_for_jobs(
-                session=session, job_ids=[JobId(row["id"]) for row in rows]
+                session=session, org_id=org_id, job_ids=[JobId(row["id"]) for row in rows]
             )
 
         return [self._record(row, events.get(JobId(row["id"]), ())) for row in rows]
@@ -118,7 +118,7 @@ class IngestJobRepository:
             row = result.mappings().first()
             if row is None:
                 return None
-            events = await self._events_for_jobs(session=session, job_ids=[job_id])
+            events = await self._events_for_jobs(session=session, org_id=org_id, job_ids=[job_id])
 
         return self._record(row, events.get(job_id, ()))
 
@@ -146,6 +146,12 @@ class IngestJobRepository:
                            heartbeat_at = :now,
                            lease_expires_at = :lease_expires,
                            started_at = COALESCE(j.started_at, :now),
+                           finished_at = NULL,
+                           error_code = NULL,
+                           error_detail = NULL,
+                           done_units = 0,
+                           total_units = 0,
+                           updated_at = :now,
                            attempts = j.attempts + 1
                       FROM next_job n
                      WHERE j.id = n.id
@@ -191,7 +197,8 @@ class IngestJobRepository:
                 text(
                     """
                     UPDATE ingest_job
-                       SET heartbeat_at = :now, lease_expires_at = :lease_expires
+                       SET heartbeat_at = :now, lease_expires_at = :lease_expires,
+                           updated_at = :now
                      WHERE id = :id AND status = 'running' AND owner_id = :owner_id
                  RETURNING id
                     """
@@ -210,96 +217,104 @@ class IngestJobRepository:
         *,
         job_id: JobId,
         org_id: OrgId,
+        owner_id: str,
         done_units: int,
         total_units: int,
         detail: str | None = None,
-    ) -> None:
-        done_units = max(0, done_units)
+    ) -> bool:
         total_units = max(0, total_units)
+        done_units = min(max(0, done_units), total_units)
+        now = SYSTEM_CLOCK.now()
         async with self._db.session(org_id=org_id) as session:
-            await session.execute(
+            result = await session.execute(
                 text(
                     """
                     UPDATE ingest_job
-                       SET done_units = :done_units, total_units = :total_units
-                     WHERE id = :id
+                       SET done_units = :done_units, total_units = :total_units,
+                           updated_at = :now
+                     WHERE id = :id AND status = 'running' AND owner_id = :owner_id
+                 RETURNING id
                     """
                 ),
-                {"id": job_id, "done_units": done_units, "total_units": total_units},
+                {
+                    "id": job_id,
+                    "owner_id": owner_id,
+                    "done_units": done_units,
+                    "total_units": total_units,
+                    "now": now,
+                },
             )
+            if result.first() is None:
+                return False
             if detail is not None:
                 await session.execute(
                     text(
                         """
-                        INSERT INTO ingest_job_event (org_id, job_id, from_status, to_status, detail)
-                        VALUES (:org_id, :job_id, 'running', 'running', :detail)
+                        INSERT INTO ingest_job_event (
+                            org_id, job_id, from_status, to_status, owner_id, detail
+                        )
+                        VALUES (:org_id, :job_id, 'running', 'running', :owner_id, :detail)
                         """
                     ),
-                    {"org_id": org_id, "job_id": job_id, "detail": detail},
+                    {
+                        "org_id": org_id,
+                        "job_id": job_id,
+                        "owner_id": owner_id,
+                        "detail": detail,
+                    },
                 )
+        return True
 
     async def mark_succeeded(
-        self, *, job_id: JobId, org_id: OrgId, document_id: DocumentId
-    ) -> None:
+        self, *, job_id: JobId, org_id: OrgId, owner_id: str, document_id: DocumentId
+    ) -> bool:
         async with self._db.session(org_id=org_id) as session:
-            await session.execute(
+            result = await session.execute(
                 text(
                     """
                     UPDATE ingest_job
                        SET status = 'succeeded', document_id = :document_id,
                            finished_at = :now, owner_id = NULL, heartbeat_at = NULL,
-                           lease_expires_at = NULL
-                     WHERE id = :id
-                    """
-                ),
-                {"id": job_id, "document_id": document_id, "now": SYSTEM_CLOCK.now()},
-            )
-            await session.execute(
-                text(
-                    """
-                    INSERT INTO ingest_job_event (org_id, job_id, from_status, to_status, detail)
-                    VALUES (:org_id, :job_id, 'running', 'succeeded', 'ingested')
-                    """
-                ),
-                {"org_id": org_id, "job_id": job_id},
-            )
-
-    async def mark_failed(
-        self, *, job_id: JobId, org_id: OrgId, error_code: str, error_detail: str
-    ) -> None:
-        async with self._db.session(org_id=org_id) as session:
-            await session.execute(
-                text(
-                    """
-                    UPDATE ingest_job
-                       SET status = 'failed', error_code = :error_code, error_detail = :error_detail,
-                           finished_at = :now, owner_id = NULL, heartbeat_at = NULL,
-                           lease_expires_at = NULL
-                     WHERE id = :id
+                           lease_expires_at = NULL, error_code = NULL, error_detail = NULL,
+                           updated_at = :now
+                     WHERE id = :id AND status = 'running' AND owner_id = :owner_id
+                 RETURNING id
                     """
                 ),
                 {
                     "id": job_id,
-                    "error_code": error_code,
-                    "error_detail": error_detail,
+                    "owner_id": owner_id,
+                    "document_id": document_id,
                     "now": SYSTEM_CLOCK.now(),
                 },
             )
+            if result.first() is None:
+                return False
             await session.execute(
                 text(
                     """
-                    INSERT INTO ingest_job_event (org_id, job_id, from_status, to_status, detail)
-                    VALUES (:org_id, :job_id, 'running', 'failed', :detail)
+                    INSERT INTO ingest_job_event (
+                        org_id, job_id, from_status, to_status, owner_id, detail
+                    )
+                    VALUES (:org_id, :job_id, 'running', 'succeeded', :owner_id, 'ingested')
                     """
                 ),
-                {"org_id": org_id, "job_id": job_id, "detail": error_detail},
+                {"org_id": org_id, "job_id": job_id, "owner_id": owner_id},
             )
+        return True
 
     async def mark_attempt_failed(
-        self, *, job_id: JobId, org_id: OrgId, error_code: str, error_detail: str
-    ) -> str:
+        self,
+        *,
+        job_id: JobId,
+        org_id: OrgId,
+        owner_id: str,
+        error_code: str,
+        error_detail: str,
+    ) -> str | None:
         """Record a failed attempt. Return the job's next status: `queued` for
-        retry, or `failed` once `max_attempts` is exhausted."""
+        retry, `failed` once `max_attempts` is exhausted, or `None` when this
+        worker no longer owns the lease and must not mutate the job."""
         now = SYSTEM_CLOCK.now()
         async with self._db.session(org_id=org_id) as session:
             result = await session.execute(
@@ -326,28 +341,40 @@ class IngestJobRepository:
                                                 )
                                               END,
                            error_code = :error_code,
-                           error_detail = :error_detail
-                     WHERE id = :id
+                           error_detail = :error_detail,
+                           updated_at = :now
+                     WHERE id = :id AND status = 'running' AND owner_id = :owner_id
                  RETURNING status
                     """
                 ),
                 {
                     "id": job_id,
+                    "owner_id": owner_id,
                     "error_code": error_code,
                     "error_detail": error_detail,
                     "now": now,
                 },
             )
-            row = result.mappings().one()
+            row = result.mappings().first()
+            if row is None:
+                return None
             next_status = str(row["status"])
             await session.execute(
                 text(
                     """
-                    INSERT INTO ingest_job_event (org_id, job_id, from_status, to_status, detail)
-                    VALUES (:org_id, :job_id, 'running', :status, :detail)
+                    INSERT INTO ingest_job_event (
+                        org_id, job_id, from_status, to_status, owner_id, detail
+                    )
+                    VALUES (:org_id, :job_id, 'running', :status, :owner_id, :detail)
                     """
                 ),
-                {"org_id": org_id, "job_id": job_id, "status": next_status, "detail": error_detail},
+                {
+                    "org_id": org_id,
+                    "job_id": job_id,
+                    "status": next_status,
+                    "owner_id": owner_id,
+                    "detail": error_detail,
+                },
             )
         return next_status
 
@@ -378,7 +405,7 @@ class IngestJobRepository:
         )
 
     async def _events_for_jobs(
-        self, *, session: AsyncSession, job_ids: Sequence[JobId]
+        self, *, session: AsyncSession, org_id: OrgId, job_ids: Sequence[JobId]
     ) -> dict[JobId, tuple[IngestJobEventRecord, ...]]:
         if not job_ids:
             return {}
@@ -386,11 +413,11 @@ class IngestJobRepository:
             """
             SELECT id, job_id, from_status, to_status, owner_id, detail, occurred_at
               FROM ingest_job_event
-             WHERE job_id IN :job_ids
-             ORDER BY occurred_at
+             WHERE org_id = :org_id AND job_id IN :job_ids
+             ORDER BY occurred_at, id
             """
         ).bindparams(bindparam("job_ids", expanding=True))
-        result = await session.execute(stmt, {"job_ids": list(job_ids)})
+        result = await session.execute(stmt, {"org_id": org_id, "job_ids": list(job_ids)})
         grouped: dict[JobId, list[IngestJobEventRecord]] = {}
         for row in result.mappings():
             job_id = JobId(row["job_id"])

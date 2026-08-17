@@ -1,4 +1,4 @@
-import { fireEvent, screen } from "@testing-library/react";
+import { fireEvent, screen, waitFor } from "@testing-library/react";
 import userEvent from "@testing-library/user-event";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import { axe } from "vitest-axe";
@@ -10,6 +10,7 @@ import { axe } from "vitest-axe";
 // lose the router it needs.
 
 import compiledCss from "@/app/globals.css?inline";
+import { LAYOUT_STORAGE_KEY } from "@/lib/layoutPreferences";
 import { resolvedPx, setMediaQueries } from "@/test/harness";
 import { renderWithProviders, stubJsonResponse } from "@/test/render";
 
@@ -34,6 +35,7 @@ function renderShell() {
 }
 
 beforeEach(() => {
+  window.localStorage.removeItem(LAYOUT_STORAGE_KEY);
   // The sidebar footer calls /readyz for real. A healthy answer keeps these
   // tests about layout rather than about what a failed probe looks like — that
   // is `health.test.tsx`'s job.
@@ -99,6 +101,35 @@ describe("the three-column shell", () => {
 
     await userEvent.click(screen.getByRole("button", { name: "Show navigation" }));
     expect(screen.getByRole("list", { name: "Sections" })).toBeInTheDocument();
+  });
+
+  it("test_saved_shell_preferences_are_restored_before_new_values_are_persisted", async () => {
+    viewport(1440);
+    window.localStorage.setItem(
+      LAYOUT_STORAGE_KEY,
+      JSON.stringify({
+        sidebarPinned: false,
+        inspectorPinned: true,
+        sidebarWidth: 340,
+        inspectorWidth: 384,
+      }),
+    );
+
+    renderShell();
+
+    await waitFor(() =>
+      expect(screen.getByRole("navigation", { name: "Workspace" })).toHaveClass("w-0"),
+    );
+    expect(screen.getByRole("separator", { name: "Resize the context inspector" })).toHaveAttribute(
+      "aria-valuenow",
+      "384",
+    );
+    expect(JSON.parse(window.localStorage.getItem(LAYOUT_STORAGE_KEY) ?? "{}")).toEqual({
+      sidebarPinned: false,
+      inspectorPinned: true,
+      sidebarWidth: 340,
+      inspectorWidth: 384,
+    });
   });
 
   it("test_dragging_the_sidebar_boundary_resizes_it", async () => {

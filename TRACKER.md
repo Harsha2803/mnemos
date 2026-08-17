@@ -6,18 +6,42 @@
 > **and [`docs/ADAPTATION.md`](docs/ADAPTATION.md)** *in the same commit* — a stale
 > tracker is worse than none.
 
-**Last updated:** 2026-08-17 — the UI enhancement handoff is implemented and verified on
-top of completed `B2`: operational overview, richer Knowledge/Sources workflows, a
-selection-aware evidence inspector, stronger SQL result states, grouped conversation
-navigation, and persisted shell preferences. See the first dated note below for evidence.
+**Last updated:** 2026-08-17 — the completed `B2`/UI-enhancement branch received a final
+correctness and accessibility review. Retry accounting, worker lease ownership, public
+error detail, live-vs-hydrated job ordering, persisted layout restoration, and interactive
+target semantics are now covered explicitly. See the first dated note below for evidence.
 **Phase:** **A — make it a chatbot.** `B1`/`B2` are now complete after the one documented
 build-order deviation; return to Phase A for `A4`.
 **Next task:** `A4` — stop choosing a mode: classify each message to chat / RAG / NL2SQL,
 run the chosen flow, and show which flow answered and why. Remove the provisional
 `use_documents` / `use_datasource` selectors once the classifier owns that decision.
 **Branch right now:** `agent/b2-ingestion-ui-enhancements`; the completed `B2` and UI
-enhancement changes are in draft PR #19. No open PRs were present at session start
-(`gh pr list --state open` returned empty). The active GitHub account is `Harsha2803`.
+enhancement changes are recorded locally as draft PR #19. Live PR state could not be
+rechecked in the final review because the cached personal `Harsha2803` CLI token had
+expired. The connected GitHub app belongs to the prohibited work account and was not used;
+restore and confirm `Harsha2803` before any push or PR mutation.
+
+> ### 2026-08-17 — final `B2`/UI review closed lease and hydration races
+>
+> **Correctness hardening:** an attempt is now counted exactly once, when a worker claims
+> it; reaping an expired lease no longer consumes a second attempt. Progress, failure, and
+> success writes require the job still to be `running` and owned by that worker, so an old
+> process cannot overwrite a replacement worker after its lease is reclaimed. Claims clear
+> stale error/progress fields, every raw job mutation advances `updated_at`, event-history
+> reads explicitly include the org predicate and have deterministic ordering, and arbitrary
+> internal exception text stays in structured logs while clients receive a safe error.
+> The Sources feed rejects an older REST hydration snapshot without rejecting a newer live
+> WebSocket transition. Shell preferences now finish hydration before persistence can write,
+> the answer bubble is no longer a mouse-only click target, and the new controls retain the
+> Design System's 44px hit target.
+>
+> **Verification:** the focused worker/router suite passed 17 tests, including a real
+> Postgres regression proving an obsolete worker cannot record progress, failure, success,
+> or history after ownership changes. Full backend `make test` passed 434 tests; `make lint`,
+> `make types`, and `make check` were clean. Frontend lint and typecheck were clean,
+> `npm run test -- --run` passed 114 tests, and `npm run build` succeeded. The compose stack
+> was rebuilt; `/readyz` reported Postgres, Redis, Ollama, and object storage `ok`; and the
+> Chromium Sources Playwright flow passed against that rebuilt stack. `A4` remains next.
 
 > ### 2026-08-17 — UI enhancement handoff implemented and live-verified
 >
