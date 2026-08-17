@@ -313,7 +313,7 @@ def make_client(
     model: ScriptedModel,
 ) -> Iterator[TestClient]:
     """`app.state.rag_flow` is left exactly as the real `lifespan()` builds
-    it — `use_datasource=True` never calls it, so the real (Ollama-backed)
+    it — the NL2SQL-classified questions never call it, so the real (Ollama-backed)
     instance sitting unused is harmless. `app.state.db` (the real lifespan's
     own `Database`) points at whatever `get_settings()` resolves outside
     this test container, so `principals` *and* `chat_service` (session CRUD
@@ -322,8 +322,8 @@ def make_client(
     against `postgres` — built fresh here, first used only from inside this
     same `TestClient` block, for the same loop-consistency reason
     `build_flow`'s own `_fresh_database` call gives. `chat_service`'s own
-    model is never exercised (only `use_datasource=True` requests are ever
-    sent), so the same `model` the caller built `flow` with is reused
+    model is never exercised (only NL2SQL-classified requests are sent), so
+    the same `model` the caller built `flow` with is reused
     rather than building a second, unused fake.
     """
     app = create_app()
@@ -373,7 +373,7 @@ def _ask(
 ) -> dict[str, object]:
     response = client.post(
         f"/api/v1/chat/sessions/{session_id}/messages",
-        json={"content": content, "use_datasource": True},
+        json={"content": content},
         headers=headers,
     )
     assert response.status_code == 200
@@ -429,6 +429,7 @@ def test_a_rejected_verdict_is_never_executed(
         assert nl2sql["row_count"] is None
         assert "region" in " ".join(nl2sql["denied_tables"])
         assert "refused" in done["message"]["content"].lower()
+        assert done["message"]["router_rationale"] == ("Requests an operation on structured data.")
         assert model.stream_calls == [], "a rejected verdict must never reach the narration model"
 
     assert region_row_count(postgres) == count_before, "a rejected verdict reached the database"

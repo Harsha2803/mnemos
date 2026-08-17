@@ -384,17 +384,25 @@ def test_a_message_streams_token_by_token_and_the_answer_is_persisted(
 
     frames = _parse_sse(raw)
     names = [name for name, _ in frames]
-    assert names == ["token", "done"]
-    assert frames[0][1] == {"text": "hi"}
-    assert frames[1][0] == "done"
-    assert frames[1][1]["message"]["role"] == "assistant"
-    assert frames[1][1]["message"]["content"] == "hi"
+    assert names == ["route", "token", "done"]
+    assert frames[0][1] == {
+        "flow": "chat",
+        "reason": "No document or database context is needed.",
+    }
+    assert frames[1][1] == {"text": "hi"}
+    assert frames[2][0] == "done"
+    assert frames[2][1]["message"]["role"] == "assistant"
+    assert frames[2][1]["message"]["content"] == "hi"
+    assert frames[2][1]["message"]["flow"] == "chat"
+    assert frames[2][1]["message"]["router_rationale"] == frames[0][1]["reason"]
 
     detail = client.get(f"/api/v1/chat/sessions/{session_id}", headers=headers).json()
     roles = [m["role"] for m in detail["messages"]]
     contents = [m["content"] for m in detail["messages"]]
     assert roles == ["user", "assistant"]
     assert contents == ["hello there", "hi"]
+    assert detail["messages"][1]["flow"] == "chat"
+    assert detail["messages"][1]["router_rationale"] == frames[0][1]["reason"]
 
     # The system prompt plus the user's turn is what the model actually saw.
     assert len(model.calls) == 1
@@ -522,8 +530,8 @@ def test_an_ollama_failure_mid_stream_becomes_an_error_frame_not_a_crash(
             raw = b"".join(response.iter_bytes())
 
         frames = _parse_sse(raw)
-        assert [name for name, _ in frames] == ["token", "token", "error"]
-        assert frames[2][1] == {"message": "the model is unavailable right now"}
+        assert [name for name, _ in frames] == ["route", "token", "token", "error"]
+        assert frames[3][1] == {"message": "the model is unavailable right now"}
         assert FakeChatModel.SECRET_DETAIL not in json.dumps(frames)
 
         detail = client.get(f"/api/v1/chat/sessions/{session_id}", headers=headers).json()
@@ -574,3 +582,18 @@ def test_an_abandoned_stream_leaves_no_half_written_assistant_message(
 
     roles = asyncio.run(_create_drive_and_check())
     assert roles == ["user"]
+
+
+def test_manual_mode_flags_are_rejected_now_that_the_router_owns_the_decision(
+    client: TestClient, codec: PlatformTokenCodec, seeded: Seed
+) -> None:
+    headers = _headers(codec, seeded)
+    session_id = client.post("/api/v1/chat/sessions", json={}, headers=headers).json()["id"]
+
+    response = client.post(
+        f"/api/v1/chat/sessions/{session_id}/messages",
+        json={"content": "hello", "use_documents": True},
+        headers=headers,
+    )
+
+    assert response.status_code == 422

@@ -514,16 +514,21 @@ def test_a_rag_answer_streams_and_persists_its_citations(
     with client.stream(
         "POST",
         f"/api/v1/chat/sessions/{session_id}/messages",
-        json={"content": "How much leave can I carry over?", "use_documents": True},
+        json={"content": "According to the handbook, how much leave can I carry over?"},
         headers=headers,
     ) as response:
         assert response.status_code == 200
         raw = b"".join(response.iter_bytes())
 
     frames = _parse_sse(raw)
-    assert [name for name, _ in frames] == ["token", "done"]
+    assert [name for name, _ in frames] == ["route", "token", "done"]
+    assert frames[0][1] == {
+        "flow": "rag",
+        "reason": "Asks about documents or cited knowledge.",
+    }
     done_message = frames[-1][1]["message"]
     assert done_message["flow"] == "rag"  # type: ignore[index,call-overload]
+    assert done_message["router_rationale"] == frames[0][1]["reason"]  # type: ignore[index,call-overload]
 
     detail = client.get(f"/api/v1/chat/sessions/{session_id}", headers=headers).json()
     assert len(detail["citations"]) == 1
@@ -545,7 +550,7 @@ def test_a_question_with_no_matching_chunks_answers_honestly_rather_than_halluci
     with client.stream(
         "POST",
         f"/api/v1/chat/sessions/{session_id}/messages",
-        json={"content": "What is our leave policy?", "use_documents": True},
+        json={"content": "What is our leave policy?"},
         headers=headers,
     ) as response:
         assert response.status_code == 200
@@ -562,9 +567,9 @@ def test_a_question_with_no_matching_chunks_answers_honestly_rather_than_halluci
 def test_a_plain_chat_message_does_not_go_through_retrieval(
     client: TestClient, codec: PlatformTokenCodec, seeded: Seed, model: ScriptedChatModel
 ) -> None:
-    """The control for `use_documents`. Without it, a RAG flow that ran on
-    every message would pass every test above and quietly change what plain
-    chat does."""
+    """The classifier's conservative default. A RAG flow that ran on every
+    message would pass every retrieval test above and quietly change what
+    plain chat does."""
     headers = _headers(codec, seeded)
     upload(client, headers, "leave.txt", "Carry-over is capped at five working days.")
     session_id = client.post("/api/v1/chat/sessions", json={}, headers=headers).json()["id"]
@@ -572,7 +577,7 @@ def test_a_plain_chat_message_does_not_go_through_retrieval(
     with client.stream(
         "POST",
         f"/api/v1/chat/sessions/{session_id}/messages",
-        json={"content": "Hello there", "use_documents": False},
+        json={"content": "Hello there"},
         headers=headers,
     ) as response:
         b"".join(response.iter_bytes())
@@ -582,4 +587,4 @@ def test_a_plain_chat_message_does_not_go_through_retrieval(
 
     detail = client.get(f"/api/v1/chat/sessions/{session_id}", headers=headers).json()
     assistant = [m for m in detail["messages"] if m["role"] == "assistant"]
-    assert assistant[0]["flow"] is None
+    assert assistant[0]["flow"] == "chat"
