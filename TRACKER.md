@@ -15,10 +15,9 @@ build-order deviation; return to Phase A for `A4`.
 **Next task:** `A4` — stop choosing a mode: classify each message to chat / RAG / NL2SQL,
 run the chosen flow, and show which flow answered and why. Remove the provisional
 `use_documents` / `use_datasource` selectors once the classifier owns that decision.
-**Branch right now:** `agent/b2-ingestion-ui-enhancements`, with the completed `B2` and UI
-enhancement changes ready to commit and open as a draft PR; no open PRs were present at
-session start (`gh pr list --state open` returned empty). The active GitHub account is
-`Harsha2803`.
+**Branch right now:** `agent/b2-ingestion-ui-enhancements`; the completed `B2` and UI
+enhancement changes are in draft PR #19. No open PRs were present at session start
+(`gh pr list --state open` returned empty). The active GitHub account is `Harsha2803`.
 
 > ### 2026-08-17 — UI enhancement handoff implemented and live-verified
 >
