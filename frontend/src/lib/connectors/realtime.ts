@@ -24,7 +24,7 @@ const WS_BASE_URL = process.env.NEXT_PUBLIC_WS_URL ?? "ws://localhost:8001";
 /** The one subprotocol value the gateway understands (`realtime/main.py`). */
 const BEARER_SUBPROTOCOL = "bearer";
 
-export type IngestJobStatus = "running" | "succeeded" | "failed";
+export type IngestJobStatus = "queued" | "running" | "succeeded" | "failed" | "stuck";
 
 export type IngestionEvent = {
   type: "ingest_job";
@@ -33,6 +33,11 @@ export type IngestionEvent = {
   kind: string;
   document_id: string | null;
   error_code: string | null;
+  error_detail: string | null;
+  attempts: number | null;
+  max_attempts: number | null;
+  done_units: number | null;
+  total_units: number | null;
   occurred_at: string;
 };
 
@@ -44,7 +49,11 @@ function isIngestionEvent(payload: unknown): payload is IngestionEvent {
   return (
     body["type"] === "ingest_job" &&
     typeof body["job_id"] === "string" &&
-    (body["status"] === "running" || body["status"] === "succeeded" || body["status"] === "failed")
+    (body["status"] === "queued" ||
+      body["status"] === "running" ||
+      body["status"] === "succeeded" ||
+      body["status"] === "failed" ||
+      body["status"] === "stuck")
   );
 }
 

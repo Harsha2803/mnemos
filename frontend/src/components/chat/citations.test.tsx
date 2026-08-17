@@ -39,7 +39,17 @@ function ChatWithInspector() {
             citations: [CITATION],
           },
         ]}
-        onCitationClick={(citation) => select({ kind: "citation", citation })}
+        onCitationClick={(citation) =>
+          select({
+            kind: "citation",
+            message: {
+              id: "msg-1",
+              content: "You can carry over five days [1].",
+              citations: [CITATION],
+            },
+            citation,
+          })
+        }
       />
     </AppShell>
   );
@@ -66,10 +76,10 @@ describe("citations", () => {
     await userEvent.click(screen.getByRole("button", { name: "Show source 1" }));
 
     expect(screen.queryByRole("heading", { name: "No message selected" })).toBeNull();
-    expect(screen.getByText(CITATION.quoted_text)).toBeInTheDocument();
+    expect(screen.getAllByText(CITATION.quoted_text)).toHaveLength(2);
     expect(screen.getByText("Page 3")).toBeInTheDocument();
     // The char span is what makes this provenance rather than a document name.
-    expect(screen.getByText(/Characters 0–71/)).toBeInTheDocument();
+    expect(screen.getAllByText(/Characters 0–71/)).toHaveLength(2);
   });
 
   it("a marker with no matching citation stays plain text rather than a dead control", async () => {

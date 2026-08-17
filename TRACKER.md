@@ -6,19 +6,75 @@
 > **and [`docs/ADAPTATION.md`](docs/ADAPTATION.md)** *in the same commit* — a stale
 > tracker is worse than none.
 
-**Last updated:** 2026-08-17 — `B1` is done, all 5/5 deliverables, and the out-of-band
-frontend polish PR #18 has also merged. The sources UI was live-verified in a real browser
-against the rebuilt compose stack, and the checked-in Playwright sources spec passed; see
-the dated note immediately below for evidence.
-**Phase:** **B — make it a platform.** `B1` ✅ is complete after `A0`–`A3`; build order
-still deviates from phase order once, so `B2` comes next before `A4` (2026-08-15 evening
-re-sequencing note below).
-**Next task:** `B2` — ingestion at scale: heartbeat, retries, status history, stuck-job
-surfacing, and the per-job progress UI over the `B1` job machinery. Do not start `A4`
-until `B2` is done; §5's "Then, in order" list remains authoritative.
-**Branch right now:** `main` after PR cleanup. PR #18 is merged; PR #16 carries the
-completed `B1` work and is merged once its conflict-resolution commit is green. Start the
-next task from `main`, not from an old feature branch.
+**Last updated:** 2026-08-17 — the UI enhancement handoff is implemented and verified on
+top of completed `B2`: operational overview, richer Knowledge/Sources workflows, a
+selection-aware evidence inspector, stronger SQL result states, grouped conversation
+navigation, and persisted shell preferences. See the first dated note below for evidence.
+**Phase:** **A — make it a chatbot.** `B1`/`B2` are now complete after the one documented
+build-order deviation; return to Phase A for `A4`.
+**Next task:** `A4` — stop choosing a mode: classify each message to chat / RAG / NL2SQL,
+run the chosen flow, and show which flow answered and why. Remove the provisional
+`use_documents` / `use_datasource` selectors once the classifier owns that decision.
+**Branch right now:** `agent/b2-ingestion-ui-enhancements`, with the completed `B2` and UI
+enhancement changes ready to commit and open as a draft PR; no open PRs were present at
+session start (`gh pr list --state open` returned empty). The active GitHub account is
+`Harsha2803`.
+
+> ### 2026-08-17 — UI enhancement handoff implemented and live-verified
+>
+> **What's built:** the overview is now an operational dashboard with live document,
+> source, job, and conversation summaries plus quick actions. Knowledge has searchable,
+> filterable document inventory and a per-file upload queue with validation, retry, and
+> batch state. Sources has provider-aware registration, richer inventory and item browsing,
+> and an expandable, filterable job timeline with progress and operational metadata. Chat
+> now preserves manual scroll position, groups/searches conversations, exposes answer and
+> citation selection, previews citations on hover/focus, and drives a multi-tab inspector
+> for evidence, SQL, and bundle state. NL2SQL results expose authorization/denial,
+> metadata, copy controls, and a persistent result header. Sidebar/inspector layout choices
+> persist as explicitly non-sensitive local preferences.
+>
+> **Verification:** frontend `npm run lint`, `npm run typecheck`, `npm run test` (112
+> passed), and `npm run build` passed. Backend `make lint`, `make types`, `make check`, and
+> `make test` passed (433 tests). `docker compose up -d --build` rebuilt the application;
+> api/web and all stateful dependencies reported healthy, and `/readyz` reported Postgres,
+> Redis, Ollama, and object storage `ok`. The complete Playwright suite passed against that
+> rebuilt stack: 12/12 browser tests, including authentication/storage safety, streaming
+> chat, document upload/RAG/citation inspection, allowed and denied NL2SQL, and live source
+> ingestion. This is product polish rather than a milestone boundary, so `A4` remains next.
+
+> ### 2026-08-17 — `B2` done: ingestion jobs now heartbeat, retry, replay, and show progress
+>
+> **What's built, backend:** `IngestJobRepository` now exposes recent job snapshots with
+> their `ingest_job_event` history, renews a running job's heartbeat/lease, records progress
+> into the existing `done_units`/`total_units` columns, skips queued jobs whose retry delay
+> has not elapsed, and records failed attempts as either `queued` (retry) or terminal
+> `failed` once `max_attempts` is exhausted. `entrypoints/worker/main.py` starts a heartbeat
+> task while a connector ingest runs, passes an optional progress callback into
+> `KnowledgeService.ingest_connector_item`, publishes progress/attempt fields on both the
+> live pub/sub channel and durable Redis Stream, and changes the reaper from an invisible
+> `running -> queued` rewrite into explicit `running -> stuck -> queued/failed` event
+> history. No migration was needed: `attempts`, `max_attempts`, heartbeat/lease fields,
+> `ingest_job_event`, `done_units`, and `total_units` already existed from `M2`.
+>
+> **What's built, API/UI:** `GET /connectors/jobs` and `GET /connectors/jobs/{job_id}` return
+> recent jobs, attempts, progress, error detail, lease timestamps, and status history for
+> the caller's org only. The Sources page now hydrates its activity feed from that API before
+> merging live WebSocket events, so a reload still shows recent job state instead of only
+> events that arrive after the socket opens. `EventFeed` gained `stuck` as a labelled state,
+> per-job progress bars, attempt counts, and error detail while keeping the B1 accessible
+> icon+word status pattern. `frontend/src/lib/api/schema.ts` was regenerated from the edited
+> app's OpenAPI document; it was not hand-edited.
+>
+> **Verification:** focused backend tests for the job repository/worker/router passed:
+> `../.venv/bin/python -m pytest tests/test_worker_ingestion.py tests/test_connectors_router.py`
+> — 16 passed. Full backend gates: `make test` — 433 passed; `make lint`, `make types`, and
+> `make check` clean (`alembic check`: no new upgrade operations detected). Frontend:
+> `npm run test` — 112 passed; `npm run lint`, `npx tsc --noEmit`, and `npm run build` clean.
+> Live stack: `docker compose up -d --build` rebuilt api/worker/realtime/web; `curl
+> localhost:8000/readyz` returned postgres, redis, ollama, and objectstore all `ok`; `npx
+> playwright test e2e/sources.spec.ts` passed against the rebuilt stack. One E2E selector was
+> tightened because B2's persisted recent-job feed means previous `handbook.txt` jobs can be
+> visible alongside the newly queued one.
 
 > ### 2026-08-17 — `B1` deliverable 5 done: the sources UI is live-verified
 >
@@ -1084,7 +1140,7 @@ order" list is the authoritative next-up sequence; the note above it explains wh
 | ID | What it builds | You can now… | Status |
 |---|---|---|---|
 | **B1** | Object storage · source connectors (MinIO/S3, local FS, HTTP) · Redis Streams event bus · sources UI | **connect a source, browse it, and watch ingestion events arrive live** | ✅ 2026-08-17 — all 5/5 deliverables done, browser-verified against the rebuilt stack |
-| **B2** | Ingestion jobs at scale: heartbeat, retries, status history, stuck-job reaper · per-job progress UI | **ingest a folder and watch every job's progress — including one that dies, surfaced as stuck rather than silently lost** | ⬜ **after `B1`** |
+| **B2** | Ingestion jobs at scale: heartbeat, retries, status history, stuck-job reaper · per-job progress UI | **ingest a folder and watch every job's progress — including one that dies, surfaced as stuck rather than silently lost** | ✅ 2026-08-17 — verified against the rebuilt stack |
 | **B3** | MCP tool runtime: registry, per-user credentials, trust tiers, approval gates · tool console | **register a tool, have the assistant call it, and approve a gated call** — with a denial that names the offending source on screen | ⬜ |
 | **B4** | Agent flow: bounded state machine over tools, checkpoints, step trace | **give it a multi-step task and watch it plan, call tools and finish — with every step inspectable** | ⬜ |
 
@@ -1134,6 +1190,34 @@ discarded. If you find a reference to an old ID anywhere, this is the translatio
 | `M12` router | `A4` | Moved **earlier**: without it the user has to pick a mode, which is not what a chatbot is |
 | `M13` frontend | dissolved into `F0` + a UI slice per milestone | Unchanged by this re-plan |
 | `M14` realtime + e2e + docs | `D1` | |
+
+### ✅ B2 — ingestion at scale, verified 2026-08-17
+
+**You can now ingest source items and watch every job's progress, attempts, retries and
+stuck/failure history from the Sources screen.** The `B1` connector job path now has the
+operational depth that had deliberately been left out of the first source-ingestion slice.
+
+What's built: `IngestJobRepository` can list recent org-scoped jobs with event history,
+renew a running job's heartbeat/lease, record progress, respect retry delays when claiming
+queued jobs, and mark a failed attempt as either retryable `queued` or terminal `failed`.
+The worker starts a heartbeat task while processing, sends progress updates from
+`KnowledgeService.ingest_connector_item`, and publishes richer live/durable payloads
+(`attempts`, `max_attempts`, `done_units`, `total_units`, `error_detail`) to both the
+authenticated WebSocket path and Redis Streams. The reaper now records visible
+`running -> stuck -> queued/failed` history instead of silently rewriting an expired lease.
+
+The API/UI slice is `GET /connectors/jobs` and `GET /connectors/jobs/{job_id}` plus the
+Sources activity feed. On page load, the feed hydrates recent job state from the API before
+folding in live WebSocket events, so a reload still shows the current progress/history. Rows
+now display a labelled `stuck` state, attempts, progress bars, and error detail. No new
+schema migration was required; B2 uses the `ingest_job`/`ingest_job_event` columns that
+already existed.
+
+**Evidence:** focused backend tests passed (16 tests across `tests/test_worker_ingestion.py`
+and `tests/test_connectors_router.py`); full backend `make test` — 433 passed, `make lint`,
+`make types`, and `make check` clean. Frontend `npm run test` — 112 passed; `npm run lint`,
+`npx tsc --noEmit`, and `npm run build` clean. The rebuilt compose stack reported
+`/readyz` fully green and `frontend/e2e/sources.spec.ts` passed against it.
 
 ### ✅ B1 — connect a source and watch it ingest, verified 2026-08-17
 
@@ -2639,201 +2723,63 @@ Recorded so they are not rediscovered as surprises:
 
 ## 5. NEXT TASK
 
-`A3` — ask about your data — is **done, all 5/5 deliverables**, verified end to end in a
-real browser against the real stack. Full evidence is in the dated note near the top of
-this file ("`A3` deliverables 4-5 done") and in §3's `A3` entry.
+`A3`, `B1`, and `B2` are all done and verified. The one documented build-order deviation
+(`B1`/`B2` immediately after `A3`) is over; return to Phase A.
 
-**`B1` is done, all 5/5 deliverables, verified 2026-08-17.** Full evidence for each is in
-its own dated note near the top of this file ("2026-08-15 (evening)" for 1,
-"2026-08-15 (night)" for 2, "2026-08-16" — the earlier of the two same-dated notes — for
-3, the other "2026-08-16" note for 4, and "2026-08-17" for 5) and in §3's `B1` entry.
-`B2` is next. What that work inherits from `B1`, in one place:
+### `A4` — stop choosing a mode
 
-- **Deliverable 1** (`SourceConnector` port + factory): `ConnectorService` (`register`,
-  `list_sources`, `list_items`, `fetch_item`) is the one thing to call — never
-  `ConnectorFactory` directly. `features/connectors/api/` is still three empty files; the
-  sources UI's backend slice is HTTP routes there, over this service. Connector kinds are
-  `s3`/`minio`/`local_fs`/`http`, each with its own config shape (`_connector_config` in
-  `entrypoints/cli.py` shows the exact fields per kind).
-- **Deliverable 2** (`EventBus`): not the sources UI's concern directly — it is deliverable
-  4's worker that publishes to it. The UI only ever reads the live pub/sub relay (below).
-- **Deliverable 3** (realtime auth): the UI's WS client connects to `/ws/ingestion`
-  (`entrypoints/realtime/main.py`, real `realtime` container on port 8001) offering
-  `Sec-WebSocket-Protocol: ["bearer", "<access token>"]` — **not** a query parameter. It
-  receives `{"type": "subscribed", "channel": "ingestion"}` once accepted, then whatever is
-  published on `mnemos:org:{org_id}:ingestion` (its own org, derived server-side — the
-  client never names an org). A denied handshake closes with code `1008`, no reason on the
-  wire.
-- **Deliverable 4** (the worker): `mnemosctl connector ingest --org-slug X --slug Y --uri Z`
-  is today's only producer of an `ingest_job` — the sources UI's ingest action is the
-  second, so it needs an HTTP route in `features/connectors/api/` that does what that CLI
-  command does (`IngestJobRepository.enqueue`, kind `CONNECTOR_INGEST_KIND` from
-  `features.knowledge.domain`, payload `{"source_slug", "item_uri", "item_name",
-  "content_type"}`, `idempotency_key=f"{slug}:{uri}"`). Every publish on the WS channel
-  above is JSON shaped `{"type": "ingest_job", "job_id", "status", "kind", "document_id",
-  "error_code", "occurred_at"}` — `status` is one of `queued`/`running`/`succeeded`/`failed`
-  (the job's `queued` insert itself is never published; the UI's own "ingest requested"
-  optimistic state covers that gap until the worker's first `running` publish arrives,
-  typically within one `POLL_INTERVAL_S` — 5 seconds today).
-
-### `B1` — connect a source and watch it ingest
-
-**The sentence (C14):** connect a source — a MinIO/S3 bucket+prefix, a local filesystem
-directory, or an operator-curated list of HTTP URLs — browse what it contains, pick items to
-ingest, and watch each one move through `queued → running → done`/`failed` **live**, pushed
-over an authenticated WebSocket, while `ingest_job`/`ingest_job_event` (schema since `M2`,
-untouched by any real ingestion path until now) finally carry real rows for the first time.
+**The sentence (C14):** ask anything in the chat box without manually choosing a mode, and
+see which flow answered — plain chat, RAG over documents, or NL2SQL over the demo warehouse
+— with a compact on-screen explanation of why that flow was selected.
 
 **What already exists and must be reused, not rebuilt:**
-- ~~`platform/objectstore/port.py` + `s3.py` — the `ObjectStore` port and its MinIO adapter
-  from `A2`. The S3 connector adapter should sit on top of this port (list/get by
-  prefix), not open a second, parallel MinIO client.~~ **Done in deliverable 1**: the port
-  gained `list(prefix) -> Sequence[ObjectMeta]`, implemented in `S3ObjectStore` via
-  `list_objects_v2`; `features/connectors/adapters/s3.py`'s `S3Connector` sits on top of it.
-- ~~`core/crypto.py`'s `DsnCipher` (Fernet) — reuse the pattern (a new cipher instance/key,
-  `MNEMOS_SOURCE_ENCRYPTION_KEY`).~~ **Done in deliverable 1**:
-  `features/connectors/adapters/crypto.py`'s `SourceConfigCipher`, same Fernet pattern, its
-  own key (`MNEMOS_SOURCE_ENCRYPTION_KEY` / `Settings.source_encryption_key`). Reuse this
-  for deliverable 4, not `DsnCipher` and not a third cipher class.
-- `entrypoints/worker/main.py`'s `reap_stuck_jobs` — the lease/heartbeat/reclaim shape for
-  `ingest_job` already exists and already works (`status`, `attempts`, `max_attempts`,
-  `owner_id`, `heartbeat_at`, `lease_expires_at`, `error_code`, `error_detail` are all real
-  columns, exercised today). **`B1`'s worker loop claims a `queued` job and actually
-  processes it** — extract/chunk/embed — for the first time; it does not redesign the
-  reaper. Backoff strategy, retry depth beyond one immediate failure, and a per-job
-  *progress* UI (percentage, partial chunk counts) are `B2`, not `B1` — don't build them
-  here even though they'd be tempting to add while already in this code.
-- `features/knowledge/application/service.py`'s `upload_document` — extract → chunk → embed
-  is already written, synchronously, for the manual-upload path (its own docstring says this
-  is deliberate through `B2`). `B1` needs that same extract/chunk/embed body reachable from
-  the worker too, for connector-sourced items — factor it out of `upload_document` into a
-  function both the HTTP handler and the worker call, rather than duplicating the pipeline.
-  **The manual upload path itself does not change** — it stays synchronous; `B1` adds a
-  second, job-queued path alongside it, it does not migrate the first one onto the queue.
-- `core/crypto.py`'s `DsnCipher` (Fernet) — the encrypted-config-at-rest pattern `A3`'s
-  datasource DSNs use. A connector's config (bucket/credentials, or a filesystem root, or a
-  URL allowlist) is exactly this shape again; reuse the pattern (a new cipher instance/key,
-  `MNEMOS_SOURCE_ENCRYPTION_KEY`, not `MNEMOS_DSN_ENCRYPTION_KEY` itself — different secret,
-  same rotation story).
+- `A1` chat sessions/messages/SSE streaming and the composer are the single conversation
+  surface. Do not add a second ask box.
+- `A2` RAG already answers when `use_documents=true`, creates citations, and renders those
+  citations in the transcript/inspector. The flag is provisional; `A4` replaces the user's
+  manual choice with a classifier decision, not a second RAG implementation.
+- `A3` NL2SQL already answers when `use_datasource=true`, including schema/glossary context,
+  read-only AST guard, `mnemos_ro` execution, narration, SQL panel, and denial/repair states.
+  That flag is provisional for the same reason.
+- The generated frontend API client is still the way typed JSON calls are made. If the chat
+  request/response contract changes, regenerate `frontend/src/lib/api/schema.ts`; never hand
+  edit it.
+- `B1`/`B2` source ingestion is now a platform capability, not part of routing a chat message.
+  Do not fold ingestion jobs into `A4` except where the classifier needs to know documents may
+  exist.
 
-**A real gap deliverable 1's session found, closed by deliverable 3 (2026-08-16):**
-`entrypoints/realtime/main.py`'s `/ws/{channel}` used to accept any connection and relay
-anything published to `mnemos:{channel}` — no JWT check, no org scoping. Its own docstring
-said this was deliberate "until M3" (identity), which had been done since `A0`. It now
-validates the platform JWT the same way the HTTP fail-closed guard does (offered as a
-`Sec-WebSocket-Protocol` value, since browsers cannot set an `Authorization` header on a WS
-upgrade), and the channel a caller subscribes to is derived from their own org, never taken
-from the client-supplied `channel` path segment — a channel string that tries to name
-another org, typed into the WS URL by hand, is refused before the URL is even capable of
-naming an org at all. Full detail in the "2026-08-16" dated note near the top of this file.
+**Deliverables, in build order — one commit (or a small adjacent group) per numbered item:**
 
-**Deliverables, in build order — one commit (or a small adjacent group) per numbered item,
-matching how `A3`'s deliverables were committed:**
+1. **Classifier domain + service.** Add a small, deterministic first pass that classifies an
+   incoming message as `chat`, `rag`, or `nl2sql`, with a reason string suitable for display.
+   The default should be conservative and local-first: obvious data/SQL/table/metric questions
+   go to NL2SQL, obvious document/upload/citation questions go to RAG, and ordinary assistant
+   questions go to chat. If an Ollama-backed classifier is added, it must have a deterministic
+   fallback and zero paid-provider dependency.
+2. **Backend chat route integration.** Replace the provisional request flags' decision point
+   with the classifier result. Preserve backward compatibility only as a temporary override if
+   tests or existing UI need it during the commit, and write down any override in code comments
+   as transitional. The response/stream metadata must name the selected flow and the reason.
+3. **Frontend composer cleanup.** Remove or demote the manual `Use documents` / `Ask your data`
+   selectors so a person can simply ask. The transcript must show the selected flow and reason
+   near the answer without becoming a verbose explainer panel.
+4. **Tests for routing decisions and visible flow state.** Unit-test classifier examples and
+   backend route behavior for all three flows, including one adversarial write-like NL2SQL
+   request that still reaches the existing guard and is visibly refused. Frontend tests should
+   prove the composer no longer requires mode picking and that the flow indicator appears.
+5. **Live verification.** Rebuild the compose stack, check `/readyz`, and exercise at least one
+   plain chat, one document/RAG, and one NL2SQL question in a browser or Playwright. The close
+   evidence must include the commands and observed results in this file and `docs/ADAPTATION.md`.
 
-1. ✅ **Done (2026-08-15 evening). `SourceConnector` port + factory, `features/connectors/`.**
-   Built exactly as specified: `domain/port.py`'s `SourceItem` + `SourceConnector` protocol
-   (`list_items`/`fetch`); three adapters (`adapters/s3.py`, `adapters/local_fs.py` —
-   default-deny outside an operator-approved root, enforced at *two* levels, the
-   per-registration `root` and a new deployment-level `Settings.local_fs_allowed_roots` —
-   and `adapters/http.py`, never crawling, only an operator-curated URL list); the SSRF
-   deny-list (`adapters/ssrf_guard.py`) with genuine DNS-rebinding protection (the request
-   pins to the address that was checked, via IP-substitution + `Host`/SNI, not a check
-   followed by a second, unpinned resolution); the `content_source` table + RLS (migration
-   `0007`, the first since `M2` — `alembic check` clean, and two latent bugs in migrations
-   `0004`/`0006` found and fixed along the way, see the dated note above); and
-   `mnemosctl connector register --org-slug X --slug Y --name N --kind {s3,local_fs,http}
-   [--bucket/--prefix | --root | --url ...]` / `connector list-items --org-slug X --slug Y`.
-   `ConnectorFactory` decrypts a registered source's config and builds the right adapter;
-   `ConnectorService` is the thing to call (`register`, `list_sources`, `list_items`) —
-   deliverable 4 should use it, not `ConnectorFactory` directly. Evidence: 32 new tests
-   (`tests/test_connectors_{ssrf,local_fs,http,s3,service}.py`), all passing against real
-   Postgres/no-network-needed fakes; `make lint`/`make types` clean.
-2. ✅ **Done (2026-08-15 night). The event bus, `platform/events/`.** Built exactly as
-   specified: `port.py`'s `EventBus` protocol (`publish`, `ensure_group`, `read_group`,
-   `ack`) and `redis_streams.py`'s `RedisStreamsEventBus` — `XADD`/consumer-group
-   `XREADGROUP`, not the pub/sub `platform/cache.py` already has for the realtime gateway's
-   existing channels. The open design question — how the realtime gateway gets from "a
-   Streams entry landed" to "a browser's WebSocket receives it" — is resolved as option (a):
-   deliverable 4's worker will publish every `ingest_job` transition to both this stream
-   (durable, for replay) **and** the existing pub/sub channel the gateway already relays
-   (live), rather than the gateway growing its own consumer-group reader (option (b), left
-   for `B2`'s replay-on-reconnect depth). Evidence: 7 new tests
-   (`tests/test_events_redis_streams.py`) against a real Redis via testcontainers, proving
-   backlog delivery to a group created after publish, idempotent group creation, no
-   redelivery of an already-delivered message, competing-consumer semantics, `ack` clearing
-   `XPENDING`, and unreachable-Redis error translation; `make lint`/`make types` clean.
-3. ✅ **Done (2026-08-16). Close the realtime auth gap** (see above) — JWT-validated WS
-   handshake, org-derived channel scoping, a test that proves a token for org A cannot
-   subscribe to org B's ingestion channel even by typing the channel name directly into the
-   WS URL. Built exactly as specified: the gateway gained a `Database` and the same
-   `PlatformTokenCodec`/`PrincipalResolver` pair the API builds; the token travels as a
-   `Sec-WebSocket-Protocol` offer (`["bearer", token]`), not a query parameter, so it never
-   appears in a URL, an access log or browser history; the channel a caller reaches is
-   always `mnemos:org:{org_id}:{kind}` with `org_id` read only from the resolved token and
-   `kind` checked against a closed allow-list (`ALLOWED_CHANNEL_KINDS = {"ingestion"}`).
-   Evidence: 12 new tests (`tests/test_realtime_auth.py`) against a real Redis via
-   testcontainers, including the exact cross-org attack named above and a genuine live
-   verification against the running compose stack (rebuilt container, real session, real
-   Redis publish/relay, real refusal of a hand-typed cross-org channel). `make
-   lint`/`make types` clean; `make check` clean (no migration touched).
-4. ✅ **Done (2026-08-16). The worker claims and processes a real job.** Built exactly as
-   specified: `entrypoints/worker/main.py`'s poll loop claims one `queued` `ingest_job` at a
-   time (`IngestJobRepository.claim_next`, `FOR UPDATE SKIP LOCKED`, mirroring the reaper's
-   own claim style) → `running` (heartbeat set at claim; no periodic renewal — that depth is
-   `B2`) → the factored-out extract/chunk/embed body
-   (`KnowledgeService.ingest_connector_item`) against the connector-fetched bytes → `succeeded`
-   **(one naming note: the brief above said `done`; the actual terminal status is
-   `succeeded`, matching `core/types.py`'s existing `JobStatus` enum rather than inventing a
-   new label — the sources UI (deliverable 5) should treat `succeeded` as the "done" state,
-   not wait for a status literally spelled `done`)**, or `failed` with `error_code`/
-   `error_detail` on the first exception (no retry-with-backoff yet — `B2`). An
-   `ingest_job_event` row and a live publish (both `EventBus` and pub/sub) at every
-   transition. Connector-sourced documents get `trust_tier=TrustTier.RETRIEVED` (10) — the
-   trust-tier question was already resolved in deliverable 1's dated note (see above), not
-   `ThreatModel.md` §4's literal "≥ 4", which was written against a retired 0-6 scale; the
-   4-rung `TrustTier` enum has no rung below `RETRIEVED` to assign. **A real RLS bug found
-   and fixed alongside this:** `reap_stuck_jobs` ran unscoped and so reclaimed nothing on a
-   real Postgres, ever — fixed via `db.elevated_session()`. Evidence: 7 new tests
-   (`tests/test_worker_ingestion.py`) against real Postgres + Redis, plus live verification
-   against the rebuilt compose stack. Full detail in the dated note above.
-5. ✅ **Done (2026-08-17). The sources UI, `frontend/src/app/(app)/sources/`.** Connect a source (a form per
-   connector kind), browse its listed items in a table, select some and ingest them, then
-   watch a live event feed of `queued`/`running`/`succeeded`/`failed` transitions arrive over
-   the now-authenticated WebSocket with no page refresh — `succeeded`, not `done` (see item
-   4's naming note just above; a `queued` transition is never itself published, only implied
-   by the ingest request the UI itself just made). Each state pairs an icon with a
-   plain-word label, never colour alone — the same accessible-state discipline
-   `SqlPanel.tsx` already established and `test_no_component_hardcodes_a_colour` already
-   enforces (DesignSystem tokens only). The backend routes live in
-   `entrypoints/api/routers/connectors.py` — list sources, list items, register, and enqueue
-   ingest (mirroring `mnemosctl connector register`/`list-items`/`ingest`, see §5's
-   deliverable-4 recap above for the exact contract each route matches). Playwright coverage
-   registers the local-filesystem connector against a small fixture directory (no real S3
-   bucket or live URL needed in CI), ingests one file, and observes its job reach
-   `succeeded` live. Verified against the rebuilt compose stack, in Chromium, signed in as
-   `analyst@mnemos.local`.
-
-**Explicitly NOT `B1`, so nobody drifts into building it early:** heartbeat/backoff retry
-depth beyond one immediate failure, a per-job progress percentage or partial-chunk count,
-more than one adapter per connector kind, crawling or discovering URLs (the HTTP connector
-only ever fetches an operator-supplied list), and migrating `A2`'s manual-upload path onto
-the job queue. All of that is `B2` or later — see §5's "Then, in order" list below.
-
-**Evidence bar to close `B1`, met 2026-08-17:** `make test` green with coverage for each
-connector adapter (including the SSRF deny-list actually refusing loopback/link-local URL
-shapes), the event bus round-trip, the worker's claim-and-process path end to end against
-real Postgres + Redis, the WS cross-org channel refusal, and the connectors router; `make
-lint` / `make types` / `make check` clean; frontend lint/tsc/test/build clean; the
-Playwright sources flow green; and real browser verification completed against the rebuilt
-stack.
+**Explicitly NOT `A4`, so nobody drifts:** replacing Ollama, building tool calls/agents,
+adding RBAC/API keys, moving manual upload onto the ingestion queue, or changing the NL2SQL
+safety model. Those are later milestones or already-settled constraints.
 
 ### Then, in order — this list is the plan, and it no longer matches phase order exactly
 
 Each item below is one session (or a small coherent group), and each carries its own "you
-can now ___" (C14). **As of 2026-08-15 (evening) this list, not the phase groupings in
-§3.0, is authoritative for sequencing** — see that date's note near the top of this file for
-why `B1`/`B2` now sit before `A4`. The phase tables still group work by kind; they no longer
-promise strict A-then-B-then-C-then-D order.
+can now ___" (C14). **As of 2026-08-17, `B1`/`B2` are complete and sequencing returns to
+`A4` before the rest of Phase B.**
 
 - **`A3` — ask about your data.** ✅ Done, all 5/5 deliverables, verified 2026-08-15.
 - **`B1` — connect a source and watch it ingest.** ✅ Done, all 5/5 deliverables, verified
@@ -2843,14 +2789,12 @@ promise strict A-then-B-then-C-then-D order.
   event bus, an authenticated realtime channel, and the worker's first real job-processing
   path, so a source is *connected and browsed* rather than only uploaded file-by-file, with
   ingestion events visible live in a new sources UI.
-- **`B2` — ingestion at scale.** ⬅ **next.** Heartbeat, retries, status history, and a stuck-job reaper
-  over the job machinery `B1` introduces, with a per-job progress UI. Depends on `B1`
-  existing first.
-- **`A4` — stop choosing a mode.** Classify each message to chat / RAG / NL2SQL and show
-  which flow answered and why. This is also where the two provisional selectors — `A2`'s
-  `use_documents` and `A3`'s NL2SQL equivalent — are replaced by a real classifier, and
-  both were written down as provisional precisely so this milestone knows what to remove.
-  Moved here, after `B1`/`B2`, from its original position immediately after `A3`.
+- **`B2` — ingestion at scale.** ✅ Done, verified 2026-08-17. Heartbeat renewal,
+  retry/backoff, status history, stuck-job surfacing, replay-via-recent-jobs, and per-job
+  progress UI are built over `B1`'s connector job path.
+- **`A4` — stop choosing a mode.** ⬅ **next.** Classify each message to chat / RAG / NL2SQL
+  and show which flow answered and why. This is where the two provisional selectors — `A2`'s
+  `use_documents` and `A3`'s NL2SQL equivalent — are replaced by a real classifier.
 
 Then `B3`, `B4` (the rest of Phase B), Phase C (`C1`–`C4`), Phase D (`D1`) — §3.0, unchanged.
 

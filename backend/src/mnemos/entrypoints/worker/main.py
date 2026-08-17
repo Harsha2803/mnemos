@@ -45,6 +45,7 @@ import json
 import os
 import signal
 import socket
+from dataclasses import dataclass
 from datetime import timedelta
 
 import httpx
@@ -71,7 +72,6 @@ from mnemos.features.knowledge.adapters.retrieval import SqlRetriever
 from mnemos.features.knowledge.application.service import KnowledgeService
 from mnemos.features.knowledge.domain import (
     ClaimedIngestJob,
-    DocumentId,
     HashingEmbedder,
     HeuristicTokenizer,
 )
@@ -85,6 +85,7 @@ log = get_logger(__name__)
 
 POLL_INTERVAL_S = 5
 LEASE_DURATION_S = 60
+HEARTBEAT_INTERVAL_S = 15
 
 # Reclaim only after the lease has been expired for a grace period. Reclaiming
 # the instant a lease lapses races a worker that is merely slow, and two owners
@@ -94,20 +95,37 @@ RECLAIM_GRACE_S = 30
 _shutdown = asyncio.Event()
 
 
+@dataclass(frozen=True, slots=True)
+class ReapedJobTransition:
+    id: object
+    org_id: object
+    kind: str
+    status: str
+    document_id: object | None
+    attempts: int
+    max_attempts: int
+    done_units: int
+    total_units: int
+    error_code: str | None
+    error_detail: str | None
+
+
 def _owner_id() -> str:
     return f"{socket.gethostname()}:{os.getpid()}"
 
 
-async def reap_stuck_jobs(db: Database) -> int:
-    """Move expired leases back to the queue. Returns how many were reclaimed."""
+async def reap_stuck_jobs(db: Database) -> list[ReapedJobTransition]:
+    """Surface expired leases as `stuck`, then either queue a retry or fail."""
     cutoff = SYSTEM_CLOCK.now() - timedelta(seconds=RECLAIM_GRACE_S)
+    now = SYSTEM_CLOCK.now()
+    retry_at = now + timedelta(seconds=POLL_INTERVAL_S)
 
-    # One statement: the UPDATE selects, transitions and records in a single
-    # round trip, and `FOR UPDATE SKIP LOCKED` means two reapers racing cannot
-    # both claim the same row. `elevated_session`, not `db.session()`: the
-    # reaper is cross-tenant by nature (it sweeps every org's stuck jobs in
-    # one pass), so there is no single `org_id` to scope this to — see the
-    # module docstring for the bug this fixes.
+    # The first UPDATE selects and marks expired jobs `stuck`; the follow-up
+    # writes happen in the same transaction. `FOR UPDATE SKIP LOCKED` means two
+    # reapers racing cannot both claim the same row. `elevated_session`, not
+    # `db.session()`: the reaper is cross-tenant by nature, so there is no
+    # single `org_id` to scope this to — see the module docstring for the bug
+    # this fixes.
     async with db.elevated_session() as session:
         result = await session.execute(
             text(
@@ -119,13 +137,9 @@ async def reap_stuck_jobs(db: Database) -> int:
                        AND lease_expires_at < :cutoff
                      FOR UPDATE SKIP LOCKED
                 ),
-                updated AS (
+                stuck AS (
                     UPDATE ingest_job j
-                       SET status = CASE
-                                      WHEN j.attempts + 1 >= j.max_attempts THEN 'failed'
-                                      ELSE 'queued'
-                                    END,
-                           attempts = j.attempts + 1,
+                       SET status = 'stuck',
                            owner_id = NULL,
                            heartbeat_at = NULL,
                            lease_expires_at = NULL,
@@ -133,20 +147,85 @@ async def reap_stuck_jobs(db: Database) -> int:
                            error_detail = 'worker stopped heartbeating; lease reclaimed'
                       FROM expired e
                      WHERE j.id = e.id
-                 RETURNING j.id, j.org_id, j.status
+                 RETURNING j.id, j.org_id, j.kind, j.document_id, j.attempts, j.max_attempts,
+                           j.done_units, j.total_units, j.error_code, j.error_detail
                 )
-                INSERT INTO ingest_job_event (org_id, job_id, from_status, to_status, detail)
-                SELECT org_id, id, 'running', status, 'reclaimed by reaper'
-                  FROM updated
-             RETURNING job_id
+                SELECT id, org_id, kind, document_id, attempts, max_attempts,
+                       done_units, total_units, error_code, error_detail
+                  FROM stuck
                 """
             ),
             {"cutoff": cutoff},
         )
-        reclaimed = len(result.fetchall())
+        stuck_rows = list(result.mappings())
+        rows = []
+        for row in stuck_rows:
+            next_attempts = int(row["attempts"]) + 1
+            next_status = "failed" if next_attempts >= int(row["max_attempts"]) else "queued"
+            await session.execute(
+                text(
+                    """
+                    INSERT INTO ingest_job_event (org_id, job_id, from_status, to_status, detail)
+                    VALUES (:org_id, :job_id, 'running', 'stuck', 'worker lease expired')
+                    """
+                ),
+                {"org_id": row["org_id"], "job_id": row["id"]},
+            )
+            await session.execute(
+                text(
+                    """
+                    UPDATE ingest_job
+                       SET status = :status,
+                           attempts = :attempts,
+                           lease_expires_at = :retry_at,
+                           finished_at = :finished_at
+                     WHERE id = :id
+                    """
+                ),
+                {
+                    "id": row["id"],
+                    "status": next_status,
+                    "attempts": next_attempts,
+                    "retry_at": retry_at if next_status == "queued" else None,
+                    "finished_at": now if next_status == "failed" else None,
+                },
+            )
+            await session.execute(
+                text(
+                    """
+                    INSERT INTO ingest_job_event (org_id, job_id, from_status, to_status, detail)
+                    VALUES (:org_id, :job_id, 'stuck', :status, :detail)
+                    """
+                ),
+                {
+                    "org_id": row["org_id"],
+                    "job_id": row["id"],
+                    "status": next_status,
+                    "detail": "retry queued after expired lease"
+                    if next_status == "queued"
+                    else "max attempts exhausted after expired lease",
+                },
+            )
+            rows.append({**row, "status": next_status, "attempts": next_attempts})
 
+    reclaimed = [
+        ReapedJobTransition(
+            id=row["id"],
+            org_id=row["org_id"],
+            kind=str(row["kind"]),
+            status=str(row["status"]),
+            document_id=row["document_id"],
+            attempts=int(row["attempts"]),
+            max_attempts=int(row["max_attempts"]),
+            done_units=int(row["done_units"]),
+            total_units=int(row["total_units"]),
+            error_code=str(row["error_code"]) if row["error_code"] else None,
+            error_detail=str(row["error_detail"]) if row["error_detail"] else None,
+        )
+        for row in rows
+    ]
     if reclaimed:
-        log.warning("worker.reclaimed_stuck_jobs", count=reclaimed)
+        log.warning("worker.reclaimed_stuck_jobs", count=len(reclaimed))
     return reclaimed
 
 
@@ -165,11 +244,17 @@ async def _publish_transition(
     *,
     cache: Cache,
     event_bus: EventBus,
-    job: ClaimedIngestJob,
+    job_id: object,
+    org_id: object,
+    kind: str,
     status: str,
-    document_id: DocumentId | None = None,
+    document_id: object | None = None,
     error_code: str | None = None,
     error_detail: str | None = None,
+    attempts: int | None = None,
+    max_attempts: int | None = None,
+    done_units: int | None = None,
+    total_units: int | None = None,
 ) -> None:
     """Both, not either (TRACKER's `B1` deliverable 2 note, settled there):
     the Streams entry is durable, for a future consumer-group reader; the
@@ -179,27 +264,58 @@ async def _publish_transition(
     occurred_at = SYSTEM_CLOCK.now().isoformat()
     payload = {
         "type": "ingest_job",
-        "job_id": str(job.id),
+        "job_id": str(job_id),
         "status": status,
-        "kind": job.kind,
+        "kind": kind,
         "document_id": str(document_id) if document_id else None,
         "error_code": error_code,
+        "error_detail": error_detail,
+        "attempts": attempts,
+        "max_attempts": max_attempts,
+        "done_units": done_units,
+        "total_units": total_units,
         "occurred_at": occurred_at,
     }
-    await cache.client.publish(_ingestion_channel(job.org_id), json.dumps(payload))
+    await cache.client.publish(_ingestion_channel(org_id), json.dumps(payload))
 
-    stream = f"mnemos:events:org:{job.org_id}:ingestion"
+    stream = f"mnemos:events:org:{org_id}:ingestion"
     fields = {
-        "job_id": str(job.id),
-        "org_id": str(job.org_id),
+        "job_id": str(job_id),
+        "org_id": str(org_id),
         "status": status,
-        "kind": job.kind,
+        "kind": kind,
         "document_id": str(document_id) if document_id else "",
         "error_code": error_code or "",
         "error_detail": error_detail or "",
+        "attempts": str(attempts) if attempts is not None else "",
+        "max_attempts": str(max_attempts) if max_attempts is not None else "",
+        "done_units": str(done_units) if done_units is not None else "",
+        "total_units": str(total_units) if total_units is not None else "",
         "occurred_at": occurred_at,
     }
     await event_bus.publish(stream, fields)
+
+
+async def _heartbeat_until_stopped(
+    *,
+    jobs: IngestJobRepository,
+    job: ClaimedIngestJob,
+    owner: str,
+    stop: asyncio.Event,
+) -> None:
+    while not stop.is_set():
+        with contextlib.suppress(TimeoutError):
+            await asyncio.wait_for(stop.wait(), timeout=HEARTBEAT_INTERVAL_S)
+            return
+        renewed = await jobs.heartbeat(
+            job_id=job.id,
+            org_id=job.org_id,
+            owner_id=owner,
+            lease_seconds=LEASE_DURATION_S,
+        )
+        if not renewed:
+            log.warning("worker.heartbeat_lost", job_id=str(job.id), org_id=str(job.org_id))
+            return
 
 
 async def process_next_job(
@@ -219,7 +335,45 @@ async def process_next_job(
         return False
 
     log.info("worker.job_claimed", job_id=str(job.id), org_id=str(job.org_id), kind=job.kind)
-    await _publish_transition(cache=cache, event_bus=event_bus, job=job, status="running")
+    await jobs.record_progress(job_id=job.id, org_id=job.org_id, done_units=0, total_units=4)
+    await _publish_transition(
+        cache=cache,
+        event_bus=event_bus,
+        job_id=job.id,
+        org_id=job.org_id,
+        kind=job.kind,
+        status="running",
+        attempts=job.attempts,
+        max_attempts=job.max_attempts,
+        done_units=0,
+        total_units=4,
+    )
+
+    heartbeat_stop = asyncio.Event()
+    heartbeat_task = asyncio.create_task(
+        _heartbeat_until_stopped(jobs=jobs, job=job, owner=owner, stop=heartbeat_stop)
+    )
+
+    async def progress(done_units: int, total_units: int, detail: str) -> None:
+        await jobs.record_progress(
+            job_id=job.id,
+            org_id=job.org_id,
+            done_units=done_units,
+            total_units=total_units,
+            detail=detail,
+        )
+        await _publish_transition(
+            cache=cache,
+            event_bus=event_bus,
+            job_id=job.id,
+            org_id=job.org_id,
+            kind=job.kind,
+            status="running",
+            attempts=job.attempts,
+            max_attempts=job.max_attempts,
+            done_units=done_units,
+            total_units=total_units,
+        )
 
     try:
         source_slug = job.payload["source_slug"]
@@ -238,33 +392,54 @@ async def process_next_job(
             source_kind=source_kind,
             source_uri=item_uri,
             trust_tier=int(TrustTier.RETRIEVED),
+            progress=progress,
         )
     except Exception as exc:
         error_code = type(exc).__name__
         error_detail = str(exc)
-        await jobs.mark_failed(
+        next_status = await jobs.mark_attempt_failed(
             job_id=job.id, org_id=job.org_id, error_code=error_code, error_detail=error_detail
         )
         await _publish_transition(
             cache=cache,
             event_bus=event_bus,
-            job=job,
-            status="failed",
+            job_id=job.id,
+            org_id=job.org_id,
+            kind=job.kind,
+            status=next_status,
             error_code=error_code,
             error_detail=error_detail,
+            attempts=job.attempts,
+            max_attempts=job.max_attempts,
+            done_units=0,
+            total_units=4,
         )
         log.error(
-            "worker.job_failed",
+            "worker.job_failed" if next_status == "failed" else "worker.job_retry_queued",
             job_id=str(job.id),
             org_id=str(job.org_id),
             error_code=error_code,
             error_detail=error_detail,
+            next_status=next_status,
         )
         return True
+    finally:
+        heartbeat_stop.set()
+        await heartbeat_task
 
     await jobs.mark_succeeded(job_id=job.id, org_id=job.org_id, document_id=summary.id)
     await _publish_transition(
-        cache=cache, event_bus=event_bus, job=job, status="succeeded", document_id=summary.id
+        cache=cache,
+        event_bus=event_bus,
+        job_id=job.id,
+        org_id=job.org_id,
+        kind=job.kind,
+        status="succeeded",
+        document_id=summary.id,
+        attempts=job.attempts,
+        max_attempts=job.max_attempts,
+        done_units=4,
+        total_units=4,
     )
     log.info(
         "worker.job_succeeded",
@@ -316,7 +491,37 @@ async def run() -> None:
     try:
         while not _shutdown.is_set():
             try:
-                await reap_stuck_jobs(db)
+                for reaped in await reap_stuck_jobs(db):
+                    await _publish_transition(
+                        cache=cache,
+                        event_bus=event_bus,
+                        job_id=reaped.id,
+                        org_id=reaped.org_id,
+                        kind=reaped.kind,
+                        status="stuck",
+                        document_id=reaped.document_id,
+                        error_code="lease_expired",
+                        error_detail=reaped.error_detail,
+                        attempts=reaped.attempts,
+                        max_attempts=reaped.max_attempts,
+                        done_units=reaped.done_units,
+                        total_units=reaped.total_units,
+                    )
+                    await _publish_transition(
+                        cache=cache,
+                        event_bus=event_bus,
+                        job_id=reaped.id,
+                        org_id=reaped.org_id,
+                        kind=reaped.kind,
+                        status=reaped.status,
+                        document_id=reaped.document_id,
+                        error_code=reaped.error_code,
+                        error_detail=reaped.error_detail,
+                        attempts=reaped.attempts,
+                        max_attempts=reaped.max_attempts,
+                        done_units=reaped.done_units,
+                        total_units=reaped.total_units,
+                    )
             except Exception as exc:
                 log.error("worker.tick_failed", error=str(exc), error_type=type(exc).__name__)
 

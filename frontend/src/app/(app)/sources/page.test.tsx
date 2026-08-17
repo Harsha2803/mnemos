@@ -9,6 +9,7 @@ import { resetSessionForTests, setAccessToken } from "@/lib/auth/session";
 import SourcesPage from "./page";
 
 const SOURCES_PATH = "/api/v1/connectors";
+const JOBS_PATH = "/api/v1/connectors/jobs";
 
 function aSource(overrides: Record<string, unknown> = {}) {
   return {
@@ -29,6 +30,31 @@ function anItem(overrides: Record<string, unknown> = {}) {
     size_bytes: 128,
     content_type: "text/plain",
     modified_at: null,
+    ...overrides,
+  };
+}
+
+function aJob(overrides: Record<string, unknown> = {}) {
+  return {
+    id: "job-1",
+    kind: "connector_ingest",
+    status: "running",
+    payload: { item_name: "handbook.txt", item_uri: "handbook.txt" },
+    document_id: null,
+    attempts: 1,
+    max_attempts: 3,
+    done_units: 2,
+    total_units: 4,
+    owner_id: "worker:1",
+    heartbeat_at: "2026-08-16T12:04:00Z",
+    lease_expires_at: "2026-08-16T12:05:00Z",
+    started_at: "2026-08-16T12:03:00Z",
+    finished_at: null,
+    error_code: null,
+    error_detail: null,
+    created_at: "2026-08-16T12:02:00Z",
+    updated_at: "2026-08-16T12:04:00Z",
+    events: [],
     ...overrides,
   };
 }
@@ -90,6 +116,9 @@ describe("the sources screen", () => {
       if (call.method === "GET" && call.path === SOURCES_PATH) {
         return jsonResponse(200, registered ? [aSource()] : []);
       }
+      if (call.method === "GET" && call.path === JOBS_PATH) {
+        return jsonResponse(200, []);
+      }
       if (call.method === "POST" && call.path === SOURCES_PATH) {
         registered = true;
         return jsonResponse(201, aSource());
@@ -115,6 +144,9 @@ describe("the sources screen", () => {
     stubRouter((call) => {
       if (call.method === "GET" && call.path === SOURCES_PATH) {
         return jsonResponse(200, [aSource()]);
+      }
+      if (call.method === "GET" && call.path === JOBS_PATH) {
+        return jsonResponse(200, []);
       }
       if (call.method === "GET" && call.path === `${SOURCES_PATH}/fixtures/items`) {
         return jsonResponse(200, [anItem()]);
@@ -149,6 +181,11 @@ describe("the sources screen", () => {
       kind: "connector_ingest",
       document_id: "019fe000-0000-7000-8000-00000000000b",
       error_code: null,
+      error_detail: null,
+      attempts: 1,
+      max_attempts: 3,
+      done_units: 4,
+      total_units: 4,
       occurred_at: "2026-08-16T12:05:00Z",
     });
 
@@ -156,5 +193,29 @@ describe("the sources screen", () => {
     await waitFor(() => expect(feed).toHaveTextContent("Succeeded"));
     expect(screen.getAllByText("handbook.txt").length).toBeGreaterThan(0);
     expect(feed.textContent).not.toContain("Queued");
+  });
+
+  it("test_recent_jobs_are_loaded_with_progress_after_a_reload", async () => {
+    stubRouter((call) => {
+      if (call.method === "GET" && call.path === SOURCES_PATH) {
+        return jsonResponse(200, [aSource()]);
+      }
+      if (call.method === "GET" && call.path === JOBS_PATH) {
+        return jsonResponse(200, [aJob()]);
+      }
+      return jsonResponse(404, { error: { code: "not_found", message: "not found" } });
+    });
+
+    renderWithProviders(<SourcesPage />);
+
+    const feed = await screen.findByRole("list", { name: "Ingestion activity" });
+    expect(feed).toHaveTextContent("handbook.txt");
+    expect(feed).toHaveTextContent("Running");
+    expect(feed).toHaveTextContent("Attempt 1/3");
+    expect(feed).toHaveTextContent("50%");
+    expect(screen.getByRole("progressbar", { name: "handbook.txt progress" })).toHaveAttribute(
+      "aria-valuenow",
+      "50",
+    );
   });
 });

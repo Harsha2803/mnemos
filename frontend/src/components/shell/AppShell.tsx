@@ -4,10 +4,11 @@ import * as Dialog from "@radix-ui/react-dialog";
 import * as VisuallyHidden from "@radix-ui/react-visually-hidden";
 import { PanelLeft, PanelRight } from "lucide-react";
 import { usePathname } from "next/navigation";
-import { useRef, useState, type CSSProperties, type KeyboardEvent, type PointerEvent, type ReactNode } from "react";
+import { useEffect, useRef, useState, type CSSProperties, type KeyboardEvent, type PointerEvent, type ReactNode } from "react";
 
 import { ThemeToggle } from "@/components/theme/ThemeToggle";
 import { Button } from "@/components/ui/Button";
+import { readLayoutPreferences, writeLayoutPreferences } from "@/lib/layoutPreferences";
 
 import { destinationFor } from "./destinations";
 import { InspectorContent } from "./InspectorContent";
@@ -69,6 +70,21 @@ export function AppShell({ children }: { children: ReactNode }) {
 
   const [sidebarWidth, setSidebarWidth] = useState(DEFAULT_SIDEBAR_WIDTH);
   const [inspectorWidth, setInspectorWidth] = useState(DEFAULT_INSPECTOR_WIDTH);
+  const restoredPreferences = useRef(false);
+
+  useEffect(() => {
+    const saved = readLayoutPreferences();
+    if (saved.sidebarPinned !== undefined) setSidebarPinned(saved.sidebarPinned);
+    if (saved.inspectorPinned !== undefined) setInspectorPinned(saved.inspectorPinned);
+    if (saved.sidebarWidth !== undefined) setSidebarWidth(clamp(saved.sidebarWidth, SIDEBAR_MIN_WIDTH, SIDEBAR_MAX_WIDTH));
+    if (saved.inspectorWidth !== undefined) setInspectorWidth(clamp(saved.inspectorWidth, INSPECTOR_MIN_WIDTH, INSPECTOR_MAX_WIDTH));
+    restoredPreferences.current = true;
+  }, []);
+
+  useEffect(() => {
+    if (!restoredPreferences.current) return;
+    writeLayoutPreferences({ sidebarPinned, inspectorPinned, sidebarWidth, inspectorWidth });
+  }, [sidebarPinned, inspectorPinned, sidebarWidth, inspectorWidth]);
 
   const sidebarShowing = sidebarIsInline ? sidebarPinned : sidebarSheetOpen;
   const inspectorShowing = inspectorIsInline ? inspectorPinned : inspectorSheetOpen;

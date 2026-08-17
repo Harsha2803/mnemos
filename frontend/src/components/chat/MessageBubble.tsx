@@ -1,3 +1,7 @@
+import { Check, Copy, Search } from "lucide-react";
+import { useState } from "react";
+
+import { Button } from "@/components/ui/Button";
 import type { Nl2SqlResult } from "@/lib/chat/stream";
 import type { Citation } from "@/lib/knowledge/api";
 
@@ -30,6 +34,8 @@ export type DisplayMessage = {
 export type MessageBubbleProps = {
   message: DisplayMessage;
   onCitationClick?: (citation: Citation) => void;
+  onMessageSelect?: () => void;
+  selectedCitationId?: string;
 };
 
 const MARKER = /(\[\d+\])/g;
@@ -44,8 +50,20 @@ const MARKER = /(\[\d+\])/g;
  * that opens a panel is a button, and a `<span onClick>` is invisible to a
  * screen reader and unreachable by keyboard (DesignSystem §3, semantics).
  */
-export function MessageBubble({ message, onCitationClick }: MessageBubbleProps) {
+export function MessageBubble({
+  message,
+  onCitationClick,
+  onMessageSelect,
+  selectedCitationId,
+}: MessageBubbleProps) {
   const isUser = message.role === "user";
+  const [copied, setCopied] = useState(false);
+
+  async function copyAnswer(): Promise<void> {
+    await navigator.clipboard.writeText(message.content);
+    setCopied(true);
+    window.setTimeout(() => setCopied(false), 1500);
+  }
 
   return (
     <div
@@ -67,17 +85,57 @@ export function MessageBubble({ message, onCitationClick }: MessageBubbleProps) 
       </span>
       <div
         aria-live={message.streaming === true ? "polite" : undefined}
+        onClick={!isUser && onMessageSelect ? onMessageSelect : undefined}
         className={[
           "measure whitespace-pre-wrap rounded-lg px-4 py-3 text-body leading-relaxed",
           isUser ? "bg-accent-tint text-label" : "bg-bg-secondary text-label",
+          !isUser && onMessageSelect ? "cursor-pointer" : "",
         ].join(" ")}
       >
         {message.content.length > 0 ? (
-          renderWithCitations(message, onCitationClick)
+          renderWithCitations(message, onCitationClick, selectedCitationId)
         ) : (
           <span className="text-label-tertiary">Thinking…</span>
         )}
       </div>
+      {!isUser && message.content.length > 0 && message.streaming !== true && (
+        <div className="flex flex-wrap items-center gap-1 px-1">
+          {onMessageSelect && (
+            <Button rank="plain" className="!min-h-9 !min-w-9 !px-2 text-footnote" onClick={onMessageSelect}>
+              <Search className="size-4" strokeWidth={1.5} aria-hidden="true" />
+              Inspect answer
+            </Button>
+          )}
+          <Button
+            rank="plain"
+            className="!min-h-9 !min-w-9 !px-2 text-footnote"
+            aria-label="Copy answer"
+            onClick={() => void copyAnswer()}
+          >
+            {copied ? <Check className="size-4" aria-hidden="true" /> : <Copy className="size-4" aria-hidden="true" />}
+            {copied ? "Copied" : "Copy"}
+          </Button>
+        </div>
+      )}
+      {!isUser && (message.citations?.length ?? 0) >= 2 && (
+        <div className="flex flex-wrap gap-2 px-1" aria-label="Evidence used by this answer">
+          {message.citations?.map((citation) => (
+            <button
+              key={citation.id}
+              type="button"
+              onClick={() => onCitationClick?.(citation)}
+              className={[
+                "hit-target !min-h-9 rounded-full border px-3 text-footnote font-semibold transition-colors",
+                citation.id === selectedCitationId
+                  ? "border-accent bg-accent-tint text-accent"
+                  : "border-separator bg-bg-secondary text-label-secondary hover:bg-fill-tertiary",
+              ].join(" ")}
+            >
+              Source [{citation.marker}]
+            </button>
+          ))}
+        </div>
+      )}
       {/* Outside the `measure`-clamped bubble above, deliberately: tabular
           data wants the full content column, not the 46rem prose measure
           (DesignSystem, TRACKER §5 deliverable 5). Visible inline in the
@@ -90,6 +148,7 @@ export function MessageBubble({ message, onCitationClick }: MessageBubbleProps) 
 function renderWithCitations(
   message: DisplayMessage,
   onCitationClick?: (citation: Citation) => void,
+  selectedCitationId?: string,
 ) {
   const citations = message.citations ?? [];
   if (citations.length === 0 || onCitationClick === undefined) return message.content;
@@ -102,16 +161,44 @@ function renderWithCitations(
     const citation = citations.find((c) => c.marker === marker);
     if (citation === undefined) return <span key={index}>{part}</span>;
 
+    const previewId = `citation-preview-${message.id}-${citation.id}-${index}`;
     return (
-      <button
-        key={index}
-        type="button"
-        aria-label={`Show source ${marker}`}
-        onClick={() => onCitationClick(citation)}
-        className="mx-0.5 cursor-pointer rounded-sm bg-accent-tint px-1 align-baseline text-footnote font-semibold text-accent transition-colors duration-150 ease-standard hover:bg-accent-tint-hover"
-      >
-        {part}
-      </button>
+      <span key={index} className="group/citation relative inline-block">
+        <button
+          type="button"
+          aria-label={`Show source ${marker}`}
+          aria-describedby={previewId}
+          onClick={(event) => {
+            event.stopPropagation();
+            onCitationClick(citation);
+          }}
+          className={[
+            "mx-0.5 cursor-pointer rounded-sm px-1 align-baseline text-footnote font-semibold text-accent transition-colors duration-150 ease-standard",
+            citation.id === selectedCitationId ? "bg-accent-tint-hover" : "bg-accent-tint hover:bg-accent-tint-hover",
+          ].join(" ")}
+        >
+          {part}
+        </button>
+        <span
+          id={previewId}
+          role="tooltip"
+          className="pointer-events-none absolute bottom-full left-1/2 z-30 mb-2 hidden w-72 -translate-x-1/2 rounded-md border border-separator bg-bg p-3 text-left text-footnote font-normal leading-relaxed text-label shadow-lg group-hover/citation:block group-focus-within/citation:block"
+        >
+          <span className="mb-1 block font-semibold">Source [{citation.marker}]</span>
+          <span className="line-clamp-4 block">{citation.quoted_text}</span>
+          <span className="mt-1 block text-label-secondary">{citationMetadata(citation)}</span>
+        </span>
+      </span>
     );
   });
+}
+
+function citationMetadata(citation: Citation): string {
+  const parts: string[] = [];
+  if (citation.page_number !== null) parts.push(`Page ${citation.page_number}`);
+  if (citation.start_char !== null && citation.end_char !== null) {
+    parts.push(`Characters ${citation.start_char}–${citation.end_char}`);
+  }
+  if (citation.score !== null) parts.push(`Relevance ${citation.score.toFixed(2)}`);
+  return parts.join(" · ") || "Document passage";
 }

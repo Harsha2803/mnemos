@@ -30,7 +30,7 @@ export default function ChatSessionPage() {
   const params = useParams<{ sessionId: string }>();
   const sessionId = params.sessionId;
   const queryClient = useQueryClient();
-  const { select } = useInspectorSelection();
+  const { select, selection } = useInspectorSelection();
 
   const { data, isPending } = useQuery({
     queryKey: sessionQueryKey(sessionId),
@@ -145,11 +145,48 @@ export default function ChatSessionPage() {
 
   function handleStop(): void {
     abortRef.current?.abort();
+    setMessages((current) =>
+      current.map((message) =>
+        message.streaming === true
+          ? {
+              ...message,
+              content:
+                message.content.length > 0
+                  ? `${message.content}\n\nGeneration stopped.`
+                  : "Generation stopped.",
+              streaming: false,
+            }
+          : message,
+      ),
+    );
     setStreaming(false);
   }
 
   function handleCitationClick(citation: Citation): void {
-    select({ kind: "citation", citation });
+    const message = messages.find((item) => item.id === citation.message_id);
+    if (!message) return;
+    select({
+      kind: "citation",
+      message: {
+        id: message.id,
+        content: message.content,
+        citations: message.citations ?? [],
+        nl2sql: message.nl2sql,
+      },
+      citation,
+    });
+  }
+
+  function handleMessageSelect(message: DisplayMessage): void {
+    select({
+      kind: "message",
+      message: {
+        id: message.id,
+        content: message.content,
+        citations: message.citations ?? [],
+        nl2sql: message.nl2sql,
+      },
+    });
   }
 
   return (
@@ -162,7 +199,12 @@ export default function ChatSessionPage() {
             <Skeleton className="ml-auto h-12 w-1/2" />
           </div>
         ) : (
-          <MessageList messages={messages} onCitationClick={handleCitationClick} />
+          <MessageList
+            messages={messages}
+            onCitationClick={handleCitationClick}
+            onMessageSelect={handleMessageSelect}
+            selectedCitationId={selection?.kind === "citation" ? selection.citation.id : undefined}
+          />
         )}
       </div>
       <Composer
