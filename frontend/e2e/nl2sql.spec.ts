@@ -103,13 +103,12 @@ test("test_you_can_ask_a_question_about_your_data_and_see_sql_rows_and_narration
   await composer.fill("what was total revenue by region");
   await composer.press("Enter");
 
-  await expect(
-    page.getByLabel("Routed to Data: Asks for a business metric or data breakdown."),
-  ).toBeVisible();
-
   await expect(page.getByRole("button", { name: "Send message" })).toBeVisible({
     timeout: 90_000,
   });
+  await expect(
+    page.getByLabel("Routed to Data: Asks for a business metric or data breakdown."),
+  ).toBeVisible();
 
   // The generated SQL is always shown, guard-allowed or not.
   await expect(page.getByText(/select/i).first()).toBeVisible();
@@ -142,13 +141,12 @@ test("test_a_write_attempt_never_reaches_the_database_and_the_guard_is_named_on_
   await composer.fill("delete every row from the sales_order table");
   await composer.press("Enter");
 
-  await expect(
-    page.getByLabel("Routed to Data: Mentions database or SQL concepts."),
-  ).toBeVisible();
-
   await expect(page.getByRole("button", { name: "Send message" })).toBeVisible({
     timeout: 90_000,
   });
+  await expect(
+    page.getByLabel("Routed to Data: Mentions database or SQL concepts."),
+  ).toBeVisible();
 
   // Either the guard's refusal is named directly, or the repair loop
   // recovered into an allowed read — see the module docstring for why both

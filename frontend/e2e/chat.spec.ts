@@ -102,10 +102,6 @@ test("test_you_can_ask_mnemos_a_question_and_watch_it_stream_and_persist", async
   await composer.fill("Say the single word: hello");
   await composer.press("Enter");
 
-  await expect(
-    page.getByLabel("Routed to Chat: No document or database context is needed."),
-  ).toBeVisible();
-
   // The assistant bubble exists before it has any text — the "never a
   // spinner over a blank region" rule, observed rather than only unit-tested.
   await expect(page.getByText("Thinking…")).toBeVisible();
@@ -115,6 +111,9 @@ test("test_you_can_ask_mnemos_a_question_and_watch_it_stream_and_persist", async
   await expect(page.getByRole("button", { name: "Send message" })).toBeVisible({
     timeout: 30_000,
   });
+  await expect(
+    page.getByLabel("Routed to Chat: No document or database context is needed."),
+  ).toBeVisible();
   await expect(page.getByText("You").first()).toBeVisible();
   await expect(page.getByText("Mnemos").first()).toBeVisible();
 
