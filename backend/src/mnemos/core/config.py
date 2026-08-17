@@ -190,6 +190,14 @@ class Settings(BaseSettings):
 
     cors_origins: list[str] = ["http://localhost:3000", "http://127.0.0.1:3000"]
 
+    # -- dev tooling --------------------------------------------------------
+    # Off by default so `pytest` — which authenticates hundreds of throwaway
+    # sessions per run — never writes into the working tree. `docker-compose.yml`
+    # turns this on for `api`/`realtime`, the two services that resolve a caller's
+    # session, and bind-mounts `./logs` so the files land in the repo's own
+    # gitignored `logs/sessions/` rather than inside the container.
+    session_log_enabled: bool = False
+
     @field_validator("database_url", "analytics_database_url")
     @classmethod
     def _require_async_driver(cls, v: str) -> str:

@@ -135,6 +135,19 @@ services:
       "
     restart: "no"
 
+  logs-init:
+    # `./logs` does not exist on a fresh clone (it is gitignored — nothing ever
+    # commits it), so Docker auto-creates it on first mount, owned by root. `api`
+    # runs as an unprivileged image user (`Dockerfile`'s `USER mnemos`, uid 10001)
+    # and cannot then write into it — the same "bind mount source must exist with
+    # the right ownership first" problem `minio-init` solves for the bucket, one
+    # layer down at the filesystem instead of the object store.
+    image: busybox:latest
+    volumes:
+      - ./logs:/app/logs
+    entrypoint: ["sh", "-c", "mkdir -p /app/logs/sessions && chown -R 10001:10001 /app/logs"]
+    restart: "no"
+
   # ------------------------------------------------------------- identity tier
   keycloak:
     # Real OIDC provider, free and self-hosted. Realm is imported at boot so the
@@ -203,18 +216,27 @@ services:
     build:
       context: ./backend
       dockerfile: Dockerfile
-    environment: *backend-env
-    # Read-only: the local-fs connector only ever lists and fetches, never
-    # writes back to a source. Same directory, same path, as `worker` below —
-    # register (here) and fetch (there) have to agree on what a `root`/`uri`
-    # resolves to.
-    volumes: ["./e2e-fixtures/sources:/fixtures/sources:ro"]
+    environment:
+      <<: *backend-env
+      # Off everywhere else (`core/config.py`'s default) so only the services
+      # that resolve a caller's session write per-session log files. `./logs`
+      # below is what puts them in the repo's own working tree instead of
+      # vanishing with the container.
+      MNEMOS_SESSION_LOG_ENABLED: "true"
+    volumes:
+      - ./logs:/app/logs
+      # Read-only: the local-fs connector only ever lists and fetches, never
+      # writes back to a source. Same directory, same path, as `worker` below —
+      # register (here) and fetch (there) have to agree on what a `root`/`uri`
+      # resolves to.
+      - ./e2e-fixtures/sources:/fixtures/sources:ro
     depends_on:
       postgres: {condition: service_healthy}
       redis: {condition: service_healthy}
       minio: {condition: service_healthy}
       minio-init: {condition: service_completed_successfully}
       migrate: {condition: service_completed_successfully}
+      logs-init: {condition: service_completed_successfully}
     command: ["uvicorn", "mnemos.entrypoints.api.main:app",
               "--host", "0.0.0.0", "--port", "8000", "--proxy-headers"]
     ports: ["8000:8000"]

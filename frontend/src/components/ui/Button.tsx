@@ -35,7 +35,7 @@ export function Button({
         // control at once, so a future icon button cannot quietly opt out.
         "hit-target inline-flex cursor-pointer items-center justify-center gap-2",
         "rounded-md px-4 text-callout font-semibold",
-        "transition-colors duration-150 ease-standard",
+        "transition-[background-color,color,transform] duration-150 ease-standard active:scale-[0.97]",
         "disabled:pointer-events-none disabled:opacity-40",
         RANK_CLASSES[rank],
         className,

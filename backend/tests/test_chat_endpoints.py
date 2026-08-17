@@ -402,6 +402,63 @@ def test_a_message_streams_token_by_token_and_the_answer_is_persisted(
     assert model.calls[0][-1].content == "hello there"
 
 
+def test_the_first_message_titles_the_session_from_its_own_content(
+    client: TestClient, codec: PlatformTokenCodec, seeded: Seed
+) -> None:
+    headers = _headers(codec, seeded)
+    session_id = client.post("/api/v1/chat/sessions", json={}, headers=headers).json()["id"]
+
+    with client.stream(
+        "POST",
+        f"/api/v1/chat/sessions/{session_id}/messages",
+        json={"content": "  what   is   the capital of   France?  "},
+        headers=headers,
+    ) as response:
+        b"".join(response.iter_bytes())
+
+    session = client.get(f"/api/v1/chat/sessions/{session_id}", headers=headers).json()["session"]
+    assert session["title"] == "what is the capital of France?"
+
+
+def test_a_second_message_does_not_retitle_the_session(
+    client: TestClient, codec: PlatformTokenCodec, seeded: Seed
+) -> None:
+    headers = _headers(codec, seeded)
+    session_id = client.post("/api/v1/chat/sessions", json={}, headers=headers).json()["id"]
+
+    for content in ["first message", "second message, entirely different"]:
+        with client.stream(
+            "POST",
+            f"/api/v1/chat/sessions/{session_id}/messages",
+            json={"content": content},
+            headers=headers,
+        ) as response:
+            b"".join(response.iter_bytes())
+
+    session = client.get(f"/api/v1/chat/sessions/{session_id}", headers=headers).json()["session"]
+    assert session["title"] == "first message"
+
+
+def test_an_explicitly_named_session_is_not_retitled_by_its_first_message(
+    client: TestClient, codec: PlatformTokenCodec, seeded: Seed
+) -> None:
+    headers = _headers(codec, seeded)
+    session_id = client.post(
+        "/api/v1/chat/sessions", json={"title": "Weekly planning"}, headers=headers
+    ).json()["id"]
+
+    with client.stream(
+        "POST",
+        f"/api/v1/chat/sessions/{session_id}/messages",
+        json={"content": "hello there"},
+        headers=headers,
+    ) as response:
+        b"".join(response.iter_bytes())
+
+    session = client.get(f"/api/v1/chat/sessions/{session_id}", headers=headers).json()["session"]
+    assert session["title"] == "Weekly planning"
+
+
 def test_sending_a_message_to_a_missing_session_is_a_404_before_any_bytes_stream(
     client: TestClient, codec: PlatformTokenCodec, seeded: Seed
 ) -> None:

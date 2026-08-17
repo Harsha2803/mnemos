@@ -6,18 +6,19 @@
 > **and [`docs/ADAPTATION.md`](docs/ADAPTATION.md)** *in the same commit* — a stale
 > tracker is worse than none.
 
-**Last updated:** 2026-08-17 — `B1` is done, all 5/5 deliverables. The sources UI was
-live-verified in a real browser against the rebuilt compose stack, and the checked-in
-Playwright sources spec passed; see the dated note immediately below for evidence.
+**Last updated:** 2026-08-17 — `B1` is done, all 5/5 deliverables, and the out-of-band
+frontend polish PR #18 has also merged. The sources UI was live-verified in a real browser
+against the rebuilt compose stack, and the checked-in Playwright sources spec passed; see
+the dated note immediately below for evidence.
 **Phase:** **B — make it a platform.** `B1` ✅ is complete after `A0`–`A3`; build order
 still deviates from phase order once, so `B2` comes next before `A4` (2026-08-15 evening
 re-sequencing note below).
 **Next task:** `B2` — ingestion at scale: heartbeat, retries, status history, stuck-job
 surfacing, and the per-job progress UI over the `B1` job machinery. Do not start `A4`
 until `B2` is done; §5's "Then, in order" list remains authoritative.
-**Branch right now:** `feat/b1-connectors`, PR #16. The branch contains the completed `B1`
-work; after this commit is pushed and checks are green, PR #16 is ready for review. `main`
-is unchanged.
+**Branch right now:** `main` after PR cleanup. PR #18 is merged; PR #16 carries the
+completed `B1` work and is merged once its conflict-resolution commit is green. Start the
+next task from `main`, not from an old feature branch.
 
 > ### 2026-08-17 — `B1` deliverable 5 done: the sources UI is live-verified
 >
@@ -101,6 +102,28 @@ is unchanged.
 > `npx tsc --noEmit` clean; `npm run test` — 99 passed; `npm run build` clean with
 > `/sources` in the route table. `B1` now satisfies C12/C14: a person can connect a source,
 > browse it, ingest an item, and watch ingestion events arrive live.
+
+> ### 2026-08-17 — PR cleanup: frontend polish merged before `B1`
+>
+> The project owner asked to clear pending PRs and start the next milestone from `main`.
+> PR #18 (`feat/frontend-ui-fixes`) was inspected first because it was open, ready, cleanly
+> mergeable, and CI-green. It contained out-of-band product polish: session auto-titling,
+> conversation rename/delete, upload size limits and multi-file upload, chat layout
+> padding, resizable sidebar/inspector panels, sidebar collapse, hover marquee titles,
+> motion polish, and the transcript scrollbar. It was squash-merged to `main` as
+> `9283f68` before resolving `B1`'s conflicts against that updated base. One local cleanup
+> warning remains harmless: the local `feat/frontend-ui-fixes` branch could not be deleted
+> because `.claude/worktrees/frontend-fixes` has it checked out; `.claude/` is local tooling
+> state and is not part of the repo.
+>
+> **Conflict-resolution evidence on the combined branch:** `make test` — 429 passed;
+> `make lint`, `make types` (`mypy --strict`, 188 source files), and `make check` clean.
+> Frontend: `npm run lint`, `npx tsc --noEmit`, `npm run test` — 111 passed, and
+> `npm run build` clean. Rebuilt the compose stack after combining #18's session-log mount
+> with #16's `/fixtures/sources` mount; `/readyz` was fully green and
+> `frontend/e2e/sources.spec.ts` passed. The only code adjustment needed by the merge was
+> tightening that spec's form selectors after #18 added sidebar rename buttons whose
+> accessible names also contain "Name".
 
 > ### 2026-08-16 — `B1` deliverable 4 built: the worker claims and processes a real
 > `ingest_job`

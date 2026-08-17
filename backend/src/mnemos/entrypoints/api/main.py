@@ -39,7 +39,12 @@ from mnemos.entrypoints.api.routers import auth as auth_router
 from mnemos.entrypoints.api.routers import chat as chat_router
 from mnemos.entrypoints.api.routers import connectors as connectors_router
 from mnemos.entrypoints.api.routers import knowledge as knowledge_router
-from mnemos.entrypoints.api.security import enforce_authentication, public_route_paths
+from mnemos.entrypoints.api.security import (
+    bind_caller_context,
+    enforce_authentication,
+    public_route_paths,
+    reset_caller_context,
+)
 from mnemos.features.chat.adapters.repository import SqlChatRepository
 from mnemos.features.chat.application.service import ChatService
 from mnemos.features.connectors.adapters.crypto import SourceConfigCipher
@@ -62,7 +67,7 @@ from mnemos.features.identity.adapters.login_state import RedisLoginStateStore
 from mnemos.features.identity.adapters.principals import SqlPrincipalRepository
 from mnemos.features.identity.adapters.sessions import SqlAppUserStore, SqlSessionStore
 from mnemos.features.identity.application.oidc_login import OidcLoginFlow
-from mnemos.features.identity.application.principals import PrincipalResolver
+from mnemos.features.identity.application.principals import AuthenticatedCaller, PrincipalResolver
 from mnemos.features.identity.application.tokens import TokenService
 from mnemos.features.identity.providers import (
     HttpJwksCache,
@@ -89,7 +94,9 @@ log = get_logger(__name__)
 @asynccontextmanager
 async def lifespan(app: FastAPI) -> AsyncIterator[None]:
     settings: Settings = get_settings()
-    configure_logging(json_output=not settings.is_local)
+    configure_logging(
+        json_output=not settings.is_local, session_log_enabled=settings.session_log_enabled
+    )
 
     app.state.settings = settings
     app.state.db = Database(settings)
@@ -309,13 +316,27 @@ def create_app() -> FastAPI:
         elapsed_ms = int((time.perf_counter() - started) * 1000)
         response.headers["X-Request-Id"] = request_id
         if request.url.path not in {"/healthz", "/readyz"}:
-            log.info(
-                "http.request",
-                method=request.method,
-                path=request.url.path,
-                status=response.status_code,
-                duration_ms=elapsed_ms,
+            # `enforce_authentication`'s own binding is already gone by now — its
+            # `finally` ran inside `call_next`, before this line — so the summary
+            # log below re-binds from `request.state.caller`, which the guard
+            # left behind for exactly this. Without this, the one log line that
+            # actually says "this request happened" would never carry the
+            # session id `core/logging.py`'s per-session file is keyed on.
+            caller = getattr(request.state, "caller", None)
+            caller_tokens = (
+                bind_caller_context(caller) if isinstance(caller, AuthenticatedCaller) else None
             )
+            try:
+                log.info(
+                    "http.request",
+                    method=request.method,
+                    path=request.url.path,
+                    status=response.status_code,
+                    duration_ms=elapsed_ms,
+                )
+            finally:
+                if caller_tokens is not None:
+                    reset_caller_context(caller_tokens)
         return response
 
     @app.exception_handler(MnemosError)

@@ -277,7 +277,9 @@ async def process_next_job(
 
 async def run() -> None:
     settings = get_settings()
-    configure_logging(json_output=not settings.is_local)
+    configure_logging(
+        json_output=not settings.is_local, session_log_enabled=settings.session_log_enabled
+    )
     db = Database(settings)
     cache = Cache(settings)
     event_bus = RedisStreamsEventBus(cache.client)

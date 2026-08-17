@@ -4,6 +4,8 @@ You are picking up Mnemos at:
 
 Current date of this handoff: 2026-08-17.
 
+Start from `main`.
+
 Read first, in order:
 
   1. TRACKER.md — it is the live source of truth. Read the header, the 2026-08-17
@@ -16,39 +18,42 @@ Read first, in order:
 Current state:
 
   - `A0` through `A3` are done and merged to `main`.
-  - `B1` is done on `feat/b1-connectors`, PR #16.
-  - `B1` deliverables 1-4 were already committed before this handoff: source
-    connectors, Redis Streams, authenticated ingestion WebSocket, and the worker's
-    real connector-ingest path.
-  - `B1` deliverable 5 is now done too: the Sources UI, backend connector routes,
-    fixture wiring, typed frontend API helpers, authenticated WebSocket hook, and
-    Playwright spec were completed and verified.
+  - `B1` is done and merged to `main`: source connectors, Redis Streams,
+    authenticated ingestion WebSocket, the worker's real connector-ingest path,
+    backend connector routes, the Sources UI, local-fs fixture wiring, and the
+    Playwright sources spec.
+  - The out-of-band frontend polish PR #18 is also merged to `main`: conversation
+    naming, rename/delete, upload limits and multi-file upload, chat layout
+    padding, resizable panels, sidebar collapse, hover marquee titles, motion
+    polish, and the transcript scrollbar.
+  - The per-session log-file work from PR #17 is already merged.
+  - As of this handoff there should be no open PRs. If `gh pr list --state open`
+    says otherwise, trust the live output and inspect that PR before starting
+    new work.
 
-Verification evidence for the completed `B1` deliverable 5:
+Verification evidence for completed `B1`:
 
-  - `gh auth status` confirmed `Harsha2803` is active; `harshaJKT` is inactive.
   - `docker compose up -d --build` rebuilt the stack.
   - `curl localhost:8000/readyz` returned `postgres`, `redis`, `ollama`, and
     `objectstore` all `ok`.
-  - The API container was confirmed to have
-    `MNEMOS_LOCAL_FS_ALLOWED_ROOTS=["/fixtures/sources"]`, the mounted
-    `/fixtures/sources/handbook.txt`, and the new connectors router.
   - In Chromium, signed in as org `mnemos`, user `analyst@mnemos.local` /
     `analyst`, opened Sources, registered a `local_fs` connector against
     `/fixtures/sources`, browsed to `handbook.txt`, selected and ingested it, and
     watched the live feed reach `Succeeded` without a page reload.
   - `cd frontend && npx playwright test e2e/sources.spec.ts` passed; a separate
     headed Chromium run of the same spec also passed.
-  - Backend: `make test` — 415 passed; `make lint`, `make types`, and `make check`
+  - After merging PR #18 first and resolving `B1` against the updated `main`:
+    backend `make test` — 429 passed; `make lint`, `make types`, and `make check`
     clean.
-  - Frontend: `npm run lint`, `npx tsc --noEmit`, `npm run test` — 99 passed, and
-    `npm run build` clean with `/sources` in the route table.
+  - Frontend after the same resolution: `npm run lint`, `npx tsc --noEmit`,
+    `npm run test` — 111 passed, and `npm run build` clean.
+  - The rebuilt combined compose stack reported `/readyz` fully green and
+    `npx playwright test e2e/sources.spec.ts` passed again.
 
-Important branch/account rules:
+Important rules:
 
   - Never use the work GitHub account or email (`harshaJKT`, `@jktech.com`).
     Confirm `Harsha2803` before any push.
-  - Keep all `B1` work on `feat/b1-connectors`, PR #16. Do not open a second PR.
   - `.claude/` is local tooling state and must not be committed.
   - Do not read or copy from `../jiva/`; it is the author's employer's proprietary
     codebase.
@@ -58,10 +63,8 @@ Important branch/account rules:
 
 What is next:
 
-  - If PR #16 is not already ready for review when you start, inspect checks with
-    `gh pr checks 16` and mark it ready only if the pushed branch is green.
-  - The next milestone after `B1` is `B2`, not `A4`: heartbeat, retries, status
-    history, stuck-job surfacing, and per-job progress UI over the job machinery
-    `B1` introduced.
+  - The next milestone is `B2`, not `A4`: heartbeat, retries, richer status
+    history, stuck-job surfacing, replay/progress depth, and per-job progress UI
+    over the job machinery `B1` introduced.
   - Ordinary one-task-per-session discipline is back in force. Do not start `B2`
-    in the same session that only intended to close `B1`.
+    in the same session that only intended to merge cleanup PRs.

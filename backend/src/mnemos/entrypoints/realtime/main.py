@@ -75,7 +75,9 @@ ALLOWED_CHANNEL_KINDS: Final[frozenset[str]] = frozenset({"ingestion"})
 @asynccontextmanager
 async def lifespan(app: FastAPI) -> AsyncIterator[None]:
     settings = get_settings()
-    configure_logging(json_output=not settings.is_local)
+    configure_logging(
+        json_output=not settings.is_local, session_log_enabled=settings.session_log_enabled
+    )
     app.state.db = Database(settings)
     app.state.cache = Cache(settings)
 

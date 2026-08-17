@@ -4,9 +4,10 @@
 > self-contained: architecture, the capability inventory, schema, milestones, and current
 > state. [`TRACKER.md`](../TRACKER.md) holds live task status; this holds the design.
 
-**Last updated:** 2026-08-17 — `B1` done on `feat/b1-connectors`: source connectors,
+**Last updated:** 2026-08-17 — `B1` is done and merged to `main`: source connectors,
 Redis Streams, authenticated ingestion realtime, the worker's real connector-ingest path,
-and the sources UI are all built and browser-verified. `B2` is next before `A4`.
+and the sources UI are all built and browser-verified. The out-of-band frontend polish PR
+#18 is merged too. `B2` is next before `A4`.
 
 ---
 
@@ -305,12 +306,11 @@ own system — its own accent, neutrals and identity — informed by Apple's des
 for typography, spatial rhythm, materials and motion character. §0 there records which
 Apple assets are off-limits (SF Pro as a webfont, SF Symbols) and what is used instead.
 
-**Current position.** `main`'s tip has `A0` (PR #11), `A1` (PR #13), `A2` (PR #14), and
-`A3` (PR #15) — all merged. `B1` is complete on `feat/b1-connectors` (PR #16): connectors,
-Redis Streams, authenticated ingestion realtime, the worker's real connector-ingest path,
-and the Sources screen were verified against the rebuilt compose stack on 2026-08-17. The
-next milestone is `B2` (ingestion at scale), still before `A4` per the 2026-08-15
-re-sequencing.
+**Current position.** `main` has `A0` (PR #11), `A1` (PR #13), `A2` (PR #14), `A3`
+(PR #15), `B1` (PR #16), the per-session log files (PR #17), and the out-of-band frontend
+polish work (PR #18). `B1`'s Sources screen was verified against the rebuilt compose stack
+on 2026-08-17. The next milestone is `B2` (ingestion at scale), still before `A4` per the
+2026-08-15 re-sequencing.
 
 `M3`'s exit criterion "RLS blocks cross-org" turned out to be unmet by `M2` rather than
 merely untested; that is written up in §8 and in
@@ -319,6 +319,71 @@ merely untested; that is written up in §8 and in
 ---
 
 ## 8. Current state
+
+### Dev tooling — per-session log files (2026-08-16, not a milestone)
+
+Not part of the `A`/`B`/`C`/`D` plan in §7 — an out-of-band developer convenience, so it
+gets no milestone id and does not move `B1`'s "next task" status. `core/logging.py` can
+now, opt-in (`Settings.session_log_enabled`, off by default), append every log line that
+carries a `session_id` to its own file at `logs/sessions/{session_id}.log` — a login
+session's whole activity, pullable by id later, rather than grepped out of the container
+log stream. `entrypoints/api/security.py`'s `enforce_authentication` binds the resolved
+caller's `org_id`/`user_id`/`session_id` to contextvars for the duration of the request
+(and, via `bind_caller_context`/`reset_caller_context`, for `main.py`'s post-`call_next`
+`http.request` summary line too — dependency teardown runs *inside* `call_next`, so the
+middleware has to re-bind from `request.state.caller` rather than reuse the dependency's
+already-reset binding). `docker-compose.yml`'s `api` service turns the flag on and
+bind-mounts `./logs`; a new one-shot `logs-init` service (same shape as `minio-init`)
+`chown`s it to the image's unprivileged uid first, since a fresh clone has no `./logs`
+and Docker would otherwise auto-create it owned by root. `logs/`/`*.log` were already
+gitignored. Full detail, including a `cache_logger_on_first_use` correctness bug this
+surfaced in `configure_logging` itself, is in
+[TRACKER's dated note](../TRACKER.md) for 2026-08-16.
+
+### Product polish — seven frontend UI fixes (2026-08-16, not a milestone)
+
+Also out-of-band, also no milestone id. A session is now titled from its own first
+message rather than staying "New chat" forever (`features/chat/application/titles.py`,
+shared by `ChatService`/`flows/rag`/`flows/nl2sql`); the sidebar's conversation rows
+gained rename and delete controls; document uploads are checked against
+`Settings.max_upload_bytes` client-side before anything is sent, and the picker/drop
+zone now accept several files at once (one request per file, each failure named
+separately); an open conversation reads at a new, wider `--chat-measure` token with a
+tighter gutter instead of the document-route `measure`; and the sidebar now collapses/
+resizes exactly like the inspector already did, plus draggable-and-keyboard-resizable
+boundaries for both panels (the ARIA "window splitter" pattern). No schema change, no
+migration. Live-verified against the running compose stack once it was free: a session
+retitling itself from its first message with no reload, inline rename, delete-the-open-
+session navigating back to `/chat`, the sidebar resize handle and collapse toggle, and a
+real 26 MB file being refused client-side alongside a small file that uploaded
+successfully. Full detail and evidence is in
+[TRACKER's dated note](../TRACKER.md) for 2026-08-16.
+
+### Product polish — hover-marquee titles + a motion pass (2026-08-16, not a milestone)
+
+Also out-of-band, also no milestone id, same `feat/frontend-ui-fixes`/PR #18. Two pieces.
+A long sidebar conversation title now scrolls into view on hover instead of staying
+truncated forever — `MarqueeText` (`components/ui/`) measures real overflow and slides at
+a constant speed, used first by `ChatSessionList.tsx`. Separately, a small, consistent
+motion pass: every `Button` gets a press animation; both delete-confirmation dialogs
+(chat and knowledge) fade/scale in and out via Radix's `data-state`; `EmptyState` settles
+in with a fade+rise; a freshly-sent chat message does too, but its assistant reply
+deliberately does not (it already arrives token by token, and its `id` swap on stream
+completion would replay a mount animation a second time). All of it opacity/transform
+only, so it collapses under `prefers-reduced-motion` for free. Full detail is in
+[TRACKER's dated note](../TRACKER.md) for 2026-08-16 (later still).
+
+### Product polish — chat transcript scrollbar (2026-08-16, not a milestone)
+
+Also out-of-band, also no milestone id, same `feat/frontend-ui-fixes`/PR #18. The chat
+transcript's scroll container (`chat/[sessionId]/page.tsx`) now carries a `.scrollbar-thin`
+class (`globals.css`): a transparent track and a rounded, token-built thumb (`--fill-
+secondary` at rest, `--fill` on hover, a `--bg`-matched inset border) instead of the bare
+OS scrollbar — the shape ChatGPT's transcript scrollbar uses. Token-driven, so it tracks
+light/dark like everything else; applied to the one pane the request named, not globally.
+Live-verified in both themes. Full detail, including a note on the shared-compose-project
+side effect this session's verification pass had on the concurrent `B1` session, is in
+[TRACKER's dated note](../TRACKER.md) for 2026-08-16 (later).
 
 ### F0 — app shell ✅
 
@@ -899,10 +964,12 @@ root and the mounted `handbook.txt` fixture. In Chromium, signed in as
 `analyst@mnemos.local`, the Sources screen registered a local filesystem connector,
 browsed to `handbook.txt`, selected and ingested it, and the live feed reached
 `Succeeded` without a page reload. The same spec passed in a headed Chromium run and in
-the normal `npx playwright test e2e/sources.spec.ts` run. Final gates: backend `make test`
-415 passed, `make lint` / `make types` / `make check` clean; frontend `npm run lint`,
-`npx tsc --noEmit`, `npm run test` 99 passed, and `npm run build` clean with `/sources`
-in the route table.
+the normal `npx playwright test e2e/sources.spec.ts` run. After merging #18 first and
+resolving `B1` against the updated `main`, final gates were: backend `make test` 429
+passed, `make lint` / `make types` / `make check` clean; frontend `npm run lint`,
+`npx tsc --noEmit`, `npm run test` 111 passed, and `npm run build` clean with `/sources`
+in the route table; `frontend/e2e/sources.spec.ts` passed against the rebuilt combined
+stack.
 
 ### A3 — ask about your data ✅ verified end to end 2026-08-15
 
