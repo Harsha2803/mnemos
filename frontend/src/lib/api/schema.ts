@@ -286,6 +286,65 @@ export interface paths {
         patch?: never;
         trace?: never;
     };
+    "/api/v1/connectors": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /** List Sources */
+        get: operations["list_sources_api_v1_connectors_get"];
+        put?: never;
+        /** Register Source */
+        post: operations["register_source_api_v1_connectors_post"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/v1/connectors/{slug}/items": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /** List Items */
+        get: operations["list_items_api_v1_connectors__slug__items_get"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/v1/connectors/{slug}/ingest": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /**
+         * Ingest Item
+         * @description Enqueue a `queued` `ingest_job` for one item the source currently
+         *     lists — the second producer `entrypoints/worker/main.py`'s docstring
+         *     already anticipated. Refuses a `uri` the source does not currently list,
+         *     same discipline `mnemosctl connector ingest` enforces, so this can never
+         *     become an arbitrary-fetch primitive for a slug the caller's org owns.
+         */
+        post: operations["ingest_item_api_v1_connectors__slug__ingest_post"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
 }
 export type webhooks = Record<string, never>;
 export interface components {
@@ -407,6 +466,33 @@ export interface components {
             /** Detail */
             detail?: components["schemas"]["ValidationError"][];
         };
+        /** IngestRequest */
+        IngestRequest: {
+            /** Uri */
+            uri: string;
+        };
+        /** IngestResponse */
+        IngestResponse: {
+            /** Job Id */
+            job_id: string;
+            /** Status */
+            status: string;
+            /** Uri */
+            uri: string;
+        };
+        /** ItemResponse */
+        ItemResponse: {
+            /** Uri */
+            uri: string;
+            /** Name */
+            name: string;
+            /** Size Bytes */
+            size_bytes: number;
+            /** Content Type */
+            content_type: string;
+            /** Modified At */
+            modified_at: string | null;
+        };
         /**
          * MeResponse
          * @description Who the bearer of this access token is, resolved against the live database.
@@ -447,6 +533,26 @@ export interface components {
              */
             tags: string[];
         };
+        /** RegisterSourceRequest */
+        RegisterSourceRequest: {
+            /** Slug */
+            slug: string;
+            /** Name */
+            name: string;
+            /**
+             * Kind
+             * @enum {string}
+             */
+            kind: "s3" | "minio" | "local_fs" | "http";
+            /** Bucket */
+            bucket?: string | null;
+            /** Prefix */
+            prefix?: string | null;
+            /** Root */
+            root?: string | null;
+            /** Urls */
+            urls?: string[] | null;
+        };
         /** RenameSessionRequest */
         RenameSessionRequest: {
             /** Title */
@@ -469,6 +575,26 @@ export interface components {
              * @default false
              */
             use_documents: boolean;
+            /**
+             * Use Datasource
+             * @default false
+             */
+            use_datasource: boolean;
+        };
+        /** SourceResponse */
+        SourceResponse: {
+            /** Id */
+            id: string;
+            /** Slug */
+            slug: string;
+            /** Name */
+            name: string;
+            /** Kind */
+            kind: string;
+            /** Is Enabled */
+            is_enabled: boolean;
+            /** Created At */
+            created_at: string;
         };
         /**
          * TokenRequest
@@ -1061,6 +1187,125 @@ export interface operations {
                     [name: string]: unknown;
                 };
                 content?: never;
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
+    list_sources_api_v1_connectors_get: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["SourceResponse"][];
+                };
+            };
+        };
+    };
+    register_source_api_v1_connectors_post: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["RegisterSourceRequest"];
+            };
+        };
+        responses: {
+            /** @description Successful Response */
+            201: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["SourceResponse"];
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
+    list_items_api_v1_connectors__slug__items_get: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                slug: string;
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ItemResponse"][];
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
+    ingest_item_api_v1_connectors__slug__ingest_post: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                slug: string;
+            };
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["IngestRequest"];
+            };
+        };
+        responses: {
+            /** @description Successful Response */
+            202: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["IngestResponse"];
+                };
             };
             /** @description Validation Error */
             422: {

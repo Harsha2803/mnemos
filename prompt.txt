@@ -1,314 +1,67 @@
-You are picking up an in-progress project called Mnemos, at
-/home/shreeharsha/Personal/Projects/Resume_001/mnemos
+You are picking up Mnemos at:
 
-This file was rewritten on 2026-08-15 (night), after a session that built `B1`
-deliverable 2 — the `EventBus` port + Redis Streams adapter (`platform/events/`) — on
-branch `feat/b1-connectors` (PR #16, **draft**, on top of deliverable 1). It replaces the
-2026-08-15 (evening) version of itself, which handed off right after deliverable 1 was
-built. No brief was rewritten this time — deliverables 3-5 in TRACKER §5 are unchanged
-from what the original `B1` brief specified. **This session should continue `B1` on the
-existing branch, starting at deliverable 3 (closing the realtime gateway's authentication
-gap).** Do not create a new branch, do not re-read the deliverable 1/2 briefs as if they
-were still unbuilt, and do not start over. Trust this file and TRACKER.md over any memory
-of a prior prompt.txt.
+  /home/shreeharsha/Personal/Projects/Resume_001/mnemos
 
-------------------------------------------------------------------------------
-READ FIRST, IN THIS ORDER
+Current date of this handoff: 2026-08-17.
 
-  1. TRACKER.md            — section 0 (rule 9 is in force), the "2026-08-15 (night) — B1
-                              deliverable 2 built" dated note near the top, the `B1` entry
-                              in section 3, then **section 5 in full** — deliverables 1-2's
-                              entries now say what was actually built; deliverables 3-5 are
-                              the original brief, unchanged, and are what you build next.
-  2. docs/ADAPTATION.md    — the updated `B1` subsection in §8 (right before `A3`'s), §7's
-                              `B1` row, and the "Not started" list's `B1` bullets (now
-                              accurate: connectors + event bus exist, worker/UI do not)
-  3. docs/ThreatModel.md   — §3⑤ (STRIDE-E, forged identity on a channel — this is
-                              deliverable 3's actual shape) and §4 layer 1 (trust tier,
-                              already resolved for deliverable 4, see TRACKER's dated note
-                              for deliverable 1 — not this session's problem but good
-                              context for where `B1` is headed after deliverable 3).
-  4. README.md             — unchanged by `B1` so far; nothing in it touches what deliverable
-                              3-4 move
-  5. docs/CodingStandards.md / docs/DesignSystem.md — before writing backend / frontend code
+Read first, in order:
 
-TRACKER.md is authoritative over this file for anything the two disagree about.
+  1. TRACKER.md — it is the live source of truth. Read the header, the 2026-08-17
+     `B1` deliverable-5 note near the top, §3's `B1` entry, and §5's "Then, in
+     order" list.
+  2. docs/ADAPTATION.md — read §7's `B1` row, §8's `B1` subsection, and the
+     "Not started" list.
+  3. Only then read code for the next milestone.
 
-------------------------------------------------------------------------------
-EXACTLY WHERE THIS WAS LEFT — read this before touching anything
+Current state:
 
-**`A3` is done and merged.** Unchanged since the last handoff — see TRACKER §3.
+  - `A0` through `A3` are done and merged to `main`.
+  - `B1` is done on `feat/b1-connectors`, PR #16.
+  - `B1` deliverables 1-4 were already committed before this handoff: source
+    connectors, Redis Streams, authenticated ingestion WebSocket, and the worker's
+    real connector-ingest path.
+  - `B1` deliverable 5 is now done too: the Sources UI, backend connector routes,
+    fixture wiring, typed frontend API helpers, authenticated WebSocket hook, and
+    Playwright spec were completed and verified.
 
-**`B1` deliverables 1-2 of 5 are done, on an open branch, not yet on `main`.** Branch
-`feat/b1-connectors`, PR #16, **draft** (stays draft until deliverable 5's sources UI
-exists — deliverables 1-4 have no product UI by design, C12). CI was green on deliverable
-1's push (backend/frontend/compose); deliverable 2's push is the one to confirm is still
-green when you start (step 3 below). What is actually on that branch, so you do not have
-to re-discover it:
+Verification evidence for the completed `B1` deliverable 5:
 
-  - `features/connectors/` has real content: `domain/port.py` (`SourceItem` +
-    `SourceConnector` — `list_items`/`fetch`), `adapters/s3.py`, `adapters/local_fs.py`,
-    `adapters/http.py`, `adapters/ssrf_guard.py` (the deny-list, with the request pinned
-    to the address that was actually checked — real DNS-rebinding protection), `adapters/
-    crypto.py`'s `SourceConfigCipher`, `adapters/models.py`'s `ContentSource` + `adapters/
-    repository.py`, `application/factory.py`'s `ConnectorFactory`, `application/
-    service.py`'s `ConnectorService`. Call `ConnectorService`, not `ConnectorFactory`
-    directly — it is what resolves a slug to a record and decrypts its config.
-  - `content_source` is a real, RLS-forced table (migration `0007` — the first since `M2`).
-  - `platform/objectstore/port.py`'s `ObjectStore` protocol has a fourth method,
-    `list(prefix) -> Sequence[ObjectMeta]`, implemented in `S3ObjectStore`.
-  - `mnemosctl connector register`/`connector list-items` work end to end.
-    `MNEMOS_LOCAL_FS_ALLOWED_ROOTS` (empty by default) is a second boundary around the
-    local-fs connector's root.
-  - **`platform/events/` is now real**: `port.py`'s `EventBus` protocol (`publish`,
-    `ensure_group`, `read_group`, `ack`) and `redis_streams.py`'s `RedisStreamsEventBus` —
-    `XADD`/consumer-group `XREADGROUP`, tested against a real Redis via testcontainers
-    (`tests/test_events_redis_streams.py`, using the new `redis_url` session fixture in
-    `conftest.py`). Nothing calls `EventBus.publish` yet — deliverable 4's worker is its
-    first real caller. **The design decision is made**: the worker will publish every
-    `ingest_job` transition to *both* this adapter (durable, for replay) *and* the
-    existing `Cache.client.publish` to the `mnemos:{channel}` pub/sub topic the realtime
-    gateway already relays (live) — not a consumer-group reader inside the gateway itself,
-    which is `B2` depth. Nothing in the realtime gateway changed because of this.
-  - `entrypoints/worker/main.py`'s stuck-job reaper still has nothing real to claim.
-  - `entrypoints/realtime/main.py` is still the same working-but-**unauthenticated** Redis
-    pub/sub → WebSocket relay it has been since `M1` — neither deliverable touched it.
-    **This is what deliverable 3 (next) fixes.**
-  - `features/knowledge/application/service.py`'s `upload_document` still does its
-    extract/chunk/embed body inline, synchronously — deliverable 4 still needs to factor
-    that body out for the worker to reuse.
+  - `gh auth status` confirmed `Harsha2803` is active; `harshaJKT` is inactive.
+  - `docker compose up -d --build` rebuilt the stack.
+  - `curl localhost:8000/readyz` returned `postgres`, `redis`, `ollama`, and
+    `objectstore` all `ok`.
+  - The API container was confirmed to have
+    `MNEMOS_LOCAL_FS_ALLOWED_ROOTS=["/fixtures/sources"]`, the mounted
+    `/fixtures/sources/handbook.txt`, and the new connectors router.
+  - In Chromium, signed in as org `mnemos`, user `analyst@mnemos.local` /
+    `analyst`, opened Sources, registered a `local_fs` connector against
+    `/fixtures/sources`, browsed to `handbook.txt`, selected and ingested it, and
+    watched the live feed reach `Succeeded` without a page reload.
+  - `cd frontend && npx playwright test e2e/sources.spec.ts` passed; a separate
+    headed Chromium run of the same spec also passed.
+  - Backend: `make test` — 415 passed; `make lint`, `make types`, and `make check`
+    clean.
+  - Frontend: `npm run lint`, `npx tsc --noEmit`, `npm run test` — 99 passed, and
+    `npm run build` clean with `/sources` in the route table.
 
-**391 tests total** (384 + 7 new: `tests/test_events_redis_streams.py`, against a real
-Redis via testcontainers — backlog delivery to a group created after publish, idempotent
-group creation, no redelivery of an already-delivered message, competing-consumer
-semantics, `ack` clearing `XPENDING`, and unreachable-Redis error translation). `make
-lint`/`make types`/`make check` clean. Do not re-verify any of this; it already
-happened — start from deliverable 3.
+Important branch/account rules:
 
-------------------------------------------------------------------------------
-WHAT TO DO, IN ORDER, THE MOMENT YOU START
+  - Never use the work GitHub account or email (`harshaJKT`, `@jktech.com`).
+    Confirm `Harsha2803` before any push.
+  - Keep all `B1` work on `feat/b1-connectors`, PR #16. Do not open a second PR.
+  - `.claude/` is local tooling state and must not be committed.
+  - Do not read or copy from `../jiva/`; it is the author's employer's proprietary
+    codebase.
+  - Do not run `pkill -f mnemos`; it can match the agent shell. Kill by port or PID.
+  - Zero monetary cost forever: free, self-hosted defaults; Ollama is the default
+    model path; no paid cloud pub/sub.
 
-  1. `gh auth status` — confirm `Harsha2803` is active. If `harshaJKT` is active instead,
-     run `gh auth switch --user Harsha2803` before anything else.
-  2. `git fetch && git checkout feat/b1-connectors && git pull --ff-only` — **not `main`**;
-     the branch with deliverables 1-2's work is where deliverable 3 continues. Confirm
-     `git log --oneline -3` shows deliverable 2's commit at the tip.
-  3. `gh pr view 16` — confirm it is still open, still draft, and CI is still green (a
-     rebase or a stale run is worth noticing before adding to it).
-  4. Read TRACKER §5 in full, starting at deliverable 3 (the realtime auth fix) —
-     deliverables 1-2's entries are marked done; do not rebuild them.
-  5. Build deliverable 3: JWT-validated WS handshake in `entrypoints/realtime/main.py`,
-     org-derived channel scoping (never taken from the client-supplied `channel` path
-     segment as-is), and a test that proves a token for org A cannot subscribe to org B's
-     ingestion channel even by hand-typing the channel name into the WS URL. Commit it to
-     `feat/b1-connectors` (already pushed, already has a PR — no new branch, no new PR).
-  6. Bring up a stack if you need one to verify against: `docker compose up -d --build`,
-     `curl localhost:8000/readyz` until fully green.
-  7. Follow the ordinary one-task-per-session rule (TRACKER §0 rule 9) for whatever comes
-     *after* deliverable 3 — land it, update TRACKER §5 so deliverable 4 is ready for
-     whoever picks it up next, and stop, unless told to run a marathon.
+What is next:
 
-------------------------------------------------------------------------------
-A NOTE ON MULTI-AGENT WORKFLOWS, IF YOU USE THEM HERE
-
-The `SourceConnector` protocol (deliverable 1) and the `EventBus` port shape
-(deliverable 2) are both done and stable now — the two contracts the sources UI
-(deliverable 5) needs settled before it can be built independently. It is still not
-independent yet: the UI's live-event feed needs deliverable 3's authenticated channel to
-exist first, and its ingest flow needs deliverable 4's worker to actually produce events.
-Once deliverable 3 lands, re-assess whether deliverable 5 is far enough ahead to hand to a
-background agent while you (or a follow-up session) build deliverable 4 — they touch
-disjoint files (`entrypoints/realtime/` + frontend vs. `entrypoints/worker/` +
-`features/knowledge/`) but deliverable 5's Playwright coverage needs a live event to
-watch, so sequencing still matters more than it looks. Keep every commit and every
-decision with security weight (the realtime auth fix — this session's job — the SSRF
-deny-list, the trust-tier assignment for connector content — both already landed, see
-TRACKER's dated notes) single-threaded through you.
-
-------------------------------------------------------------------------------
-WHAT THIS PROJECT IS
-
-An enterprise AI assistant. One conversation surface; a router (`A4`, scheduled *after*
-`B1`/`B2`) will decide whether an answer needs documents (RAG, `A2`), a database (NL2SQL,
-`A3`), a tool (MCP, `B3`), memory, or a combination. Underneath, every message will have an
-inspectable, budgeted context bundle (`C4`) and a governed memory layer distinguishing
-current facts from superseded ones (also `C4`) — the project's one deep technical claim,
-measured on the v0.1 kernel and not yet re-measured on Postgres.
-
-It is a portfolio project. Production practices, single-node scale, zero paid dependencies
-in the default path, ever.
-
-**Phase A is complete** (`A0`–`A3`, all ✅). `B1` is the first step of Phase B, turning it
-from a chatbot into a platform — deliverables 1-2 of 5 done, three to go.
-
-------------------------------------------------------------------------------
-HARD RULES — violating any of these is worse than doing nothing
-
-* ZERO MONETARY COST. Every component free and self-hosted. No API key for any capability
-  in the default path. Ollama is the default model forever. Redis Streams, not a cloud
-  pub/sub service, for `B1`'s event bus — this is a **locked decision** (ADAPTATION §9),
-  now built, not a choice to re-litigate.
-
-* NEVER READ OR COPY FROM ../jiva/. That directory is the author's EMPLOYER'S proprietary
-  codebase. Not a reference, not a source, not to be cited. Every file in Mnemos is written
-  fresh. See ADAPTATION.md section 2 and constraint C11.
-
-* NEVER use the work GitHub account or email (harshaJKT, @jktech.com). Two accounts are
-  authenticated in `gh` on this machine. Confirm `Harsha2803` is active before any push —
-  check every time, do not assume the last session left it right.
-
-* NO PLACEHOLDERS, NO TODOs, NO STUBBED RETURNS. Split a task rather than stub it.
-
-* EVERY FEATURE SHIPS ITS UI IN THE SAME MILESTONE (C12). For `B1`: deliverables 1-4 have
-  no product UI and PR #16 stays in draft until deliverable 5's sources screen exists and
-  "connect a source, watch it ingest" is true in a browser.
-
-* THE UI FOLLOWS docs/DesignSystem.md (C13). Tokens are the only source of colour, type,
-  spacing and radius. `test_no_component_hardcodes_a_colour` enforces this in CI. The sources
-  UI's live-event states (queued/running/done/failed) pair an icon with a plain-word label,
-  never colour alone — the same discipline `A3`'s `SqlPanel.tsx` already established.
-
-* DO NOT re-litigate settled decisions (TRACKER section 2, ADAPTATION section 9). If you
-  think one is wrong, write an ADR superseding it — do not silently deviate.
-
-* DO NOT run `pkill -f mnemos` — it matches the agent's own shell. Kill by port or PID.
-
-* Never leave uncommitted work, and never leave a genuinely finished PR open. Push, add to
-  PR #16's branch (it already exists — do not open a second one for `B1`), merge only once
-  every deliverable is done, green, and browser-verified.
-
-* NEVER SHIP A SECOND DEFENCE AS IF IT WERE THE FIRST. `B1`'s realtime-auth fix
-  (deliverable 3, **this session's task**) is exactly this shape: prove a token for org A
-  cannot subscribe to org B's ingestion channel by connecting around the code path
-  entirely (dial the WebSocket directly with a hand-typed channel name), not just by
-  checking the one call site you think enforces it.
-
-* THE HTTP SOURCE CONNECTOR NEVER CRAWLS AND NEVER FETCHES AN ARBITRARY USER-SUPPLIED URL.
-  Already enforced in deliverable 1 (`adapters/http.py` + `adapters/ssrf_guard.py`, tested
-  against an actual loopback/link-local/metadata-IP/localhost refusal, not just an assertion
-  that the deny-list exists). Keep this property true in whatever deliverable 4/5 build on
-  top of it.
-
-------------------------------------------------------------------------------
-HOW TO WORK
-
-Commits: one logical change per commit, conventional format, explaining why not just what.
-Never a bulk commit of unrelated files. One commit per numbered `B1` deliverable — all on
-`feat/b1-connectors`, all part of PR #16.
-
-Every change ends with ALL of:
-  - make test            (391 passed as of deliverable 2 — this will grow)
-  - make lint / make types / make check
-  - frontend (if touched): npm run lint && npx tsc --noEmit && npm run test && npm run build
-  - TRACKER.md updated in the same commit as the work — status, evidence, next task
-  - docs/ADAPTATION.md updated in the same commit — section 7 position, section 8 state
-  - README numbers updated ONLY if the retrieval or compile path moved (still doesn't apply)
-  - the branch pushed, PR #16 still green, before you call a deliverable done
-  - real browser verification before claiming the sources UI works (deliverable 5 only) —
-    connect the local-filesystem connector against real fixture files, in a real browser,
-    and watch a job move queued -> running -> done live
-
-Report honestly. Claim something works only after you have run it and seen the output.
-
-------------------------------------------------------------------------------
-RUNNING IT
-
-  gh auth status                                 # confirm Harsha2803 is active
-  docker compose up -d --build                   # nine services
-  docker compose ps
-  curl localhost:8000/readyz                     # postgres/redis/ollama/objectstore all "ok"
-  docker compose exec -e MNEMOS_BOOTSTRAP_ADMIN_PASSWORD=<pw> api mnemosctl bootstrap \
-      --org-slug mnemos --org-name Mnemos --admin-email admin@mnemos.local
-                                                  # idempotent
-  docker compose exec -e MNEMOS_BOOTSTRAP_ADMIN_PASSWORD=<pw> api mnemosctl datasource \
-      introspect --org-slug mnemos              # registers + caches the demo warehouse
-  docker compose exec -e MNEMOS_BOOTSTRAP_ADMIN_PASSWORD=<pw> api mnemosctl datasource \
-      seed-glossary --org-slug mnemos           # seeds the four curated glossary terms
-  docker compose exec -e MNEMOS_BOOTSTRAP_ADMIN_PASSWORD=<pw> api mnemosctl connector \
-      register --org-slug mnemos --slug demo-fs --name "Demo filesystem" \
-      --kind local_fs --root /some/allowlisted/path
-                                                  # needs MNEMOS_LOCAL_FS_ALLOWED_ROOTS set
-  docker compose exec -e MNEMOS_BOOTSTRAP_ADMIN_PASSWORD=<pw> api mnemosctl connector \
-      list-items --org-slug mnemos --slug demo-fs
-
-  cd backend && ../.venv/bin/python -m pytest -q
-  make lint && make types && make check
-
-  # Code changes require a rebuild before `docker compose exec`/the running container will
-  # see them — neither the api nor the web image has a bind mount:
-  docker compose build api && docker compose up -d api
-  docker compose build web && docker compose up -d web
-  docker compose build realtime && docker compose up -d realtime   # deliverable 3 touches this
-
-Sign in at http://localhost:3000 as org `mnemos`, then on Keycloak's form use
-`analyst@mnemos.local` / `analyst` (or `user@mnemos.local` / `user`) — NOT
-`admin@mnemos.local` / `admin` (TRACKER §4 item 40). If sign-in fails with an "already
-belongs to a different subject" error after a fresh `docker compose down && up --build`, it
-is Keycloak's own container config: `start-dev --import-realm` has no persistent volume, so
-every full rebuild mints fresh subject UUIDs while the app's Postgres volume still points a
-JIT-provisioned `app_user` row at the old one. Fix: `DELETE FROM app_user WHERE email = '...'
-AND external_subject = '<the stale one, from the failing log line>'`, then sign in again —
-disposable dev data, not a regression.
-
-Host ports (unchanged since M1): postgres 15432, redis 6380, api 8000, realtime 8001,
-keycloak 8080, minio 9000/9001, ollama 11434. Python venv is at .venv/ in the repo root; the
-package lives in backend/.
-
-------------------------------------------------------------------------------
-WHERE THINGS ARE (current, post-B1-deliverable-2)
-
-  backend/src/mnemos/
-    core/          config (has source_encryption_key, local_fs_allowed_roots), errors (has
-                   SsrfRejectedError, and the DependencyUnavailableError/UpstreamError pair
-                   the event bus adapter now uses too), logging, clock, ids, crypto
-                   (DsnCipher — the pattern connectors/adapters/crypto.py's
-                   SourceConfigCipher already copied)
-    platform/      db engine + tenant-scoped sessions, cache.py (Redis — pub/sub, still what
-                   the realtime gateway uses), objectstore (S3/MinIO — `ObjectStore` has
-                   `list()` too), models. **`platform/events/` is real now**: `port.py`'s
-                   `EventBus`, `redis_streams.py`'s `RedisStreamsEventBus` — nothing calls
-                   `publish` yet; deliverable 4's worker is the first caller.
-    features/      identity, chat, llm (Ollama gateway), knowledge (RAG; `upload_document`'s
-                   extract/chunk/embed body still needs factoring out for deliverable 4),
-                   memory, context, connectors (real content — domain/adapters/
-                   application/api, though api/ is still three empty files; deliverable 5's
-                   UI will need routes there), datasources (NL2SQL, complete since A3),
-                   tools, prompts, observability
-    flows/         rag (A2), nl2sql (A3), agent, router (both still unbuilt)
-    entrypoints/   api, worker (main.py's reaper already works; deliverable 4 adds real job
-                   claiming and the `EventBus.publish` calls), realtime (main.py — working
-                   but UNAUTHENTICATED; **deliverable 3, this session, must fix this**), cli
-                   (has `connector register`/`list-items`)
-    _v1/           the SQLite kernel. Retrieval was ported OUT of it in A2. Memory + the
-                   six-phase compiler are still only in here, ported in C4. Its own
-                   `TrustTier` (0-6, lower = more trusted) is the scale ThreatModel.md §4's
-                   "external connectors ≥ 4" was written against — `core/types.py`'s ported
-                   `TrustTier` (10/20/30/40, higher = more trusted) is the one deliverable 4
-                   actually assigns from; see TRACKER's dated note for the reconciliation.
-  backend/migrations/    0001-0006 unchanged in behaviour (0004/0006 fixed to freeze their
-                          own table list rather than import the live one); 0007 adds
-                          `content_source` + its RLS. No migration since — deliverable 2
-                          added no schema.
-  backend/tests/  conftest.py now has a session-scoped `redis_url` fixture (a real Redis
-                  via testcontainers, same pattern as the `postgres` fixture) alongside
-                  `test_events_redis_streams.py`.
-  frontend/src/
-    app/(app)/chat/, app/(app)/knowledge/    the built screens. No sources/ screen yet —
-                                              that is deliverable 5.
-    components/chat/       SqlPanel.tsx, Composer.tsx
-    lib/chat/stream.ts
-  frontend/e2e/           chat.spec.ts, knowledge.spec.ts, nl2sql.spec.ts, auth.spec.ts — all
-                          green. Deliverable 5 adds a sources flow spec.
-  deploy/                 postgres init SQL, keycloak realm
-  docs/                   architecture, schema, API contract, threat model, ADRs
-
-Layering rule: domain (pure) <- application <- adapters/api. `features` must never import
-`flows`; `flows` may import multiple `features`.
-
-------------------------------------------------------------------------------
-START HERE
-
-Read TRACKER.md now — the header, the "2026-08-15 (night) — B1 deliverable 2 built" dated
-note, and **section 5 in full**, starting at deliverable 3. Do steps 1-7 under "WHAT TO DO,
-IN ORDER" above, then build deliverable 3 on `feat/b1-connectors`. You do not need to ask
-what to work on — begin.
+  - If PR #16 is not already ready for review when you start, inspect checks with
+    `gh pr checks 16` and mark it ready only if the pushed branch is green.
+  - The next milestone after `B1` is `B2`, not `A4`: heartbeat, retries, status
+    history, stuck-job surfacing, and per-job progress UI over the job machinery
+    `B1` introduced.
+  - Ordinary one-task-per-session discipline is back in force. Do not start `B2`
+    in the same session that only intended to close `B1`.

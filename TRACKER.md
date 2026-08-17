@@ -6,20 +6,101 @@
 > **and [`docs/ADAPTATION.md`](docs/ADAPTATION.md)** *in the same commit* — a stale
 > tracker is worse than none.
 
-**Last updated:** 2026-08-16 — `B1` deliverable 4 built: the worker claims and processes a
-real `ingest_job` end to end (extract/chunk/embed, reusing the factored-out body from
-`upload_document`), publishing to both the event bus and the now-authenticated realtime
-channel deliverable 3 built. Deliverable 5 (the sources UI) remains — see §5.
-**Phase:** **A — make it a chatbot.** `A0` ✅, `A1` ✅, `A2` ✅, `A3` ✅ — all merged to
-`main`. Phase A is complete. Build order deviates from phase order once: `B1`/`B2` come
-next, before `A4` (2026-08-15 evening re-sequencing note below).
-**Next task:** `B1` deliverable 5 — the sources UI (`frontend/src/app/(app)/sources/`):
-connect a source, browse and select items, ingest them, and watch the live
-queued/running/succeeded/failed feed over the now-real, now-authenticated pipeline
-deliverables 1-4 built. **Fully specified in §5.** This is the deliverable that takes PR
-#16 out of draft (C12).
-**Branch right now:** `feat/b1-connectors`, PR open (draft — until deliverable 5 lands).
-Deliverables 1-4's commits are on it; `main` is unchanged.
+**Last updated:** 2026-08-17 — `B1` is done, all 5/5 deliverables. The sources UI was
+live-verified in a real browser against the rebuilt compose stack, and the checked-in
+Playwright sources spec passed; see the dated note immediately below for evidence.
+**Phase:** **B — make it a platform.** `B1` ✅ is complete after `A0`–`A3`; build order
+still deviates from phase order once, so `B2` comes next before `A4` (2026-08-15 evening
+re-sequencing note below).
+**Next task:** `B2` — ingestion at scale: heartbeat, retries, status history, stuck-job
+surfacing, and the per-job progress UI over the `B1` job machinery. Do not start `A4`
+until `B2` is done; §5's "Then, in order" list remains authoritative.
+**Branch right now:** `feat/b1-connectors`, PR #16. The branch contains the completed `B1`
+work; after this commit is pushed and checks are green, PR #16 is ready for review. `main`
+is unchanged.
+
+> ### 2026-08-17 — `B1` deliverable 5 done: the sources UI is live-verified
+>
+> This note began as a mid-deliverable handoff: the code was written and every non-stack
+> check was green, but the running containers had not been rebuilt and nobody had opened
+> `/sources` in a browser. That gap is now closed. The completed deliverable is the first
+> product UI over `B1`'s connector, worker, Redis Streams and authenticated realtime pieces.
+>
+> **What's built, backend:** `entrypoints/api/routers/connectors.py` — `POST /connectors`
+> (register), `GET /connectors` (list), `GET /connectors/{slug}/items` (browse),
+> `POST /connectors/{slug}/ingest` (enqueue) — over the same `ConnectorService`/
+> `IngestJobRepository` `mnemosctl connector register`/`list-items`/`ingest` already used,
+> reachable from a browser instead of a terminal. Wired into `entrypoints/api/main.py`'s
+> lifespan (`app.state.connector_service`, `app.state.ingest_jobs`, a dedicated
+> `connector_http` client — deliberately not the redirect-following `app.state.http`, since
+> `adapters/http.py`'s connector treats a redirect as a failure). A service-layer `ValueError`
+> (a rejected config) becomes a 422 `ValidationError`; a duplicate slug's `IntegrityError`
+> becomes a 409 `ConflictError`; an unregistered slug's `LookupError` becomes a 404
+> `NotFoundError` — three translations the router owns because `ConnectorService` itself
+> (deliverable 1, unmodified) raises the plain Python exceptions `mnemosctl` was always going
+> to catch itself.
+>
+> **What's built, frontend:** `lib/connectors/api.ts` (generated-client typed calls),
+> `lib/connectors/realtime.ts` (`useIngestionFeed` — connects to `/ws/ingestion` with
+> `Sec-WebSocket-Protocol: ["bearer", token]`, exactly deliverable 3's contract, and reports
+> each transition through an `onEvent` callback keyed by `job_id` rather than an ever-growing
+> log, so a caller can fold `queued -> running -> succeeded`/`failed` into one row that
+> updates in place), `components/connectors/{RegisterSourceForm,SourceList,ItemBrowser,
+> EventFeed}.tsx`, `app/(app)/sources/page.tsx` (orchestrates: register, select a source,
+> browse its items in a checkbox table, ingest the selection, watch the live feed — the
+> `queued` row is the UI's own optimistic state from the `202` response, since the worker
+> never publishes a `queued` transition, matching §5 deliverable 4's recap verbatim), and a
+> `destinations.tsx` nav entry (`/sources`, `Plug` icon — the row TRACKER's own comment on
+> that file had already anticipated: "the sidebar grows a row per milestone — sources at
+> B1"). `EventFeed` pairs an icon with a plain-word label for every state, never colour
+> alone (DesignSystem §3/§4, `SqlPanel.tsx`'s discipline). `frontend/src/lib/api/schema.ts`
+> was regenerated against the rebuilt `api` container's live `/openapi.json` and committed
+> as generated (never hand-edited, per DesignSystem §5).
+>
+> **What's built, fixtures and compose:** `e2e-fixtures/sources/handbook.txt` — a static
+> fixture file, bind-mounted read-only into both `api` and `worker` at `/fixtures/sources`
+> (`docker-compose.yml`), which is also the one path `MNEMOS_LOCAL_FS_ALLOWED_ROOTS` now
+> opts in for the dev/CI stack. `frontend/e2e/sources.spec.ts` registers a `local_fs`
+> connector against that fixture with a **per-run-unique slug** (`e2e-fixtures-<runId>`) —
+> load-bearing, not decoration: `content_source` has a `(org_id, slug)` uniqueness
+> constraint and this deliverable has no unregister/delete, so a fixed slug would 409 on the
+> second run, and since `IngestJobRepository.enqueue`'s idempotency key is `f"{slug}:{uri}"`,
+> the unique slug also keeps the ingest idempotency-key collision-free across runs without
+> needing a fresh fixture file each time.
+>
+> **Automated evidence before live verification:** backend — `make
+> test` 415 passed (410 prior + 5 new, `tests/test_connectors_router.py`: register/list/
+> browse/ingest against a real Postgres end to end, a `local_fs` root outside
+> `MNEMOS_LOCAL_FS_ALLOWED_ROOTS` refused as 422 not 500, a duplicate slug refused as 409
+> not 500, an unlisted ingest `uri` refused as 404, and the same cross-org RLS isolation
+> `test_knowledge_endpoints.py` proves for documents, proven here for `content_source`'s
+> migration-`0007` policy); `make lint` / `make types` clean; `make check` (`alembic check`)
+> clean — deliverable 5 adds no schema. Frontend — `npm run test` 99 passed (97 prior + 2
+> new, `app/(app)/sources/page.test.tsx`: registering a source adds it to the list against a
+> stubbed router, and — against a hand-rolled `FakeWebSocket` double plus `setAccessToken`
+> — ingesting a selected item shows an optimistic "Queued" row and then a dispatched socket
+> message updates that *same* row to "Succeeded" rather than appending a second one); `npm
+> run lint` clean; `npx tsc --noEmit` clean; `npm run build` clean, `/sources` is a real
+> compiled route.
+>
+> **Live verification, against the rebuilt compose stack:** `docker compose up -d --build`
+> rebuilt the stack; `curl localhost:8000/readyz` returned
+> `{"postgres":"ok","redis":"ok","ollama":"ok","objectstore":"ok"}`. The `api` container was
+> confirmed to have `MNEMOS_LOCAL_FS_ALLOWED_ROOTS=["/fixtures/sources"]`, the mounted
+> `handbook.txt` fixture, and the new connectors router. In Chromium, signed in as
+> `analyst@mnemos.local` (org `mnemos`), opened Sources, registered a `local_fs` connector
+> against `/fixtures/sources`, browsed to `handbook.txt`, selected it, ingested it, and saw
+> the same feed row move through the live `Queued`/`Running`/`Succeeded` path with no page
+> reload. The checked-in script then proved the same flow repeatably:
+> `cd frontend && npx playwright test e2e/sources.spec.ts` — 1 passed. A separate headed
+> Chromium run of the same spec also passed.
+>
+> **Final evidence after the live pass:** `make test` — 415 passed; `make lint` clean;
+> `make types` clean (`mypy --strict`, 187 source files); `make check` clean (`alembic
+> check`: no new upgrade operations detected). Frontend: `npm run lint` clean;
+> `npx tsc --noEmit` clean; `npm run test` — 99 passed; `npm run build` clean with
+> `/sources` in the route table. `B1` now satisfies C12/C14: a person can connect a source,
+> browse it, ingest an item, and watch ingestion events arrive live.
 
 > ### 2026-08-16 — `B1` deliverable 4 built: the worker claims and processes a real
 > `ingest_job`
@@ -979,7 +1060,7 @@ order" list is the authoritative next-up sequence; the note above it explains wh
 
 | ID | What it builds | You can now… | Status |
 |---|---|---|---|
-| **B1** | Object storage · source connectors (MinIO/S3, local FS, HTTP) · Redis Streams event bus · sources UI | **connect a source, browse it, and watch ingestion events arrive live** | 🟡 **deliverable 4/5 done** — connectors, event bus, realtime auth, the worker's real job-processing path; only the UI remains |
+| **B1** | Object storage · source connectors (MinIO/S3, local FS, HTTP) · Redis Streams event bus · sources UI | **connect a source, browse it, and watch ingestion events arrive live** | ✅ 2026-08-17 — all 5/5 deliverables done, browser-verified against the rebuilt stack |
 | **B2** | Ingestion jobs at scale: heartbeat, retries, status history, stuck-job reaper · per-job progress UI | **ingest a folder and watch every job's progress — including one that dies, surfaced as stuck rather than silently lost** | ⬜ **after `B1`** |
 | **B3** | MCP tool runtime: registry, per-user credentials, trust tiers, approval gates · tool console | **register a tool, have the assistant call it, and approve a gated call** — with a denial that names the offending source on screen | ⬜ |
 | **B4** | Agent flow: bounded state machine over tools, checkpoints, step trace | **give it a multi-step task and watch it plan, call tools and finish — with every step inspectable** | ⬜ |
@@ -1031,13 +1112,14 @@ discarded. If you find a reference to an old ID anywhere, this is the translatio
 | `M13` frontend | dissolved into `F0` + a UI slice per milestone | Unchanged by this re-plan |
 | `M14` realtime + e2e + docs | `D1` | |
 
-### 🟡 B1 — connect a source and watch it ingest, deliverable 4/5 done 2026-08-16
+### ✅ B1 — connect a source and watch it ingest, verified 2026-08-17
 
-**Deliverables 1-4 — the `SourceConnector` port + factory, the `EventBus` port + Redis
-Streams adapter, the realtime gateway's JWT-validated WS handshake, and the worker's real
-job-processing path — are done; deliverable 5 (the sources UI) is not.** Branch
-`feat/b1-connectors`, PR open in draft (stays draft until deliverable 5 exists, per C12 —
-deliverables 1-4 have no product UI by design).
+**You can now connect a source, browse it, ingest an item, and watch ingestion events
+arrive live.** All five deliverables are done on `feat/b1-connectors`: the
+`SourceConnector` port + factory, the `EventBus` port + Redis Streams adapter, the
+realtime gateway's JWT-validated WS handshake, the worker's real job-processing path, and
+the sources UI. Full deliverable-5 browser evidence is in the "2026-08-17" dated note near
+the top of this file.
 
 What's built (deliverable 1): `features/connectors/domain/port.py` (`SourceItem`,
 `SourceConnector` protocol), three adapters (`s3.py` over the extended `ObjectStore` port,
@@ -1088,13 +1170,26 @@ watched `queued -> running -> succeeded` via `psql`/`redis-cli`, plus the failur
 idempotency paths), is in the dated note near the top of this file ("`B1` deliverable 4
 built").
 
-**Evidence:** `make test` — 410 passed (403 prior + 7 new: `tests/test_worker_ingestion.py`
-— claim exclusivity under real concurrency, the full connector-ingest success path against
-real Postgres + Redis, the missing-item failure path, and the RLS regression test for the
-`elevated_session` fix). `make lint` / `make types` clean. `make check` (`alembic check`)
-clean — no migration needed. No frontend change; not claimed as done.
+What's built (deliverable 5): `entrypoints/api/routers/connectors.py` exposes
+register/list/browse/ingest HTTP routes over the same `ConnectorService` and
+`IngestJobRepository` deliverables 1 and 4 already used from the CLI, and
+`entrypoints/api/main.py` wires that service into the API lifespan. The frontend gained
+`frontend/src/app/(app)/sources/`, typed connector API helpers, the authenticated
+`useIngestionFeed` WebSocket hook, connector components, and a Sources sidebar entry.
+`docker-compose.yml` now mounts `e2e-fixtures/sources/handbook.txt` read-only into both
+`api` and `worker` at `/fixtures/sources`, the one dev root
+`MNEMOS_LOCAL_FS_ALLOWED_ROOTS` permits.
 
-**Not done:** the sources UI — deliverable 5, fully specified in §5, unstarted.
+**Evidence:** deliverable 4's own evidence remains: `make test` 410 passed, `make lint` /
+`make types` / `make check` clean. Deliverable 5 closes `B1` with: `make test` — 415
+passed; `make lint` clean; `make types` clean (`mypy --strict`, 187 source files);
+`make check` clean. Frontend: `npm run lint`, `npx tsc --noEmit`, `npm run test` — 99
+passed, and `npm run build` all clean. Real browser: after `docker compose up -d --build`
+and a fully green `/readyz`, signed in as `analyst@mnemos.local`, opened Sources,
+registered the local filesystem connector against `/fixtures/sources`, browsed to
+`handbook.txt`, selected and ingested it, and watched the live feed reach `Succeeded`
+without a page reload. `frontend/e2e/sources.spec.ts` passed in both a headed Chromium run
+and the normal Playwright run.
 
 ### ✅ A3 — ask about your data, verified end to end 2026-08-15, PR #15
 
@@ -2525,14 +2620,11 @@ Recorded so they are not rediscovered as surprises:
 real browser against the real stack. Full evidence is in the dated note near the top of
 this file ("`A3` deliverables 4-5 done") and in §3's `A3` entry.
 
-**`B1` deliverables 1-4 are done.** Full evidence for each is in its own dated note near the
-top of this file ("2026-08-15 (evening)" for 1, "2026-08-15 (night)" for 2, "2026-08-16" —
-the earlier of the two same-dated notes — for 3, and the deliverable-4 note above this one
-— for 4) and in §3's `B1` entry. **Deliverable 5 below (the sources UI) is unchanged from
-the original brief** — it was written before deliverables 1-4 existed, but nothing in it
-assumed a shape for `SourceConnector`/`ConnectorFactory`/`EventBus`/the realtime handshake/
-the worker beyond what got built, so it still applies as written. What the sources UI needs
-to know about each, in one place:
+**`B1` is done, all 5/5 deliverables, verified 2026-08-17.** Full evidence for each is in
+its own dated note near the top of this file ("2026-08-15 (evening)" for 1,
+"2026-08-15 (night)" for 2, "2026-08-16" — the earlier of the two same-dated notes — for
+3, the other "2026-08-16" note for 4, and "2026-08-17" for 5) and in §3's `B1` entry.
+`B2` is next. What that work inherits from `B1`, in one place:
 
 - **Deliverable 1** (`SourceConnector` port + factory): `ConnectorService` (`register`,
   `list_sources`, `list_items`, `fetch_item`) is the one thing to call — never
@@ -2681,7 +2773,7 @@ matching how `A3`'s deliverables were committed:**
    real Postgres, ever — fixed via `db.elevated_session()`. Evidence: 7 new tests
    (`tests/test_worker_ingestion.py`) against real Postgres + Redis, plus live verification
    against the rebuilt compose stack. Full detail in the dated note above.
-5. **The sources UI, `frontend/src/app/(app)/sources/`.** Connect a source (a form per
+5. ✅ **Done (2026-08-17). The sources UI, `frontend/src/app/(app)/sources/`.** Connect a source (a form per
    connector kind), browse its listed items in a table, select some and ingest them, then
    watch a live event feed of `queued`/`running`/`succeeded`/`failed` transitions arrive over
    the now-authenticated WebSocket with no page refresh — `succeeded`, not `done` (see item
@@ -2689,15 +2781,14 @@ matching how `A3`'s deliverables were committed:**
    by the ingest request the UI itself just made). Each state pairs an icon with a
    plain-word label, never colour alone — the same accessible-state discipline
    `SqlPanel.tsx` already established and `test_no_component_hardcodes_a_colour` already
-   enforces (DesignSystem tokens only). `features/connectors/api/` (still three empty files)
-   is where this deliverable's backend routes belong — list sources, list items, enqueue an
+   enforces (DesignSystem tokens only). The backend routes live in
+   `entrypoints/api/routers/connectors.py` — list sources, list items, register, and enqueue
    ingest (mirroring `mnemosctl connector register`/`list-items`/`ingest`, see §5's
-   deliverable-4 recap above for the exact contract each route needs to match). New
-   Playwright coverage: register the local-filesystem connector against a small fixture
-   directory (no real S3 bucket or live URL needed in CI — the point of doing local
-   filesystem first in this deliverable list is that it is the one connector kind a CI
-   runner can exercise for free), ingest one file, and observe its job reach `succeeded`
-   live.
+   deliverable-4 recap above for the exact contract each route matches). Playwright coverage
+   registers the local-filesystem connector against a small fixture directory (no real S3
+   bucket or live URL needed in CI), ingests one file, and observes its job reach
+   `succeeded` live. Verified against the rebuilt compose stack, in Chromium, signed in as
+   `analyst@mnemos.local`.
 
 **Explicitly NOT `B1`, so nobody drifts into building it early:** heartbeat/backoff retry
 depth beyond one immediate failure, a per-job progress percentage or partial-chunk count,
@@ -2705,17 +2796,13 @@ more than one adapter per connector kind, crawling or discovering URLs (the HTTP
 only ever fetches an operator-supplied list), and migrating `A2`'s manual-upload path onto
 the job queue. All of that is `B2` or later — see §5's "Then, in order" list below.
 
-**Evidence bar to close `B1`,** matching every prior milestone's bar: `make test` green with
-new coverage for each connector adapter (including the SSRF deny-list actually refusing a
-loopback/link-local URL, not just asserting it exists), the event bus round-trip, the
-worker's claim-and-process path end to end against real Postgres + Redis, and the WS
-cross-org channel refusal; `make lint` / `make types` / `make check` (including a clean
-`alembic check` against the new migration) all clean; `frontend`'s lint/tsc/test/build
-clean; the new Playwright sources flow green; **real browser verification** before calling
-it done (C12/C14) — connect the local filesystem connector against real seeded fixture
-files, in a real browser, and watch the live feed move, the same bar `A3`'s browser
-verification set; TRACKER and `docs/ADAPTATION.md` updated in the same commit as each
-deliverable, not batched at the end.
+**Evidence bar to close `B1`, met 2026-08-17:** `make test` green with coverage for each
+connector adapter (including the SSRF deny-list actually refusing loopback/link-local URL
+shapes), the event bus round-trip, the worker's claim-and-process path end to end against
+real Postgres + Redis, the WS cross-org channel refusal, and the connectors router; `make
+lint` / `make types` / `make check` clean; frontend lint/tsc/test/build clean; the
+Playwright sources flow green; and real browser verification completed against the rebuilt
+stack.
 
 ### Then, in order — this list is the plan, and it no longer matches phase order exactly
 
@@ -2726,14 +2813,14 @@ why `B1`/`B2` now sit before `A4`. The phase tables still group work by kind; th
 promise strict A-then-B-then-C-then-D order.
 
 - **`A3` — ask about your data.** ✅ Done, all 5/5 deliverables, verified 2026-08-15.
-- **`B1` — connect a source and watch it ingest.** ⬅ **next, fully specified above.**
-  Object storage port + `S3ObjectStore` already exist from `A2` (MinIO); `B1` adds the
+- **`B1` — connect a source and watch it ingest.** ✅ Done, all 5/5 deliverables, verified
+  2026-08-17.
+  Object storage port + `S3ObjectStore` already existed from `A2` (MinIO); `B1` added the
   `SourceConnector` abstraction (MinIO/S3, local filesystem, HTTP URL), a Redis Streams
   event bus, an authenticated realtime channel, and the worker's first real job-processing
   path, so a source is *connected and browsed* rather than only uploaded file-by-file, with
-  ingestion events visible live in a new sources UI. Five deliverables, in build order,
-  above — read them before starting rather than re-deriving the design.
-- **`B2` — ingestion at scale.** Heartbeat, retries, status history, and a stuck-job reaper
+  ingestion events visible live in a new sources UI.
+- **`B2` — ingestion at scale.** ⬅ **next.** Heartbeat, retries, status history, and a stuck-job reaper
   over the job machinery `B1` introduces, with a per-job progress UI. Depends on `B1`
   existing first.
 - **`A4` — stop choosing a mode.** Classify each message to chat / RAG / NL2SQL and show

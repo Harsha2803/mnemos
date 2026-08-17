@@ -37,10 +37,15 @@ from mnemos.core.logging import configure_logging, get_logger, request_id_var
 from mnemos.core.security import PasswordHasher
 from mnemos.entrypoints.api.routers import auth as auth_router
 from mnemos.entrypoints.api.routers import chat as chat_router
+from mnemos.entrypoints.api.routers import connectors as connectors_router
 from mnemos.entrypoints.api.routers import knowledge as knowledge_router
 from mnemos.entrypoints.api.security import enforce_authentication, public_route_paths
 from mnemos.features.chat.adapters.repository import SqlChatRepository
 from mnemos.features.chat.application.service import ChatService
+from mnemos.features.connectors.adapters.crypto import SourceConfigCipher
+from mnemos.features.connectors.adapters.repository import ContentSourceRepository
+from mnemos.features.connectors.application.factory import ConnectorFactory
+from mnemos.features.connectors.application.service import ConnectorService
 from mnemos.features.datasources.adapters.executor import PostgresExecutor
 from mnemos.features.datasources.adapters.introspection import PostgresIntrospector
 from mnemos.features.datasources.adapters.repository import (
@@ -66,6 +71,7 @@ from mnemos.features.identity.providers import (
     PlatformTokenConfig,
     ProviderFactory,
 )
+from mnemos.features.knowledge.adapters.jobs_repository import IngestJobRepository
 from mnemos.features.knowledge.adapters.repository import KnowledgeRepository
 from mnemos.features.knowledge.adapters.retrieval import SqlRetriever
 from mnemos.features.knowledge.application.service import KnowledgeService
@@ -217,12 +223,30 @@ async def lifespan(app: FastAPI) -> AsyncIterator[None]:
         repair_attempts=settings.sql_repair_attempts,
     )
 
+    # --- connectors: browse a registered source, enqueue an ingest ---------
+    # A dedicated client, not `app.state.http` (which follows redirects for
+    # the OIDC round trip) — `adapters/http.py`'s connector deliberately
+    # treats a redirect as a failure rather than following it, and sharing a
+    # redirect-following client here would silently defeat that.
+    app.state.connector_http = httpx.AsyncClient()
+    connector_cipher = SourceConfigCipher(settings.source_encryption_key.get_secret_value())
+    app.state.connector_service = ConnectorService(
+        repository=ContentSourceRepository(app.state.db, DEFAULT_ID_GENERATOR),
+        cipher=connector_cipher,
+        factory=ConnectorFactory(
+            settings=settings, cipher=connector_cipher, http_client=app.state.connector_http
+        ),
+        local_fs_allowed_roots=settings.local_fs_allowed_roots,
+    )
+    app.state.ingest_jobs = IngestJobRepository(app.state.db, DEFAULT_ID_GENERATOR)
+
     log.info("api.startup", env=str(settings.env), api_prefix=settings.api_prefix)
     try:
         yield
     finally:
         await app.state.http.aclose()
         await app.state.ollama_http.aclose()
+        await app.state.connector_http.aclose()
         await app.state.cache.close()
         await app.state.db.dispose()
         log.info("api.shutdown")
@@ -356,6 +380,7 @@ def create_app() -> FastAPI:
     app.include_router(auth_router.router, prefix=settings.api_prefix)
     app.include_router(chat_router.router, prefix=settings.api_prefix)
     app.include_router(knowledge_router.router, prefix=settings.api_prefix)
+    app.include_router(connectors_router.router, prefix=settings.api_prefix)
 
     return app
 

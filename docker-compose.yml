@@ -47,6 +47,14 @@ x-backend-env: &backend-env
   # `core/config.py` separately refuses to start in production while this is
   # still the development default, so a real deployment cannot inherit it.
   MNEMOS_JWT_SECRET: dev-only-change-me-this-is-not-a-real-secret-32b+
+  # The deployment-operator boundary around the local-filesystem connector
+  # (`B1` deliverable 1) — empty (default-deny) unless a real path is opted
+  # in. `/fixtures/sources` is the one path this compose file actually
+  # mounts (below), the same fixture directory both `api` (register/browse)
+  # and `worker` (fetch) need to see, at the same container path, for the
+  # sources UI's local-fs flow to work at all — in dev and in the deliverable
+  # 5 Playwright spec alike.
+  MNEMOS_LOCAL_FS_ALLOWED_ROOTS: '["/fixtures/sources"]'
   PYTHONUNBUFFERED: "1"
 
 # The browser-facing configuration, in one place because it is needed twice: as
@@ -196,6 +204,11 @@ services:
       context: ./backend
       dockerfile: Dockerfile
     environment: *backend-env
+    # Read-only: the local-fs connector only ever lists and fetches, never
+    # writes back to a source. Same directory, same path, as `worker` below —
+    # register (here) and fetch (there) have to agree on what a `root`/`uri`
+    # resolves to.
+    volumes: ["./e2e-fixtures/sources:/fixtures/sources:ro"]
     depends_on:
       postgres: {condition: service_healthy}
       redis: {condition: service_healthy}
@@ -220,6 +233,7 @@ services:
       context: ./backend
       dockerfile: Dockerfile
     environment: *backend-env
+    volumes: ["./e2e-fixtures/sources:/fixtures/sources:ro"]
     depends_on:
       postgres: {condition: service_healthy}
       redis: {condition: service_healthy}
