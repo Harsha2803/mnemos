@@ -405,6 +405,8 @@ export interface components {
             content: string;
             /** Flow */
             flow: string | null;
+            /** Router Rationale */
+            router_rationale: string | null;
             /** Prompt Tokens */
             prompt_tokens: number;
             /** Completion Tokens */
@@ -671,16 +673,6 @@ export interface components {
         SendMessageRequest: {
             /** Content */
             content: string;
-            /**
-             * Use Documents
-             * @default false
-             */
-            use_documents: boolean;
-            /**
-             * Use Datasource
-             * @default false
-             */
-            use_datasource: boolean;
         };
         /** SourceResponse */
         SourceResponse: {

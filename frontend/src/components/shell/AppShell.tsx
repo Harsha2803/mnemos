@@ -54,7 +54,7 @@ export function AppShell({ children }: { children: ReactNode }) {
   const sidebarIsInline = useMediaQuery(SIDEBAR_INLINE, true);
 
   // An open conversation is chrome as much as it is prose (the composer, its
-  // mode toggles, `SqlPanel`), so it gets the wider `measure-chat` column and
+  // flow annotations, `SqlPanel`), so it gets the wider `measure-chat` column and
   // a tighter gutter rather than the `measure`/`px-6 py-8` every other route
   // reads at a document's pace. `/chat` with nothing selected is still the
   // narrow `EmptyState`, hence the trailing slash.

@@ -25,6 +25,13 @@ import type { components } from "@/lib/api/schema";
 
 export type ChatMessage = components["schemas"]["ChatMessageResponse"];
 
+export type AnswerFlow = "chat" | "rag" | "nl2sql";
+
+export type RouteDecision = {
+  flow: AnswerFlow;
+  reason: string;
+};
+
 /**
  * The read-only AST guard's five outcomes (`SqlVerdict` on the backend,
  * `core/types.py`). Only `"allowed"` ever executes — every other value means
@@ -65,25 +72,11 @@ export type Nl2SqlResult = {
 };
 
 export type ChatStreamHandlers = {
+  onRoute: (decision: RouteDecision) => void;
   onToken: (text: string) => void;
   /** `nl2sql` is present only when the answer came from the NL2SQL flow. */
   onDone: (message: ChatMessage, nl2sql?: Nl2SqlResult) => void;
   onError: (message: string) => void;
-};
-
-export type ChatStreamOptions = {
-  /**
-   * Answer from the knowledge base rather than the model alone. Manual for
-   * now — `A4`'s classifier replaces this with real routing, and the backend
-   * says the same thing in `SendMessageRequest`.
-   */
-  useDocuments?: boolean;
-  /**
-   * Answer by generating and running SQL against the registered datasource.
-   * Same provisionality as `useDocuments`, and mutually exclusive with it —
-   * the backend 422s if both are `true`.
-   */
-  useDatasource?: boolean;
 };
 
 /**
@@ -95,14 +88,9 @@ export async function streamChatReply(
   content: string,
   handlers: ChatStreamHandlers,
   signal?: AbortSignal,
-  options: ChatStreamOptions = {},
 ): Promise<void> {
   const url = `${API_BASE_URL}/api/v1/chat/sessions/${sessionId}/messages`;
-  const body = JSON.stringify({
-    content,
-    use_documents: options.useDocuments ?? false,
-    use_datasource: options.useDatasource ?? false,
-  });
+  const body = JSON.stringify({ content });
 
   let response = await send(url, body, getAccessToken(), signal);
   if (response.status === 401) {
@@ -166,7 +154,9 @@ function dispatch(frame: string, handlers: ChatStreamHandlers): void {
   if (typeof payload !== "object" || payload === null) return;
   const record = payload as Record<string, unknown>;
 
-  if (name === "token" && typeof record.text === "string") {
+  if (name === "route" && isRouteDecision(record)) {
+    handlers.onRoute(record);
+  } else if (name === "token" && typeof record.text === "string") {
     handlers.onToken(record.text);
   } else if (name === "done" && isChatMessage(record.message)) {
     handlers.onDone(record.message, isNl2SqlResult(record.nl2sql) ? record.nl2sql : undefined);
@@ -177,6 +167,13 @@ function dispatch(frame: string, handlers: ChatStreamHandlers): void {
 
 function isChatMessage(value: unknown): value is ChatMessage {
   return typeof value === "object" && value !== null && "id" in value && "role" in value;
+}
+
+function isRouteDecision(value: Record<string, unknown>): value is RouteDecision {
+  return (
+    (value.flow === "chat" || value.flow === "rag" || value.flow === "nl2sql") &&
+    typeof value.reason === "string"
+  );
 }
 
 function isNl2SqlResult(value: unknown): value is Nl2SqlResult {
