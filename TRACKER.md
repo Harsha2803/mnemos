@@ -22,6 +22,119 @@ wrote it.
 **Branch right now:** none open. `main`'s tip is the squashed `A3` merge plus this session's
 docs-only commit (no code changed).
 
+> ### 2026-08-16 (later still, unfinished) — message actions (copy/edit/share) + a
+> ### streaming-scroll fix: **scoped, not built — read this before touching it**
+>
+> A fourth out-of-band request in the same session as the three notes below, same branch
+> (`feat/frontend-ui-fixes`, PR #18) — but this one was interrupted mid-investigation, no
+> code written, **zero commits**. Written up here rather than left implicit, per §0 rule 9's
+> "if a task proves bigger than it looked... rewrite §5 [or the relevant note] so the
+> remainder is fully specified for the next agent" — the closest fit, even though nothing
+> was landed to call a "first piece."
+>
+> **What was asked:** a ChatGPT-style action row on chat messages — Share, Copy, Edit the
+> question — plus a fix so scrolling up during a live streaming answer does not get yanked
+> back to the bottom on every token.
+>
+> **Two scope decisions already made** (asked via the harness's clarifying-question tool,
+> not assumed):
+>   1. **Edit → "regenerate from there."** Editing a previously-sent question deletes it and
+>      everything the conversation said or asked after it (the old answer included), then
+>      streams a fresh reply for the edited content — ChatGPT's own behaviour. Needs a new
+>      backend endpoint; the alternative (append the edit as a new message, leave history
+>      alone) was explicitly turned down.
+>   2. **Share → "copy link, org members only."** No public/unauthenticated surface. Sharing
+>      copies this conversation's own `/chat/{id}` app URL to the clipboard; opening it still
+>      requires sign-in and only works for someone in the same org who already has access.
+>      A real public share-token table + unauthenticated route + public page was on the table
+>      and explicitly declined — flagged at the time as a genuine new data-exposure surface
+>      for an enterprise chat app, which is why it went to the project owner rather than
+>      being assumed.
+>
+> **The backend design for edit-and-regenerate, worked out but not written:**
+>   - `ChatRepository` (`ports.py`) gains `delete_messages_from(*, org_id, session_id,
+>     ordinal)` — deletes every message in the session with `ordinal >=` the given one.
+>     `MessageCitation`/`Bookmark`/`Feedback` all FK `chat_message.id` with `ondelete=
+>     "CASCADE"` already (`adapters/models.py`), confirmed by reading the schema — no
+>     citation/bookmark cleanup needed, the DB does it.
+>   - `SqlChatRepository` implements it as a plain `DELETE ... WHERE org_id = ? AND
+>     session_id = ? AND ordinal >= ?`, same `Database.session(org_id=...)` RLS discipline
+>     as every other method in that file.
+>   - `ChatService.stream_reply`'s generation loop (the `async for event in
+>     self._model.stream(turns)` block, persisting only on `ChatDone`) gets factored out into
+>     a private `_generate(*, org_id, session_id, turns)` helper, so `edit_message` (below)
+>     does not duplicate it — `stream_reply` becomes "append, maybe retitle, build turns,
+>     `async for event in self._generate(...): yield event`".
+>   - New `ChatService.edit_message(*, org_id, user_id, session_id, message_id, content)`:
+>     `_owned_session` check (existing), `list_messages` once, locate the target by id +
+>     `role is MessageRole.USER` (404 if not found or not the caller's own turn — same
+>     404-not-403 discipline as `_owned_session`'s own docstring), look at the message right
+>     after it in the list — if it is an assistant reply with a non-`None` `flow` (i.e. it
+>     was answered via `RagFlow` or `Nl2SqlFlow`, which each own their own persistence
+>     through the same `ChatRepository` and do not have an edit path built), raise
+>     `ValidationError` (422) rather than silently regenerating a plain-chat answer to a
+>     question that was originally grounded in documents or a datasource — matching this
+>     router's existing `use_documents`-and-`use_datasource` mutual-exclusion error shape.
+>     Otherwise: `delete_messages_from(ordinal=target.ordinal)`, `append_user_message`
+>     (returns the fresh row), build turns from `history[:target_index] + [new_message]`
+>     (no second `list_messages` round trip needed), stream via `_generate`.
+>   - Router (`entrypoints/api/routers/chat.py`): `send_message`'s priming-then-`Streaming
+>     Response` plumbing (the `first = await anext(events, None)` block through the returned
+>     `StreamingResponse`) factors into a shared `_sse_response(events)` helper, since the
+>     new endpoint needs the identical wiring. New `EditMessageRequest` (`content` only — no
+>     `use_documents`/`use_datasource`; edit stays plain-chat-only, enforced by the service).
+>     New `POST /sessions/{session_id}/messages/{message_id}/edit`, a `_parse_message_id`
+>     helper mirroring `_parse_session_id`.
+>   - Test shape to follow: `backend/tests/test_chat_endpoints.py` already has the fixtures
+>     (`Seed`, `FakeChatModel`, `make_client`) — new tests would cover regenerate-discards-
+>     everything-after, 404 on someone else's message / a non-`user`-role message, 422 on a
+>     rag/nl2sql-answered turn, and that citations/bookmarks on the discarded messages are
+>     actually gone (cascade, not just unreferenced).
+>
+> **The frontend design, worked out but not written:**
+>   - `lib/chat/stream.ts`: `streamChatReply`'s body (the 401-retry-then-read-frames
+>     sequence) factors into a private `streamReply(url, body, handlers, signal)`, reused by
+>     a new `streamEditedReply(sessionId, messageId, content, handlers, signal)` posting to
+>     the new `/edit` route with `{content}` only.
+>   - `MessageBubble.tsx`'s `DisplayMessage` needs a `flow?: string | null` field so a user
+>     bubble can know whether *its own* answer (the assistant turn right after it) came from
+>     `rag`/`nl2sql` — `ChatMessageResponse.flow` already carries this from both `GET
+>     .../sessions/{id}` (loading history) and the `done` SSE frame (`onDone`'s `message.
+>     flow`) — no backend response-shape change needed, just wiring it into `page.tsx`'s two
+>     places that build `DisplayMessage` objects, which currently drop it. The edit action
+>     shows only on a user bubble whose following assistant `flow` is `null`/absent — hidden,
+>     not a dead button that 422s, per `EmptyState.tsx`'s own "an action that does not work
+>     is worse than none" precedent elsewhere in this codebase.
+>   - Not designed at all yet: the actual hover action-row UI (Share/Copy/Edit affordances
+>     on `MessageBubble`), the Copy implementation (`navigator.clipboard.writeText`, trivial,
+>     no ambiguity), the Share implementation (copy `window.location.href` for the current
+>     `/chat/{sessionId}` route, also trivial once the decision above was made), the actual
+>     edit-in-place composer UX (does the bubble turn into an editable textarea? does it
+>     reuse `RenameField`'s pattern from `ChatSessionList.tsx`?), and the streaming-scroll fix
+>     (`MessageList.tsx`'s `useEffect` currently force-scrolls to bottom on every `messages`
+>     change with no check for whether the user had scrolled away first — needs a "was
+>     already near the bottom" check, likely paired with a ChatGPT-style "jump to bottom"
+>     affordance once the user has scrolled up during a live stream, matching the existing
+>     `scrollbar-thin` pane from the note two below this one).
+>
+> **Why this stopped here:** interrupted by the project owner before any file was written,
+> immediately after `list_messages`/repository/model reading confirmed the cascade-delete
+> behaviour above. Nothing to run, nothing to test, nothing pushed.
+>
+> **`prompt.txt` was deliberately left untouched**, again (see the scrollbar note below for
+> the general reason — the concurrent `B1` session on `feat/b1-connectors` owns that file).
+> Specifically this time: this worktree's copy is still at commit `d228404`, the *pre-B1-
+> build* handoff, predating even the "night" rewrite this session's own system prompt
+> quotes — editing it here would edit a copy several rewrites behind the one the other
+> session is actually working from, and risks a conflict neither session could resolve
+> sanely. This note is the handoff instead.
+>
+> **Open question for whoever resumes this:** same branch/PR #18, or a new branch? Every
+> prior out-of-band note on this branch was small enough that reusing PR #18 was an easy
+> call; this one adds a real backend endpoint and a schema-level behaviour change (message
+> deletion), which reads more like a feature than polish. Worth deciding deliberately
+> rather than defaulting to "same branch" out of momentum.
+>
 > ### 2026-08-16 (later still) — hover-marquee titles + a motion pass (product polish, not
 > ### on the roadmap)
 >
