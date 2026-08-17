@@ -8,63 +8,66 @@ Start from `main`.
 
 Read first, in order:
 
-  1. TRACKER.md — it is the live source of truth. Read the header, the 2026-08-17
-     `B1` deliverable-5 note near the top, §3's `B1` entry, and §5's "Then, in
-     order" list.
-  2. docs/ADAPTATION.md — read §7's `B1` row, §8's `B1` subsection, and the
-     "Not started" list.
-  3. Only then read code for the next milestone.
+  1. TRACKER.md — it is the live source of truth. Read the header, §0's agent
+     operating instructions, §3's `B2` and `A3` entries, §5's complete `A4`
+     brief, and §7's update protocol.
+  2. docs/ADAPTATION.md — read §7's `A4`/`B2` rows, §8's `B2` subsection,
+     the "Not started" list, and §10's notes for the next session.
+  3. README.md, then the existing chat/RAG/NL2SQL code named by §5.
+  4. docs/CodingStandards.md before backend work and docs/DesignSystem.md
+     before frontend work.
 
 Current state:
 
-  - `A0` through `A3` are done and merged to `main`.
-  - `B1` is done and merged to `main`: source connectors, Redis Streams,
-    authenticated ingestion WebSocket, the worker's real connector-ingest path,
-    backend connector routes, the Sources UI, local-fs fixture wiring, and the
-    Playwright sources spec.
-  - The out-of-band frontend polish PR #18 is also merged to `main`: conversation
-    naming, rename/delete, upload limits and multi-file upload, chat layout
-    padding, resizable panels, sidebar collapse, hover marquee titles, motion
-    polish, and the transcript scrollbar.
-  - The per-session log-file work from PR #17 is already merged.
-  - As of this handoff there should be no open PRs. If `gh pr list --state open`
-    says otherwise, trust the live output and inspect that PR before starting
-    new work.
+  - `A0` through `A3`, `B1`, and `B2` are done and merged to `main`.
+  - `B2` landed in PR #19 with heartbeat/lease renewal, retry/backoff, richer
+    status history, stuck-job surfacing, recent-job replay, per-job progress,
+    the expanded Sources UI, and the UI enhancement handoff.
+  - The final review fenced job mutations by the current worker owner, fixed
+    retry attempt accounting, protected safe public errors, prevented stale
+    REST hydration from overwriting newer WebSocket state, and corrected shell
+    preference restoration and interactive target semantics.
+  - PRs #17 and #18 remain merged: per-session log files and the earlier
+    frontend polish work respectively.
+  - As of this handoff there should be no open PRs. If
+    `gh pr list --state open` says otherwise, trust the live output and inspect
+    that PR before starting new work.
 
-Verification evidence for completed `B1`:
+Verification evidence for completed `B2` and its final review:
 
-  - `docker compose up -d --build` rebuilt the stack.
-  - `curl localhost:8000/readyz` returned `postgres`, `redis`, `ollama`, and
-    `objectstore` all `ok`.
-  - In Chromium, signed in as org `mnemos`, user `analyst@mnemos.local` /
-    `analyst`, opened Sources, registered a `local_fs` connector against
-    `/fixtures/sources`, browsed to `handbook.txt`, selected and ingested it, and
-    watched the live feed reach `Succeeded` without a page reload.
-  - `cd frontend && npx playwright test e2e/sources.spec.ts` passed; a separate
-    headed Chromium run of the same spec also passed.
-  - After merging PR #18 first and resolving `B1` against the updated `main`:
-    backend `make test` — 429 passed; `make lint`, `make types`, and `make check`
-    clean.
-  - Frontend after the same resolution: `npm run lint`, `npx tsc --noEmit`,
-    `npm run test` — 111 passed, and `npm run build` clean.
-  - The rebuilt combined compose stack reported `/readyz` fully green and
-    `npx playwright test e2e/sources.spec.ts` passed again.
+  - Focused backend worker/repository/router tests: 17 passed.
+  - Full backend `make test`: 434 passed; `make lint`, `make types`, and
+    `make check` clean.
+  - Frontend `npm run test -- --run`: 114 passed; `npm run lint`,
+    `npx tsc --noEmit`, and `npm run build` clean.
+  - `docker compose up -d --build` rebuilt the stack; `/readyz` returned
+    `postgres`, `redis`, `ollama`, and `objectstore` all `ok`.
+  - `npx playwright test e2e/sources.spec.ts` passed in Chromium against the
+    rebuilt stack.
+  - PR #19's backend, frontend, and Compose GitHub Actions checks passed.
 
 Important rules:
 
   - Never use the work GitHub account or email (`harshaJKT`, `@jktech.com`).
-    Confirm `Harsha2803` before any push.
+    Confirm `Harsha2803` before every push or PR mutation.
   - `.claude/` is local tooling state and must not be committed.
-  - Do not read or copy from `../jiva/`; it is the author's employer's proprietary
-    codebase.
-  - Do not run `pkill -f mnemos`; it can match the agent shell. Kill by port or PID.
-  - Zero monetary cost forever: free, self-hosted defaults; Ollama is the default
-    model path; no paid cloud pub/sub.
+  - Do not read or copy from `../jiva/`; it is the author's employer's
+    proprietary codebase.
+  - Do not run `pkill -f mnemos`; it can match the agent shell. Kill by port or
+    PID.
+  - Zero monetary cost forever: free, self-hosted defaults; Ollama is the
+    default model path; no paid cloud pub/sub.
+  - Apply TRACKER §0 and §7 at the end of every task: full verification,
+    synchronized TRACKER/ADAPTATION/handoff, scoped conventional commits,
+    personal-account push, green PR, ready/merge for completed work, then sync
+    and verify clean `main` before reporting completion.
 
 What is next:
 
-  - The next milestone is `B2`, not `A4`: heartbeat, retries, richer status
-    history, stuck-job surfacing, replay/progress depth, and per-job progress UI
-    over the job machinery `B1` introduced.
-  - Ordinary one-task-per-session discipline is back in force. Do not start `B2`
-    in the same session that only intended to merge cleanup PRs.
+  - The next milestone is `A4`: classify every chat message to plain chat, RAG,
+    or NL2SQL; route it through the existing flow; show the selected flow and a
+    compact reason; remove the provisional manual mode selectors.
+  - Follow TRACKER §5's five deliverables in order. Do not rebuild the existing
+    A1/A2/A3 flows or change the NL2SQL safety model.
+  - Ordinary one-task-per-session discipline is in force. Complete `A4`, close
+    its repository lifecycle, and stop before `B3`.

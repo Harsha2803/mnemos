@@ -306,9 +306,10 @@ for typography, spatial rhythm, materials and motion character. §0 there record
 Apple assets are off-limits (SF Pro as a webfont, SF Symbols) and what is used instead.
 
 **Current position.** `main` has `A0` (PR #11), `A1` (PR #13), `A2` (PR #14), `A3`
-(PR #15), `B1` (PR #16), the per-session log files (PR #17), and the out-of-band frontend
-polish work (PR #18). This local work completes `B2`; the next milestone is `A4`, returning
-to the normal sequence after the 2026-08-15 `B1`/`B2` ingestion detour.
+(PR #15), `B1` (PR #16), the per-session log files (PR #17), the out-of-band frontend
+polish work (PR #18), and `B2` plus its final UI/correctness review (PR #19). The next
+milestone is `A4`, returning to the normal sequence after the 2026-08-15 `B1`/`B2`
+ingestion detour.
 
 `M3`'s exit criterion "RLS blocks cross-org" turned out to be unmet by `M2` rather than
 merely untested; that is written up in §8 and in
@@ -935,6 +936,8 @@ and `npm run build` clean.
 After `docker compose up -d --build`, `/readyz` returned postgres, redis, ollama and
 objectstore all `ok`, and `npx playwright test e2e/sources.spec.ts` passed against the rebuilt
 stack.
+PR #19's backend, frontend, and Compose GitHub Actions checks also passed before the
+completed milestone was marked ready and merged to `main`.
 
 ### B1 — connect a source and watch it ingest ✅ verified 2026-08-17
 
@@ -1313,6 +1316,10 @@ click-through citations. Evidence for each is above.
   who trusts neither.
 - **Every branch gets a PR when it is created**, so no branch is lost track of. Push and
   open it as soon as the branch has its first commit, in draft if the work is unfinished.
+- **A completed task closes its repository lifecycle.** After verification and green CI,
+  mark the PR ready, merge it with the repository's normal strategy, sync `main`, and
+  update `prompt.txt` alongside TRACKER/ADAPTATION so the next handoff describes what is
+  actually merged rather than what merely exists on a branch.
 - **Milestone IDs are `A0`–`D1` now, not `M4`–`M14`.** If you find an old ID in a document,
   a docstring or a commit message, §7's mapping table is the translation — do not guess,
   and do not leave a reader holding a number that no longer names anything.

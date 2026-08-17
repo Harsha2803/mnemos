@@ -15,11 +15,10 @@ build-order deviation; return to Phase A for `A4`.
 **Next task:** `A4` — stop choosing a mode: classify each message to chat / RAG / NL2SQL,
 run the chosen flow, and show which flow answered and why. Remove the provisional
 `use_documents` / `use_datasource` selectors once the classifier owns that decision.
-**Branch right now:** `agent/b2-ingestion-ui-enhancements`; the completed `B2` and UI
-enhancement changes are recorded locally as draft PR #19. Live PR state could not be
-rechecked in the final review because the cached personal `Harsha2803` CLI token had
-expired. The connected GitHub app belongs to the prohibited work account and was not used;
-restore and confirm `Harsha2803` before any push or PR mutation.
+**Branch right now:** `main`; completed `B2` and the UI enhancement work landed through
+PR #19 after its backend, frontend, and Compose checks passed. No milestone branch is
+pending. Start `A4` on a fresh branch after confirming the active GitHub account is
+`Harsha2803`.
 
 > ### 2026-08-17 — final `B2`/UI review closed lease and hydration races
 >
@@ -41,7 +40,9 @@ restore and confirm `Harsha2803` before any push or PR mutation.
 > `make types`, and `make check` were clean. Frontend lint and typecheck were clean,
 > `npm run test -- --run` passed 114 tests, and `npm run build` succeeded. The compose stack
 > was rebuilt; `/readyz` reported Postgres, Redis, Ollama, and object storage `ok`; and the
-> Chromium Sources Playwright flow passed against that rebuilt stack. `A4` remains next.
+> Chromium Sources Playwright flow passed against that rebuilt stack. PR #19's backend,
+> frontend, and Compose GitHub Actions checks also passed before the completed milestone
+> was marked ready and merged to `main`. `A4` remains next.
 
 > ### 2026-08-17 — UI enhancement handoff implemented and live-verified
 >
@@ -1023,7 +1024,7 @@ restore and confirm `Harsha2803` before any push or PR mutation.
    wrong, write an ADR superseding it — do not silently deviate.
 3. **Every change ends with:** `pytest` green + `alembic check` clean + benchmark re-run
    *if the retrieval or compile path moved* + README numbers updated if they moved +
-   **this file and ADAPTATION.md both updated** + a conventional commit.
+   **this file, ADAPTATION.md, and `prompt.txt` all updated** + a conventional commit.
 4. **If you change anything in the retrieval or compile path, re-run the benchmark and
    paste the new numbers into the README.** The README publishes measured results; a
    change that moves them and does not update them makes the repository dishonest.
@@ -2856,3 +2857,9 @@ When you finish a task, in the **same commit**:
    measured contrast row for any new colour (§2.1). A token that exists only in code is a
    token the next agent will duplicate under a different name.
 9. Push the branch and make sure its PR exists.
+10. When the task is complete and CI is green, take its PR out of draft, merge it with the
+    repository's normal strategy, switch back to `main`, fast-forward from `origin/main`,
+    and verify the worktree is clean apart from explicitly ignored local tooling state.
+    Do not report completion while a finished milestone is still only on a branch. If
+    authentication, review, or branch protection prevents closure, report that as the
+    remaining blocker rather than calling the task done.
