@@ -71,6 +71,7 @@ class ChatRepository(Protocol):
         model: str,
         finish_reason: str,
         flow: str | None = None,
+        router_rationale: str | None = None,
     ) -> ChatMessageRecord: ...
 
     async def add_citations(

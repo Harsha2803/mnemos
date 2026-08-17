@@ -36,6 +36,7 @@ class ChatMessageRecord:
     role: MessageRole
     content: str
     flow: str | None
+    router_rationale: str | None
     prompt_tokens: int
     completion_tokens: int
     latency_ms: int | None

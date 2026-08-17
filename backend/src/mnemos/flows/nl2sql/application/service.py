@@ -109,6 +109,7 @@ class Nl2SqlFlow:
         user_id: UserId,
         session_id: ChatSessionId,
         content: str,
+        router_rationale: str | None = None,
     ) -> AsyncGenerator[ChatStreamEvent, None]:
         session = await self._chat.get_session(org_id=org_id, session_id=session_id)
         if session is None or session.user_id != user_id:
@@ -132,6 +133,7 @@ class Nl2SqlFlow:
                 narration=narration,
                 outcome=None,
                 model=_NO_MODEL_CALL,
+                router_rationale=router_rationale,
             )
             return
 
@@ -161,6 +163,7 @@ class Nl2SqlFlow:
                 narration=execution_error_narration(outcome),
                 outcome=outcome,
                 model=_NO_MODEL_CALL,
+                router_rationale=router_rationale,
             )
             return
 
@@ -195,6 +198,7 @@ class Nl2SqlFlow:
                         completion_tokens=event.completion_tokens,
                         finish_reason=event.finish_reason,
                         latency_ms=int((time.perf_counter() - start) * 1000),
+                        router_rationale=router_rationale,
                     )
                     return
         except UpstreamError:
@@ -238,6 +242,7 @@ class Nl2SqlFlow:
         narration: str,
         outcome: ExecutionOutcome | None,
         model: str,
+        router_rationale: str | None,
         prompt_tokens: int = 0,
         completion_tokens: int = 0,
         finish_reason: str = "stop",
@@ -258,6 +263,7 @@ class Nl2SqlFlow:
             model=model,
             finish_reason=finish_reason,
             flow=FLOW_NAME,
+            router_rationale=router_rationale,
         )
         await self._sql_runs.attach_to_message(
             org_id=org_id, sql_run_id=record.id, message_id=message.id
