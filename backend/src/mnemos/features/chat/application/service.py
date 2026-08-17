@@ -23,6 +23,10 @@ from mnemos.core.errors import NotFoundError, UpstreamError, ValidationError
 from mnemos.core.logging import get_logger
 from mnemos.core.types import MessageRole
 from mnemos.features.chat.application.ports import ChatRepository
+from mnemos.features.chat.application.titles import (
+    DEFAULT_SESSION_TITLE,
+    title_session_from_first_message,
+)
 from mnemos.features.chat.domain import (
     AssistantDone,
     AssistantError,
@@ -49,7 +53,6 @@ SYSTEM_PROMPT = (
     "than guessing."
 )
 
-DEFAULT_SESSION_TITLE = "New chat"
 DEFAULT_PAGE_SIZE = 20
 
 
@@ -126,9 +129,12 @@ class ChatService:
         session does not exist or belongs to someone else — the router relies
         on that to answer 404 rather than starting a stream doomed to be empty.
         """
-        await self._owned_session(org_id=org_id, user_id=user_id, session_id=session_id)
+        session = await self._owned_session(org_id=org_id, user_id=user_id, session_id=session_id)
         await self._repository.append_user_message(
             org_id=org_id, session_id=session_id, content=content
+        )
+        await title_session_from_first_message(
+            repository=self._repository, org_id=org_id, session=session, content=content
         )
         history = await self._repository.list_messages(org_id=org_id, session_id=session_id)
         turns = _build_turns(history, history_turns=self._history_turns)

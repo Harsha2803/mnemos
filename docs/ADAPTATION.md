@@ -364,6 +364,51 @@ gitignored. Full detail, including a `cache_logger_on_first_use` correctness bug
 surfaced in `configure_logging` itself, is in
 [TRACKER's dated note](../TRACKER.md) for 2026-08-16.
 
+### Product polish — seven frontend UI fixes (2026-08-16, not a milestone)
+
+Also out-of-band, also no milestone id. A session is now titled from its own first
+message rather than staying "New chat" forever (`features/chat/application/titles.py`,
+shared by `ChatService`/`flows/rag`/`flows/nl2sql`); the sidebar's conversation rows
+gained rename and delete controls; document uploads are checked against
+`Settings.max_upload_bytes` client-side before anything is sent, and the picker/drop
+zone now accept several files at once (one request per file, each failure named
+separately); an open conversation reads at a new, wider `--chat-measure` token with a
+tighter gutter instead of the document-route `measure`; and the sidebar now collapses/
+resizes exactly like the inspector already did, plus draggable-and-keyboard-resizable
+boundaries for both panels (the ARIA "window splitter" pattern). No schema change, no
+migration. Live-verified against the running compose stack once it was free: a session
+retitling itself from its first message with no reload, inline rename, delete-the-open-
+session navigating back to `/chat`, the sidebar resize handle and collapse toggle, and a
+real 26 MB file being refused client-side alongside a small file that uploaded
+successfully. Full detail and evidence is in
+[TRACKER's dated note](../TRACKER.md) for 2026-08-16.
+
+### Product polish — hover-marquee titles + a motion pass (2026-08-16, not a milestone)
+
+Also out-of-band, also no milestone id, same `feat/frontend-ui-fixes`/PR #18. Two pieces.
+A long sidebar conversation title now scrolls into view on hover instead of staying
+truncated forever — `MarqueeText` (`components/ui/`) measures real overflow and slides at
+a constant speed, used first by `ChatSessionList.tsx`. Separately, a small, consistent
+motion pass: every `Button` gets a press animation; both delete-confirmation dialogs
+(chat and knowledge) fade/scale in and out via Radix's `data-state`; `EmptyState` settles
+in with a fade+rise; a freshly-sent chat message does too, but its assistant reply
+deliberately does not (it already arrives token by token, and its `id` swap on stream
+completion would replay a mount animation a second time). All of it opacity/transform
+only, so it collapses under `prefers-reduced-motion` for free. Full detail is in
+[TRACKER's dated note](../TRACKER.md) for 2026-08-16 (later still).
+
+### Product polish — chat transcript scrollbar (2026-08-16, not a milestone)
+
+Also out-of-band, also no milestone id, same `feat/frontend-ui-fixes`/PR #18. The chat
+transcript's scroll container (`chat/[sessionId]/page.tsx`) now carries a `.scrollbar-thin`
+class (`globals.css`): a transparent track and a rounded, token-built thumb (`--fill-
+secondary` at rest, `--fill` on hover, a `--bg`-matched inset border) instead of the bare
+OS scrollbar — the shape ChatGPT's transcript scrollbar uses. Token-driven, so it tracks
+light/dark like everything else; applied to the one pane the request named, not globally.
+Live-verified in both themes. Full detail, including a note on the shared-compose-project
+side effect this session's verification pass had on the concurrent `B1` session, is in
+[TRACKER's dated note](../TRACKER.md) for 2026-08-16 (later).
+
 ### F0 — app shell ✅
 
 The one task with no backend half, because `frontend/` was an empty directory and there

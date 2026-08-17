@@ -179,6 +179,13 @@
   /* The measure. Past ~75 characters the eye loses its place on the return
      sweep, so this is a legibility control, not a layout preference. */
   --measure: 46rem;
+
+  /* The chat conversation column's own width — wider than the prose measure,
+     because it is chrome (the composer, its mode toggles, `SqlPanel`'s
+     tabular data) as much as it is prose. Each bubble still clamps to
+     `--measure` on its own (`MessageBubble.tsx`), so a line of text is never
+     wider even though the column around it is. */
+  --chat-measure: 64rem;
 }
 
 /* ------------------------------------------- 2.3 spacing — 8pt rhythm */
@@ -236,6 +243,25 @@
   --duration-fast:   150ms;  /* hover, focus, small state changes */
   --duration-normal: 250ms;  /* panels, sheets, disclosure */
   --duration-slow:   350ms;  /* full-screen transitions */
+}
+
+/* Named keyframes for the handful of entrances below — a freshly-sent chat
+   bubble, an empty state settling in, a Radix dialog opening/closing. Kept to
+   opacity + transform only, which is what the reduced-motion block below can
+   collapse to nothing without leaving a layout jump. */
+@keyframes fade-in-up {
+  from { opacity: 0; transform: translateY(4px); }
+  to   { opacity: 1; transform: translateY(0); }
+}
+
+@keyframes dialog-overlay-in {
+  from { opacity: 0; }
+  to   { opacity: 1; }
+}
+
+@keyframes dialog-content-in {
+  from { opacity: 0; transform: translate(-50%, -50%) scale(0.96); }
+  to   { opacity: 1; transform: translate(-50%, -50%) scale(1); }
 }
 
 /* --------------------------------------------------- 3. accessibility */
@@ -405,6 +431,11 @@
     max-width: var(--measure);
   }
 
+  /* The wider chat-column measure, §2.2's note above `--chat-measure`. */
+  .measure-chat {
+    max-width: var(--chat-measure);
+  }
+
   /* Grouped-inset list (DesignSystem §4). The separator is a pseudo-element
      rather than a border because it has to start at the *text* origin, not at
      the container edge — a full-bleed rule cuts the group in half instead of
@@ -434,6 +465,72 @@
     right: 0;
     height: 1px;
     background-color: var(--separator);
+  }
+
+  /* A thin, low-contrast scrollbar for content panes that scroll on their own
+     (the chat transcript first). Transparent track, a rounded thumb that only
+     reads as present near the fill tokens' own contrast, and a background-
+     matched inset border so the thumb floats off the edge rather than
+     spanning full width — the same shape ChatGPT's transcript scrollbar
+     uses. Firefox gets the same read via `scrollbar-color`; there is no
+     equivalent inset trick there, so it is a hair thicker by default. */
+  .scrollbar-thin {
+    scrollbar-width: thin;
+    scrollbar-color: var(--fill-secondary) transparent;
+  }
+
+  .scrollbar-thin::-webkit-scrollbar {
+    width: 10px;
+    height: 10px;
+  }
+
+  .scrollbar-thin::-webkit-scrollbar-track {
+    background: transparent;
+  }
+
+  .scrollbar-thin::-webkit-scrollbar-thumb {
+    background-color: var(--fill-secondary);
+    border-radius: var(--radius-full);
+    border: 3px solid var(--bg);
+    background-clip: padding-box;
+  }
+
+  .scrollbar-thin::-webkit-scrollbar-thumb:hover {
+    background-color: var(--fill);
+  }
+
+  .scrollbar-thin::-webkit-scrollbar-corner {
+    background: transparent;
+  }
+
+  /* A settle-in for content that just appeared rather than always having
+     been there: a freshly-sent chat bubble (`MessageBubble.tsx`, the user's
+     own turn only — the assistant's reply already animates by filling with
+     tokens) and an `EmptyState` replacing a loading skeleton. */
+  .animate-fade-in-up {
+    animation: fade-in-up var(--duration-normal) var(--ease-out);
+  }
+
+  /* A Radix `Dialog`'s overlay and content, sharing one shape across every
+     confirmation in the app (`ChatSessionList.tsx`'s and `DocumentList.tsx`'s
+     delete dialogs today). Keyed off `data-state` rather than a mount/unmount
+     prop — Radix's `Presence` already waits for this animation to finish
+     before actually removing the node on close, so the exit is as real as
+     the entrance. */
+  .dialog-overlay {
+    animation: dialog-overlay-in var(--duration-fast) var(--ease-out);
+  }
+
+  .dialog-overlay[data-state="closed"] {
+    animation: dialog-overlay-in var(--duration-fast) var(--ease-standard) reverse;
+  }
+
+  .dialog-content {
+    animation: dialog-content-in var(--duration-normal) var(--ease-spring);
+  }
+
+  .dialog-content[data-state="closed"] {
+    animation: dialog-content-in var(--duration-fast) var(--ease-standard) reverse;
   }
 }
 

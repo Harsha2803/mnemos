@@ -36,6 +36,7 @@ export function EmptyState({
     <div
       className={[
         "flex flex-col items-center justify-center gap-3 px-6 py-10 text-center",
+        "animate-fade-in-up",
         className,
       ]
         .filter(Boolean)

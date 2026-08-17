@@ -1,4 +1,4 @@
-import { screen } from "@testing-library/react";
+import { fireEvent, screen } from "@testing-library/react";
 import userEvent from "@testing-library/user-event";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import { axe } from "vitest-axe";
@@ -81,6 +81,79 @@ describe("the three-column shell", () => {
     expect(screen.getByRole("heading", { name: "No message selected" })).toBeInTheDocument();
   });
 
+  it("test_the_sidebar_collapses_and_reopens_on_the_desktop", async () => {
+    viewport(1440);
+    renderShell();
+
+    const toggle = screen.getByRole("button", { name: "Hide navigation" });
+    expect(toggle).toHaveAttribute("aria-expanded", "true");
+    expect(toggle).toHaveAttribute("aria-controls", "workspace-sidebar");
+
+    await userEvent.click(toggle);
+
+    // Collapsed, not removed — the same DesignSystem §1 rule the inspector's
+    // own collapse follows.
+    const collapsed = screen.getByRole("navigation", { name: "Workspace" });
+    expect(collapsed).toHaveClass("w-0");
+    expect(screen.queryByRole("list", { name: "Sections" })).toBeNull();
+
+    await userEvent.click(screen.getByRole("button", { name: "Show navigation" }));
+    expect(screen.getByRole("list", { name: "Sections" })).toBeInTheDocument();
+  });
+
+  it("test_dragging_the_sidebar_boundary_resizes_it", async () => {
+    viewport(1440);
+    renderShell();
+
+    const handle = screen.getByRole("separator", { name: "Resize the workspace sidebar" });
+    expect(handle).toHaveAttribute("aria-valuenow", "260");
+
+    fireEvent.pointerDown(handle, { clientX: 260 });
+    fireEvent.pointerMove(handle, { clientX: 340 });
+    fireEvent.pointerUp(handle, { clientX: 340 });
+
+    expect(handle).toHaveAttribute("aria-valuenow", "340");
+    expect(screen.getByRole("navigation", { name: "Workspace" })).toHaveStyle({
+      "--sidebar-width": "340px",
+    });
+  });
+
+  it("test_the_sidebar_boundary_does_not_resize_past_its_floor_or_ceiling", async () => {
+    viewport(1440);
+    renderShell();
+
+    const handle = screen.getByRole("separator", { name: "Resize the workspace sidebar" });
+
+    fireEvent.pointerDown(handle, { clientX: 0 });
+    fireEvent.pointerMove(handle, { clientX: -1000 });
+    fireEvent.pointerUp(handle, { clientX: -1000 });
+    expect(handle).toHaveAttribute("aria-valuenow", "200");
+
+    fireEvent.pointerDown(handle, { clientX: 0 });
+    fireEvent.pointerMove(handle, { clientX: 1000 });
+    fireEvent.pointerUp(handle, { clientX: 1000 });
+    expect(handle).toHaveAttribute("aria-valuenow", "420");
+  });
+
+  it("test_the_arrow_keys_resize_the_inspector_boundary_inverted", () => {
+    viewport(1440);
+    renderShell();
+
+    // The inspector sits on the right, so its handle is on its *leading*
+    // edge — the same rightward motion that grows the sidebar has to shrink
+    // the inspector, which is what `invert` on this call site is for.
+    const handle = screen.getByRole("separator", { name: "Resize the context inspector" });
+    expect(handle).toHaveAttribute("aria-valuenow", "320");
+
+    handle.focus();
+    fireEvent.keyDown(handle, { key: "ArrowRight" });
+    expect(handle).toHaveAttribute("aria-valuenow", "304");
+
+    fireEvent.keyDown(handle, { key: "ArrowLeft" });
+    fireEvent.keyDown(handle, { key: "ArrowLeft" });
+    expect(handle).toHaveAttribute("aria-valuenow", "336");
+  });
+
   it("test_below_1024px_the_inspector_becomes_an_overlay_sheet", async () => {
     viewport(900);
     renderShell();
@@ -110,7 +183,7 @@ describe("the three-column shell", () => {
 
     expect(screen.queryByRole("navigation", { name: "Workspace" })).toBeNull();
 
-    await userEvent.click(screen.getByRole("button", { name: "Open navigation" }));
+    await userEvent.click(screen.getByRole("button", { name: "Show navigation" }));
 
     const sheet = screen.getByRole("dialog", { name: "Workspace" });
     expect(sheet).toBeInTheDocument();

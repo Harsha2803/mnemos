@@ -32,6 +32,7 @@ from mnemos.core.errors import NotFoundError, UpstreamError
 from mnemos.core.logging import get_logger
 from mnemos.core.types import MessageRole, SqlVerdict
 from mnemos.features.chat.application.ports import ChatRepository
+from mnemos.features.chat.application.titles import title_session_from_first_message
 from mnemos.features.chat.domain import (
     AssistantDone,
     AssistantError,
@@ -114,6 +115,9 @@ class Nl2SqlFlow:
             raise NotFoundError(f"chat session {session_id} not found")
 
         await self._chat.append_user_message(org_id=org_id, session_id=session_id, content=content)
+        await title_session_from_first_message(
+            repository=self._chat, org_id=org_id, session=session, content=content
+        )
 
         record = await self._generate_with_repair(org_id=org_id, question=content)
 

@@ -22,7 +22,276 @@ wrote it.
 **Branch right now:** none open. `main`'s tip is the squashed `A3` merge plus this session's
 docs-only commit (no code changed).
 
-> ### 2026-08-16 — per-session log files (dev tooling, not on the roadmap)
+> ### 2026-08-16 (later still, unfinished) — message actions (copy/edit/share) + a
+> ### streaming-scroll fix: **scoped, not built — read this before touching it**
+>
+> A fourth out-of-band request in the same session as the three notes below, same branch
+> (`feat/frontend-ui-fixes`, PR #18) — but this one was interrupted mid-investigation, no
+> code written, **zero commits**. Written up here rather than left implicit, per §0 rule 9's
+> "if a task proves bigger than it looked... rewrite §5 [or the relevant note] so the
+> remainder is fully specified for the next agent" — the closest fit, even though nothing
+> was landed to call a "first piece."
+>
+> **What was asked:** a ChatGPT-style action row on chat messages — Share, Copy, Edit the
+> question — plus a fix so scrolling up during a live streaming answer does not get yanked
+> back to the bottom on every token.
+>
+> **Two scope decisions already made** (asked via the harness's clarifying-question tool,
+> not assumed):
+>   1. **Edit → "regenerate from there."** Editing a previously-sent question deletes it and
+>      everything the conversation said or asked after it (the old answer included), then
+>      streams a fresh reply for the edited content — ChatGPT's own behaviour. Needs a new
+>      backend endpoint; the alternative (append the edit as a new message, leave history
+>      alone) was explicitly turned down.
+>   2. **Share → "copy link, org members only."** No public/unauthenticated surface. Sharing
+>      copies this conversation's own `/chat/{id}` app URL to the clipboard; opening it still
+>      requires sign-in and only works for someone in the same org who already has access.
+>      A real public share-token table + unauthenticated route + public page was on the table
+>      and explicitly declined — flagged at the time as a genuine new data-exposure surface
+>      for an enterprise chat app, which is why it went to the project owner rather than
+>      being assumed.
+>
+> **The backend design for edit-and-regenerate, worked out but not written:**
+>   - `ChatRepository` (`ports.py`) gains `delete_messages_from(*, org_id, session_id,
+>     ordinal)` — deletes every message in the session with `ordinal >=` the given one.
+>     `MessageCitation`/`Bookmark`/`Feedback` all FK `chat_message.id` with `ondelete=
+>     "CASCADE"` already (`adapters/models.py`), confirmed by reading the schema — no
+>     citation/bookmark cleanup needed, the DB does it.
+>   - `SqlChatRepository` implements it as a plain `DELETE ... WHERE org_id = ? AND
+>     session_id = ? AND ordinal >= ?`, same `Database.session(org_id=...)` RLS discipline
+>     as every other method in that file.
+>   - `ChatService.stream_reply`'s generation loop (the `async for event in
+>     self._model.stream(turns)` block, persisting only on `ChatDone`) gets factored out into
+>     a private `_generate(*, org_id, session_id, turns)` helper, so `edit_message` (below)
+>     does not duplicate it — `stream_reply` becomes "append, maybe retitle, build turns,
+>     `async for event in self._generate(...): yield event`".
+>   - New `ChatService.edit_message(*, org_id, user_id, session_id, message_id, content)`:
+>     `_owned_session` check (existing), `list_messages` once, locate the target by id +
+>     `role is MessageRole.USER` (404 if not found or not the caller's own turn — same
+>     404-not-403 discipline as `_owned_session`'s own docstring), look at the message right
+>     after it in the list — if it is an assistant reply with a non-`None` `flow` (i.e. it
+>     was answered via `RagFlow` or `Nl2SqlFlow`, which each own their own persistence
+>     through the same `ChatRepository` and do not have an edit path built), raise
+>     `ValidationError` (422) rather than silently regenerating a plain-chat answer to a
+>     question that was originally grounded in documents or a datasource — matching this
+>     router's existing `use_documents`-and-`use_datasource` mutual-exclusion error shape.
+>     Otherwise: `delete_messages_from(ordinal=target.ordinal)`, `append_user_message`
+>     (returns the fresh row), build turns from `history[:target_index] + [new_message]`
+>     (no second `list_messages` round trip needed), stream via `_generate`.
+>   - Router (`entrypoints/api/routers/chat.py`): `send_message`'s priming-then-`Streaming
+>     Response` plumbing (the `first = await anext(events, None)` block through the returned
+>     `StreamingResponse`) factors into a shared `_sse_response(events)` helper, since the
+>     new endpoint needs the identical wiring. New `EditMessageRequest` (`content` only — no
+>     `use_documents`/`use_datasource`; edit stays plain-chat-only, enforced by the service).
+>     New `POST /sessions/{session_id}/messages/{message_id}/edit`, a `_parse_message_id`
+>     helper mirroring `_parse_session_id`.
+>   - Test shape to follow: `backend/tests/test_chat_endpoints.py` already has the fixtures
+>     (`Seed`, `FakeChatModel`, `make_client`) — new tests would cover regenerate-discards-
+>     everything-after, 404 on someone else's message / a non-`user`-role message, 422 on a
+>     rag/nl2sql-answered turn, and that citations/bookmarks on the discarded messages are
+>     actually gone (cascade, not just unreferenced).
+>
+> **The frontend design, worked out but not written:**
+>   - `lib/chat/stream.ts`: `streamChatReply`'s body (the 401-retry-then-read-frames
+>     sequence) factors into a private `streamReply(url, body, handlers, signal)`, reused by
+>     a new `streamEditedReply(sessionId, messageId, content, handlers, signal)` posting to
+>     the new `/edit` route with `{content}` only.
+>   - `MessageBubble.tsx`'s `DisplayMessage` needs a `flow?: string | null` field so a user
+>     bubble can know whether *its own* answer (the assistant turn right after it) came from
+>     `rag`/`nl2sql` — `ChatMessageResponse.flow` already carries this from both `GET
+>     .../sessions/{id}` (loading history) and the `done` SSE frame (`onDone`'s `message.
+>     flow`) — no backend response-shape change needed, just wiring it into `page.tsx`'s two
+>     places that build `DisplayMessage` objects, which currently drop it. The edit action
+>     shows only on a user bubble whose following assistant `flow` is `null`/absent — hidden,
+>     not a dead button that 422s, per `EmptyState.tsx`'s own "an action that does not work
+>     is worse than none" precedent elsewhere in this codebase.
+>   - Not designed at all yet: the actual hover action-row UI (Share/Copy/Edit affordances
+>     on `MessageBubble`), the Copy implementation (`navigator.clipboard.writeText`, trivial,
+>     no ambiguity), the Share implementation (copy `window.location.href` for the current
+>     `/chat/{sessionId}` route, also trivial once the decision above was made), the actual
+>     edit-in-place composer UX (does the bubble turn into an editable textarea? does it
+>     reuse `RenameField`'s pattern from `ChatSessionList.tsx`?), and the streaming-scroll fix
+>     (`MessageList.tsx`'s `useEffect` currently force-scrolls to bottom on every `messages`
+>     change with no check for whether the user had scrolled away first — needs a "was
+>     already near the bottom" check, likely paired with a ChatGPT-style "jump to bottom"
+>     affordance once the user has scrolled up during a live stream, matching the existing
+>     `scrollbar-thin` pane from the note two below this one).
+>
+> **Why this stopped here:** interrupted by the project owner before any file was written,
+> immediately after `list_messages`/repository/model reading confirmed the cascade-delete
+> behaviour above. Nothing to run, nothing to test, nothing pushed.
+>
+> **`prompt.txt` was deliberately left untouched**, again (see the scrollbar note below for
+> the general reason — the concurrent `B1` session on `feat/b1-connectors` owns that file).
+> Specifically this time: this worktree's copy is still at commit `d228404`, the *pre-B1-
+> build* handoff, predating even the "night" rewrite this session's own system prompt
+> quotes — editing it here would edit a copy several rewrites behind the one the other
+> session is actually working from, and risks a conflict neither session could resolve
+> sanely. This note is the handoff instead.
+>
+> **Open question for whoever resumes this:** same branch/PR #18, or a new branch? Every
+> prior out-of-band note on this branch was small enough that reusing PR #18 was an easy
+> call; this one adds a real backend endpoint and a schema-level behaviour change (message
+> deletion), which reads more like a feature than polish. Worth deciding deliberately
+> rather than defaulting to "same branch" out of momentum.
+>
+> ### 2026-08-16 (later still) — hover-marquee titles + a motion pass (product polish, not
+> ### on the roadmap)
+>
+> A third out-of-band request in the same session as the scrollbar note directly below,
+> same branch (`feat/frontend-ui-fixes`, PR #18), same non-milestone shape.
+>
+> **Hover-marquee conversation titles.** The sidebar's rows truncated a long title with no
+> way to read the rest. New `MarqueeText` (`components/ui/`): measures its own overflow
+> against the rendered box (not guessed from character count, so it survives font/zoom
+> changes) and only engages when that overflow is real; hovering slides the title left at a
+> constant speed (so a long title is not rushed and a short overflow does not crawl)
+> rather than a fixed duration, and mouse-out slides it back. `ChatSessionList.tsx` is the
+> first use; built as a reusable primitive since a fixed-width row holding free-form text
+> is not unique to it.
+>
+> **A subtle motion pass.** Three named keyframes in `globals.css`
+> (`fade-in-up`/`dialog-overlay-in`/`dialog-content-in`), opacity/transform only, so the
+> existing `prefers-reduced-motion` block collapses them the same way it already collapses
+> every transition — no special case needed. `Button` (`ui/`) gained a small `active:scale`
+> press, which fans out to every button in the app from one place; both delete-confirmation
+> dialogs (`ChatSessionList`, `DocumentList`) fade/scale in and out via Radix's
+> `data-state`, which `Presence` already uses to delay unmounting until the animation
+> finishes on close; `EmptyState` settles in with a fade+rise instead of just appearing;
+> and the citation-marker button in `MessageBubble` picked up the `transition-colors` its
+> hover state was missing. The one judgment call: only the user's own freshly-sent turn
+> animates in (`page.tsx` now marks it `justSent`) — the assistant's reply does not, on
+> purpose, because it mounts once empty and fills token by token (its own entrance
+> already), and its `id` is swapped for the server's once the stream finishes
+> (`onDone`); animating that bubble too would replay the entrance a second time right as
+> the swap remounts it.
+>
+> **Evidence:** `npm run lint`/`npx tsc --noEmit`/`npm run test` (109 passed, unchanged) /
+> `npm run build` all clean. Live-verified in a real browser: the marquee measured and slid
+> correctly on a title renamed long enough to overflow, then back on mouse-out; the delete
+> dialog opened with the fade/scale visible; the composer round-trip (send → streaming →
+> done) still worked with no console errors. Same `web`-container rebuild/redeploy approach
+> as the scrollbar note below — built the image from this worktree, tagged `mnemos-web:
+> latest`, recreated only `web` via `docker compose up -d --no-deps --no-build web` from
+> the main checkout (not this worktree, whose `docker-compose.yml` is stale relative to
+> `feat/b1-connectors` — see the scrollbar note's flag below for why that distinction
+> matters) — no drift on `postgres`/`api` this time, confirmed via `docker compose ps`
+> before and after.
+>
+> ### 2026-08-16 (later) — chat transcript scrollbar (product polish, not on the roadmap)
+>
+> A further out-of-band request from the project owner while the concurrent session below
+> built `B1` deliverable 3 on `feat/b1-connectors` — same non-milestone shape as the two
+> notes below it. Same branch as the seven UI fixes, `feat/frontend-ui-fixes`, PR #18 (not
+> a new branch/PR — the branch was still open).
+>
+> The transcript pane (`chat/[sessionId]/page.tsx`) scrolled with the bare OS scrollbar —
+> thick, opaque, unrelated to the token palette. New `.scrollbar-thin` class in
+> `globals.css`: transparent track, a rounded thumb built from the existing
+> `--fill-secondary`/`--fill` tokens (hover darkens, matching every other control's hover
+> state), with a `--bg`-matched inset border so the thumb floats off the track edge —
+> ChatGPT's transcript scrollbar shape. Firefox gets the same read via `scrollbar-color`;
+> there is no inset-border equivalent there, so it renders a hair thicker by default.
+> Applied only to the transcript pane, not globally — the request named that one surface.
+>
+> **Evidence:** `npm run lint`/`npx tsc --noEmit`/`npm run test` (109 passed, unchanged —
+> no test targets a scrollbar's rendered pixels) / `npm run build` all clean. Live-verified
+> in a real browser, both themes: the compose stack's `web` container was briefly stopped
+> to free port 3000 for a dev server carrying this change (the registered Keycloak
+> redirect URI and the API's CORS allow-list are both pinned to port 3000, so a dev server
+> on another port cannot complete a real sign-in) — the same `docker-compose.yml`
+> `name: mnemos` pin the seven-UI-fixes note below flags, so this **did** touch the
+> concurrent session's shared containers. `docker compose up -d web` afterward recreated
+> `postgres`/`api` (compose reconciling drift against `main`'s compose file, not a
+> `--build`) — no volume was removed, `/readyz` came back fully green, and no image was
+> rebuilt from this branch's code, so the concurrent session's in-progress work on
+> `entrypoints/realtime/` was not touched. Worth flagging rather than burying: a future
+> out-of-band frontend request during a concurrent backend session should use a second
+> compose project (`-p`/`COMPOSE_PROJECT_NAME`) rather than the shared one, to avoid this
+> class of container-recreate side effect entirely.
+>
+> ### 2026-08-16 — seven frontend UI fixes (product polish, not on the roadmap)
+>
+> Another out-of-band request from the project owner, unrelated to `B1`/`B2`/… — same
+> shape as the per-session-log-files note directly below, and for the same reason it does
+> not move `B1`'s "next task" status. Branch `feat/frontend-ui-fixes`, off `main` (after
+> the log-files PR merged), PR #18.
+>
+> **What was asked, and what was built, in order:**
+>
+>   1. *Conversation naming.* Every session stayed titled "New chat" forever unless a
+>      user renamed it by hand. `features/chat/application/titles.py` is new: the first
+>      message persisted into a session (`last_message_at` still `None` at the moment it
+>      arrives) derives that session's title from its own content, one line, cut at a
+>      word boundary at 60 chars. Shared by all three answer flows —
+>      `ChatService.stream_reply`, `flows/rag`, `flows/nl2sql` — rather than duplicated
+>      three times, so a fourth flow cannot forget to call it.
+>   2. *Rename and delete.* The rename/delete API and client (`renameSession`/
+>      `deleteSession`) already existed end to end from earlier work and had no UI.
+>      `ChatSessionList.tsx` now gives every row always-visible rename (inline text
+>      field, Enter commits via blur, Escape cancels without sending anything) and
+>      delete (a named confirmation dialog, the same pattern `DocumentList`'s delete
+>      already used) controls — built as siblings of the navigating link rather than
+>      inside it, since `ListItem`'s `href` form would otherwise nest a `<button>`
+>      inside an `<a>`. Deleting the open conversation navigates back to `/chat`.
+>   3. *Upload size limit.* `Settings.max_upload_bytes` (25 MB) was already enforced
+>      server-side with no client-side check at all — an oversized file uploaded in
+>      full before being refused. `UploadControl.tsx` now checks the same limit before
+>      sending anything, and states it in the drop zone's own copy.
+>   4. *Multiple files at once.* The picker and drop zone accept several files now. Each
+>      is its own request — concurrency across them is whatever `docker-compose.yml`'s
+>      `api` service actually runs (one uvicorn worker, unchanged, since bumping that
+>      touches the process model for reasons wider than this request), not a limit the
+>      frontend imposes. `Promise.allSettled` means one bad file no longer blocks the
+>      rest, and each failure is named against the file it came from.
+>   5. *Chat window padding.* An open conversation read at the same `measure`
+>      (46rem)/`px-6 py-8` gutter every document-shaped route uses, leaving a wide empty
+>      margin on anything wider than a laptop. New token `--chat-measure` (64rem,
+>      `globals.css` §2.2) plus a tighter `px-4 py-4` gutter apply only to
+>      `/chat/[sessionId]`; each message bubble still clamps to the original 46rem
+>      `measure` on its own, so a line of text is never wider even though the column
+>      around it is.
+>   6. *Resizable panel boundaries.* Both the sidebar/content and content/inspector
+>      boundaries are now draggable, via the ARIA "window splitter" pattern (a focusable
+>      `role="separator"` with live `aria-value*`); the arrow keys do the same clamped
+>      resize. The inspector's handle sits on its own leading edge, so the same
+>      rightward drag that grows the sidebar has to shrink the inspector — the one sign
+>      flip `AppShell.tsx`'s `invert` prop exists for.
+>   7. *Sidebar open/close.* The sidebar could only be hidden below 768px, as a sheet.
+>      It now collapses/reopens from the toolbar exactly like the inspector already did
+>      (`sidebarPinned`, mirroring `inspectorPinned`) — same `aria-expanded`/
+>      `aria-controls` shape, same collapsing-width-not-unmount behaviour.
+>
+> **Evidence:** `pytest` — 378 passed (366 prior on `main` + 12 new: three for the
+> title-derivation behaviour in `test_chat_endpoints.py`, plus the RAG/NL2SQL flow
+> suites re-run unchanged). `ruff check`/`ruff format --check` clean, `mypy --strict`
+> clean — no schema touched, no migration needed. Frontend: `npm run lint`/
+> `npx tsc --noEmit` clean, `npm run test` — 109 passed (18 files, up from 97/16),
+> including new coverage for rename/delete, the client-side size limit and multi-file
+> partial-failure behaviour, and the resize handles under both simulated pointer drag
+> and keyboard. `npm run build` (production) succeeds.
+>
+> **Real-browser verification, done as a follow-up once the shared stack was free.**
+> `docker-compose.yml` pins `name: mnemos` (line 12) — every git worktree of this repo,
+> not only the primary checkout, resolves to the *same* running compose project, and the
+> stack was mid-use by the concurrent session building the per-session-log-files work
+> above while this session first built and tested the seven fixes, so PR #18 originally
+> went up without a browser pass. The project owner asked for the containers to be
+> rebuilt once that concurrent session had moved on to `feat/b1-connectors`; `docker
+> compose build api worker realtime web && docker compose up -d api worker realtime web`
+> from this branch's worktree, then verified live against `localhost:3000` signed in as
+> `analyst@mnemos.local`: a fresh session started at "New chat", sent "What is the
+> tallest mountain in the world?", and the sidebar row retitled itself to the question
+> live, no reload — deliverable 1 end to end. Renamed that row inline (Enter commits),
+> created and deleted a second session while it was the open one and landed back on
+> `/chat`, confirming the delete dialog named it correctly first. Dragged the sidebar's
+> resize handle 100px right and watched it grow 260px → ~297px in the DOM, then
+> collapsed and reopened it from the toolbar. On `/knowledge`, dropped a 62-byte file
+> and a real 26 MB file together: the oversized one was refused client-side
+> ("huge.txt: larger than the 25 MB limit") without a network request, the small one
+> uploaded and appeared in the document list — the multi-file/partial-failure path
+> genuinely exercised, not just unit-tested. Both test documents and sessions cleaned
+> up afterward.
 >
 > A request from the project owner, out of band from the `B1`/`B2`/… plan above: every
 > authenticated request's log lines should also land in a file named by that request's

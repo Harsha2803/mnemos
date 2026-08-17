@@ -9,6 +9,12 @@ export type DisplayMessage = {
   content: string;
   /** True for the one assistant bubble currently filling with tokens. */
   streaming?: boolean;
+  /**
+   * True for the one turn the composer just sent, false/absent for anything
+   * loaded from history — the signal `MessageBubble` uses to animate a bubble
+   * in only when it genuinely just appeared, not on every conversation open.
+   */
+  justSent?: boolean;
   /** Present on a RAG answer; the markers in `content` index into these. */
   citations?: Citation[];
   /**
@@ -42,7 +48,20 @@ export function MessageBubble({ message, onCitationClick }: MessageBubbleProps) 
   const isUser = message.role === "user";
 
   return (
-    <div className={`flex flex-col gap-1 ${isUser ? "items-end" : "items-start"}`}>
+    <div
+      className={[
+        "flex flex-col gap-1",
+        isUser ? "items-end" : "items-start",
+        // Only the user's own turn animates in: its id never changes after
+        // creation. The assistant bubble mounts once (empty, `streaming`)
+        // and its `id` is swapped for the server's once the reply finishes
+        // (`page.tsx`'s `onDone`) — animating that bubble too would replay
+        // the entrance a second time right as the swap remounts it.
+        message.justSent === true && isUser ? "animate-fade-in-up" : "",
+      ]
+        .filter(Boolean)
+        .join(" ")}
+    >
       <span className="px-1 text-footnote text-label-secondary">
         {isUser ? "You" : "Mnemos"}
       </span>
@@ -89,7 +108,7 @@ function renderWithCitations(
         type="button"
         aria-label={`Show source ${marker}`}
         onClick={() => onCitationClick(citation)}
-        className="mx-0.5 cursor-pointer rounded-sm bg-accent-tint px-1 align-baseline text-footnote font-semibold text-accent hover:bg-accent-tint-hover"
+        className="mx-0.5 cursor-pointer rounded-sm bg-accent-tint px-1 align-baseline text-footnote font-semibold text-accent transition-colors duration-150 ease-standard hover:bg-accent-tint-hover"
       >
         {part}
       </button>
