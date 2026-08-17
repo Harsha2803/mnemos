@@ -4,47 +4,61 @@ You are picking up Mnemos at:
 
 Current date of this handoff: 2026-08-17.
 
-Start from `main`.
+Repository state at this handoff:
+
+  - `A4` is complete and verified on `agent/a4-message-router`.
+  - Publication is the only unfinished lifecycle step: local `gh` tokens are
+    expired and must be renewed for `Harsha2803` before the first push or PR
+    mutation. Do not use or activate `harshaJKT`.
+  - If the branch has not been merged yet, finish its repository lifecycle
+    before starting anything else: push, open the draft PR, confirm green CI,
+    mark ready, merge, switch to `main`, fast-forward, and verify the worktree.
+  - If live GitHub state says `A4` is already merged, trust it and start from
+    clean `main` instead.
 
 Read first, in order:
 
   1. TRACKER.md — it is the live source of truth. Read the header, §0's agent
-     operating instructions, §3's `B2` and `A3` entries, §5's complete `A4`
+     operating instructions, §3's `A4` and `B2` entries, §5's complete `B3`
      brief, and §7's update protocol.
-  2. docs/ADAPTATION.md — read §7's `A4`/`B2` rows, §8's `B2` subsection,
+  2. docs/ADAPTATION.md — read §7's `A4`/`B3` rows, §8's `A4` subsection,
      the "Not started" list, and §10's notes for the next session.
-  3. README.md, then the existing chat/RAG/NL2SQL code named by §5.
+  3. README.md, then the existing tool models and the auth/router/chat code
+     named by TRACKER §5.
   4. docs/CodingStandards.md before backend work and docs/DesignSystem.md
      before frontend work.
 
-Current state:
+Current product state:
 
-  - `A0` through `A3`, `B1`, and `B2` are done and merged to `main`.
-  - `B2` landed in PR #19 with heartbeat/lease renewal, retry/backoff, richer
-    status history, stuck-job surfacing, recent-job replay, per-job progress,
-    the expanded Sources UI, and the UI enhancement handoff.
-  - The final review fenced job mutations by the current worker owner, fixed
-    retry attempt accounting, protected safe public errors, prevented stale
-    REST hydration from overwriting newer WebSocket state, and corrected shell
-    preference restoration and interactive target semantics.
-  - PRs #17 and #18 remain merged: per-session log files and the earlier
-    frontend polish work respectively.
-  - As of this handoff there should be no open PRs. If
-    `gh pr list --state open` says otherwise, trust the live output and inspect
-    that PR before starting new work.
+  - `A0` through `A4`, `B1`, and `B2` are done. Phase A is complete.
+  - `A4` added `flows/router/`'s deterministic local classifier, automatic
+    backend dispatch to the existing chat/RAG/NL2SQL flows, a leading `route`
+    SSE frame, and persisted `flow`/`router_rationale` metadata.
+  - The provisional `use_documents` / `use_datasource` request fields and the
+    composer's manual Chat / Use documents / Ask your data toggle are gone.
+    Each answer now shows a compact Chat, Documents, or Data reason, including
+    after a history reload.
+  - No schema migration was needed; `chat_message.flow` and
+    `router_rationale` already existed. The generated frontend OpenAPI schema
+    was regenerated, not hand-edited.
+  - A4 did not rebuild RAG or NL2SQL, did not change the SQL guard/read-only
+    role, did not change Ollama defaults, and did not move retrieval/compiler
+    code or benchmark numbers.
 
-Verification evidence for completed `B2` and its final review:
+Verification evidence for completed `A4`:
 
-  - Focused backend worker/repository/router tests: 17 passed.
-  - Full backend `make test`: 434 passed; `make lint`, `make types`, and
+  - Focused classifier/chat/RAG/NL2SQL tests: 35 passed, including automatic
+    routing of a write-like request through the existing NL2SQL guard.
+  - Full backend `make test`: 441 passed; `make lint`, `make types`, and
     `make check` clean.
-  - Frontend `npm run test -- --run`: 114 passed; `npm run lint`,
+  - Frontend `npm run test -- --run`: 112 passed; `npm run lint`,
     `npx tsc --noEmit`, and `npm run build` clean.
-  - `docker compose up -d --build` rebuilt the stack; `/readyz` returned
-    `postgres`, `redis`, `ollama`, and `objectstore` all `ok`.
-  - `npx playwright test e2e/sources.spec.ts` passed in Chromium against the
-    rebuilt stack.
-  - PR #19's backend, frontend, and Compose GitHub Actions checks passed.
+  - `docker compose up -d --build` rebuilt the full stack; `/readyz` returned
+    postgres, redis, ollama, and objectstore all `ok`.
+  - `npx playwright test e2e/chat.spec.ts e2e/knowledge.spec.ts
+    e2e/nl2sql.spec.ts` passed all four Chromium cases: plain chat,
+    uploaded-document RAG/citation inspection, normal NL2SQL, and the
+    adversarial guarded-write route.
 
 Important rules:
 
@@ -56,18 +70,21 @@ Important rules:
   - Do not run `pkill -f mnemos`; it can match the agent shell. Kill by port or
     PID.
   - Zero monetary cost forever: free, self-hosted defaults; Ollama is the
-    default model path; no paid cloud pub/sub.
+    default model path; no paid cloud pub/sub or required SaaS tool account.
   - Apply TRACKER §0 and §7 at the end of every task: full verification,
     synchronized TRACKER/ADAPTATION/handoff, scoped conventional commits,
     personal-account push, green PR, ready/merge for completed work, then sync
     and verify clean `main` before reporting completion.
 
-What is next:
+What is next after A4's repository lifecycle is closed:
 
-  - The next milestone is `A4`: classify every chat message to plain chat, RAG,
-    or NL2SQL; route it through the existing flow; show the selected flow and a
-    compact reason; remove the provisional manual mode selectors.
-  - Follow TRACKER §5's five deliverables in order. Do not rebuild the existing
-    A1/A2/A3 flows or change the NL2SQL safety model.
-  - Ordinary one-task-per-session discipline is in force. Complete `A4`, close
-    its repository lifecycle, and stop before `B3`.
+  - `B3`: register a self-hosted MCP server, discover a tool, let the assistant
+    propose one call, approve a gated invocation, and show the result/history.
+  - Follow TRACKER §5's five deliverables in order. Reuse the existing MCP
+    tables, keep credentials per user, authorize again at the invocation
+    boundary using the motivating trust tier, and name an offending retrieved
+    source in a denial.
+  - `B3` is single-call only. Multi-step plans, loops, checkpoints, and replay
+    are `B4`; do not start them in the same session.
+  - Ordinary one-task-per-session discipline is in force. Complete `B3`, close
+    its repository lifecycle, and stop before `B4`.
