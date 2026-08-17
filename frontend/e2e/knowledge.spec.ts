@@ -107,11 +107,11 @@ test("test_you_can_upload_a_document_ask_about_it_and_click_the_citation", async
 
   await nav(page).getByRole("link", { name: "Knowledge", exact: true }).click();
   await page.waitForURL(new RegExp(`^${WEB}/knowledge`));
-  await page.setInputFiles('input[aria-label="Upload a document"]', path);
+  await page.setInputFiles('input[aria-label="Upload documents"]', path);
 
   // Extracted, chunked and embedded — the row says how many passages, which
   // is a claim about the pipeline rather than about the upload alone.
-  const row = page.getByRole("listitem").filter({ hasText: filename });
+  const row = page.getByRole("row").filter({ hasText: filename });
   await expect(row).toBeVisible({ timeout: 60_000 });
   await expect(row).toContainText(/\d+ passages/);
 

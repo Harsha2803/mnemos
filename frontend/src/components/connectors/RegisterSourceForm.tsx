@@ -1,6 +1,7 @@
 "use client";
 
-import { useState, type FormEvent } from "react";
+import { Database, FolderOpen, Globe, type LucideIcon } from "lucide-react";
+import { useMemo, useState, type FormEvent } from "react";
 
 import { Button } from "@/components/ui/Button";
 import { registerSource, type RegisterSourceRequest } from "@/lib/connectors/api";
@@ -17,6 +18,8 @@ const KIND_LABEL: Record<Kind, string> = {
   local_fs: "Local filesystem directory",
   http: "Curated list of URLs",
 };
+
+const KIND_ICON: Record<Kind, LucideIcon> = { s3: Database, minio: Database, local_fs: FolderOpen, http: Globe };
 
 const inputClasses =
   "hit-target rounded-md border border-separator bg-bg px-4 text-body text-label placeholder:text-label-tertiary focus-visible:border-accent";
@@ -36,6 +39,9 @@ export function RegisterSourceForm({ onRegistered }: RegisterSourceFormProps) {
   const [urls, setUrls] = useState("");
   const [busy, setBusy] = useState(false);
   const [error, setError] = useState<string | null>(null);
+  const slugPreview = slugify(slug);
+  const urlLines = useMemo(() => urls.split("\n").map((line) => line.trim()).filter(Boolean), [urls]);
+  const invalidUrls = useMemo(() => urlLines.filter((line) => !isHttpUrl(line)), [urlLines]);
 
   async function onSubmit(event: FormEvent<HTMLFormElement>): Promise<void> {
     event.preventDefault();
@@ -104,25 +110,25 @@ export function RegisterSourceForm({ onRegistered }: RegisterSourceFormProps) {
             placeholder="handbook-fileshare"
             className={inputClasses}
           />
+          <p className="text-footnote text-label-secondary">
+            URL preview: <code className="font-mono">/sources/{slugPreview || "source-slug"}</code>
+          </p>
         </div>
       </div>
 
       <div className="flex flex-col gap-2">
-        <label htmlFor="source-kind" className="text-subheadline font-semibold text-label">
-          Kind
-        </label>
-        <select
-          id="source-kind"
-          value={kind}
-          onChange={(event) => setKind(event.target.value as Kind)}
-          className={`${inputClasses} bg-bg`}
-        >
-          {(Object.keys(KIND_LABEL) as Kind[]).map((value) => (
-            <option key={value} value={value}>
-              {KIND_LABEL[value]}
-            </option>
-          ))}
-        </select>
+        <span className="text-subheadline font-semibold text-label">Provider</span>
+        <div className="grid grid-cols-2 gap-2 sm:grid-cols-4" role="radiogroup" aria-label="Source provider">
+          {(Object.keys(KIND_LABEL) as Kind[]).map((value) => {
+            const Icon = KIND_ICON[value];
+            return (
+              <button key={value} type="button" role="radio" aria-checked={kind === value} onClick={() => setKind(value)} className="hit-target flex flex-col items-start rounded-md border border-separator p-3 text-left text-footnote text-label-secondary hover:bg-fill-tertiary aria-checked:border-accent aria-checked:bg-accent-tint aria-checked:text-accent">
+                <Icon className="mb-2 size-5" strokeWidth={1.5} aria-hidden="true" />
+                <span className="font-semibold">{KIND_LABEL[value]}</span>
+              </button>
+            );
+          })}
+        </div>
       </div>
 
       {(kind === "s3" || kind === "minio") && (
@@ -190,8 +196,9 @@ export function RegisterSourceForm({ onRegistered }: RegisterSourceFormProps) {
             className={`${inputClasses} py-3`}
           />
           <p className="text-footnote text-label-secondary">
-            Exactly these URLs — this connector never crawls or discovers links.
+            {urlLines.length} URL{urlLines.length === 1 ? "" : "s"}. Exactly these URLs — this connector never crawls or discovers links.
           </p>
+          {invalidUrls.length > 0 && <p className="text-footnote text-danger">{invalidUrls.length} line{invalidUrls.length === 1 ? " is" : "s are"} not a valid HTTP(S) URL.</p>}
         </div>
       )}
 
@@ -199,9 +206,22 @@ export function RegisterSourceForm({ onRegistered }: RegisterSourceFormProps) {
         {error ?? ""}
       </p>
 
-      <Button rank="filled" type="submit" disabled={busy} aria-busy={busy} className="self-start">
+      <Button rank="filled" type="submit" disabled={busy || (kind === "http" && invalidUrls.length > 0)} aria-busy={busy} className="self-start">
         {busy ? "Registering…" : "Register source"}
       </Button>
     </form>
   );
+}
+
+function slugify(value: string): string {
+  return value.trim().toLocaleLowerCase().replaceAll(/[^a-z0-9]+/g, "-").replaceAll(/^-|-$/g, "");
+}
+
+function isHttpUrl(value: string): boolean {
+  try {
+    const parsed = new URL(value);
+    return parsed.protocol === "http:" || parsed.protocol === "https:";
+  } catch {
+    return false;
+  }
 }

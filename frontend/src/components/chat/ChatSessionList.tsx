@@ -2,10 +2,10 @@
 
 import * as Dialog from "@radix-ui/react-dialog";
 import { useQuery, useQueryClient } from "@tanstack/react-query";
-import { MessageCircle, Pencil, Plus, Trash2 } from "lucide-react";
+import { MessageCircle, Pencil, Plus, Search, Trash2 } from "lucide-react";
 import Link from "next/link";
 import { usePathname, useRouter } from "next/navigation";
-import { useEffect, useRef, useState, type KeyboardEvent } from "react";
+import { useEffect, useMemo, useRef, useState, type KeyboardEvent } from "react";
 
 import { Button } from "@/components/ui/Button";
 import { EmptyState } from "@/components/ui/EmptyState";
@@ -51,6 +51,17 @@ export function ChatSessionList() {
   const [editingValue, setEditingValue] = useState("");
   const [renameError, setRenameError] = useState<string | null>(null);
   const [pendingDelete, setPendingDelete] = useState<ChatSession | null>(null);
+  const [query, setQuery] = useState("");
+  const sessions = useMemo(() => data?.sessions ?? [], [data?.sessions]);
+  const groups = useMemo(
+    () =>
+      groupSessions(
+        sessions.filter((session) =>
+          session.title.toLocaleLowerCase().includes(query.trim().toLocaleLowerCase()),
+        ),
+      ),
+    [query, sessions],
+  );
 
   async function startNewChat(): Promise<void> {
     const session = await createSession();
@@ -105,8 +116,6 @@ export function ChatSessionList() {
     );
   }
 
-  const sessions = data?.sessions ?? [];
-
   return (
     <div className="flex flex-col gap-2">
       <div className="flex items-center justify-between px-2">
@@ -122,6 +131,14 @@ export function ChatSessionList() {
         </p>
       )}
 
+      {sessions.length > 0 && (
+        <label className="relative mx-1">
+          <span className="sr-only">Search conversations</span>
+          <Search className="pointer-events-none absolute left-3 top-1/2 size-4 -translate-y-1/2 text-label-tertiary" aria-hidden="true" />
+          <input value={query} onChange={(event) => setQuery(event.target.value)} placeholder="Search conversations" className="hit-target w-full rounded-md border border-separator bg-bg pl-9 pr-3 text-footnote text-label" />
+        </label>
+      )}
+
       {sessions.length === 0 ? (
         <EmptyState
           icon={MessageCircle}
@@ -135,10 +152,12 @@ export function ChatSessionList() {
         />
       ) : (
         <List label="Conversations">
-          {sessions.map((session) => {
+          {groups.flatMap((group) => [
+            <li key={`heading-${group.label}`} className="px-3 pb-1 pt-3 text-caption font-semibold uppercase tracking-wide text-label-tertiary">{group.label}</li>,
+            ...group.sessions.map((session) => {
             const href = `/chat/${session.id}`;
             const editing = editingId === session.id;
-            return (
+              return (
               <li key={session.id} className="list-row">
                 <div className="flex w-full items-center">
                   {editing ? (
@@ -178,8 +197,10 @@ export function ChatSessionList() {
                   )}
                 </div>
               </li>
-            );
-          })}
+              );
+            }),
+          ])}
+          {groups.length === 0 && <li className="px-3 py-4 text-footnote text-label-secondary">No conversations match.</li>}
         </List>
       )}
 
@@ -213,6 +234,26 @@ export function ChatSessionList() {
       </Dialog.Root>
     </div>
   );
+}
+
+type SessionGroup = { label: string; sessions: ChatSession[] };
+
+function groupSessions(sessions: ChatSession[]): SessionGroup[] {
+  const now = new Date();
+  const startToday = new Date(now.getFullYear(), now.getMonth(), now.getDate()).getTime();
+  const buckets = new Map<string, ChatSession[]>();
+  for (const session of sessions) {
+    const timestamp = new Date(session.last_message_at ?? session.updated_at).getTime();
+    const ageDays = Math.floor((startToday - new Date(new Date(timestamp).getFullYear(), new Date(timestamp).getMonth(), new Date(timestamp).getDate()).getTime()) / 86_400_000);
+    const label = ageDays <= 0 ? "Today" : ageDays === 1 ? "Yesterday" : ageDays <= 7 ? "Previous 7 days" : "Older";
+    const bucket = buckets.get(label) ?? [];
+    bucket.push(session);
+    buckets.set(label, bucket);
+  }
+  return ["Today", "Yesterday", "Previous 7 days", "Older"].flatMap((label) => {
+    const grouped = buckets.get(label);
+    return grouped ? [{ label, sessions: grouped }] : [];
+  });
 }
 
 type RenameFieldProps = {

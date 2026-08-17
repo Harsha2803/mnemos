@@ -16,17 +16,31 @@ import { MessageBubble, type DisplayMessage } from "./MessageBubble";
 export type MessageListProps = {
   messages: DisplayMessage[];
   onCitationClick?: (citation: Citation) => void;
+  onMessageSelect?: (message: DisplayMessage) => void;
+  selectedCitationId?: string;
 };
 
-export function MessageList({ messages, onCitationClick }: MessageListProps) {
+export function MessageList({ messages, onCitationClick, onMessageSelect, selectedCitationId }: MessageListProps) {
   const bottomRef = useRef<HTMLDivElement>(null);
+  const followTail = useRef(true);
+
+  useEffect(() => {
+    const scrollPane = bottomRef.current?.parentElement?.parentElement;
+    if (!scrollPane) return;
+    const onScroll = () => {
+      followTail.current = scrollPane.scrollHeight - scrollPane.scrollTop - scrollPane.clientHeight < 120;
+    };
+    onScroll();
+    scrollPane.addEventListener("scroll", onScroll, { passive: true });
+    return () => scrollPane.removeEventListener("scroll", onScroll);
+  }, []);
 
   useEffect(() => {
     // jsdom has no layout, so `scrollIntoView` does not exist there — guarded
     // rather than polyfilled, since the test suite has no scroll position to
     // assert on in the first place (DesignSystem's `harness.ts` note in
     // vitest.setup.ts covers the same gap for other layout APIs).
-    bottomRef.current?.scrollIntoView?.({ block: "end" });
+    if (followTail.current) bottomRef.current?.scrollIntoView?.({ block: "end" });
   }, [messages]);
 
   if (messages.length === 0) {
@@ -46,6 +60,8 @@ export function MessageList({ messages, onCitationClick }: MessageListProps) {
           key={message.id}
           message={message}
           onCitationClick={onCitationClick}
+          onMessageSelect={message.role === "assistant" ? () => onMessageSelect?.(message) : undefined}
+          selectedCitationId={selectedCitationId}
         />
       ))}
       <div ref={bottomRef} />

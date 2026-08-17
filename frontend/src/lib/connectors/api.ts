@@ -12,8 +12,10 @@ export type ContentSource = components["schemas"]["SourceResponse"];
 export type SourceItem = components["schemas"]["ItemResponse"];
 export type RegisterSourceRequest = components["schemas"]["RegisterSourceRequest"];
 export type IngestResponse = components["schemas"]["IngestResponse"];
+export type IngestJob = components["schemas"]["IngestJobResponse"];
 
 export const SOURCES_QUERY_KEY = ["connectors", "sources"] as const;
+export const CONNECTOR_JOBS_QUERY_KEY = ["connectors", "jobs"] as const;
 export const itemsQueryKey = (slug: string) => ["connectors", "sources", slug, "items"] as const;
 
 export async function fetchSources(signal?: AbortSignal): Promise<ContentSource[]> {
@@ -49,6 +51,12 @@ export async function ingestItem(slug: string, uri: string): Promise<IngestRespo
     body: { uri },
   });
   if (error !== undefined) throw new Error(errorMessage(error, "could not queue this item"));
+  return data;
+}
+
+export async function fetchJobs(signal?: AbortSignal): Promise<IngestJob[]> {
+  const { data, error } = await api.GET("/api/v1/connectors/jobs", { signal });
+  if (error !== undefined) throw new Error(errorMessage(error, "could not load ingestion jobs"));
   return data;
 }
 

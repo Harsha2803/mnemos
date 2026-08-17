@@ -3,6 +3,7 @@
 import { createContext, useContext, useMemo, useState, type ReactNode } from "react";
 
 import type { Citation } from "@/lib/knowledge/api";
+import type { Nl2SqlResult } from "@/lib/chat/stream";
 
 /**
  * What the inspector is currently showing.
@@ -16,7 +17,19 @@ import type { Citation } from "@/lib/knowledge/api";
  * with the full context bundle, which is why the value is a named union rather
  * than a bare `Citation | null`.
  */
-export type InspectorSelection = { kind: "citation"; citation: Citation } | null;
+export type InspectorMessage = {
+  id: string;
+  content: string;
+  citations: Citation[];
+  nl2sql?: Nl2SqlResult;
+};
+
+export type InspectorSelection =
+  | { kind: "message"; message: InspectorMessage }
+  | { kind: "citation"; message: InspectorMessage; citation: Citation }
+  | { kind: "sql"; message: InspectorMessage; result: Nl2SqlResult }
+  | { kind: "bundle"; message: InspectorMessage }
+  | null;
 
 type InspectorContextValue = {
   selection: InspectorSelection;

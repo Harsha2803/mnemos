@@ -249,6 +249,61 @@ def test_ingest_refuses_a_uri_the_source_does_not_currently_list(
     assert response.status_code == 404, response.text
 
 
+def test_list_jobs_returns_progress_history_for_only_the_callers_org(
+    client: TestClient, codec: PlatformTokenCodec, seeded: Seed, postgres: Postgres
+) -> None:
+    job_a = uuid7()
+    job_b = uuid7()
+
+    async def seed_jobs() -> None:
+        conn = await asyncpg.connect(postgres.owner_dsn)
+        try:
+            await conn.execute(
+                """
+                INSERT INTO ingest_job (id, org_id, kind, status, payload, attempts,
+                                        max_attempts, done_units, total_units)
+                VALUES ($1, $2, 'connector_ingest', 'running',
+                        '{"item_name": "handbook.txt", "item_uri": "handbook.txt"}'::jsonb,
+                        1, 3, 2, 4),
+                       ($3, $4, 'connector_ingest', 'failed',
+                        '{"item_name": "private.txt", "item_uri": "private.txt"}'::jsonb,
+                        3, 3, 0, 4)
+                """,
+                job_a,
+                seeded.org_a,
+                job_b,
+                seeded.org_b,
+            )
+            await conn.execute(
+                """
+                INSERT INTO ingest_job_event (id, org_id, job_id, from_status, to_status, detail)
+                VALUES ($1, $2, $3, 'queued', 'running', 'claimed by worker'),
+                       ($4, $2, $3, 'running', 'running', 'prepared 2 chunks')
+                """,
+                uuid7(),
+                seeded.org_a,
+                job_a,
+                uuid7(),
+            )
+        finally:
+            await conn.close()
+
+    import asyncio
+
+    asyncio.run(seed_jobs())
+
+    headers_a = _headers_a(codec, seeded)
+    response = client.get("/api/v1/connectors/jobs", headers=headers_a)
+
+    assert response.status_code == 200, response.text
+    body = response.json()
+    assert [job["id"] for job in body] == [str(job_a)]
+    assert body[0]["status"] == "running"
+    assert body[0]["done_units"] == 2
+    assert body[0]["total_units"] == 4
+    assert [event["to_status"] for event in body[0]["events"]] == ["running", "running"]
+
+
 def test_org_b_cannot_list_or_browse_org_as_source(
     client: TestClient, codec: PlatformTokenCodec, seeded: Seed, tmp_path: Path
 ) -> None:

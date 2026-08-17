@@ -10,7 +10,7 @@ half-built queue nothing yet drains.
 from __future__ import annotations
 
 import hashlib
-from collections.abc import Sequence
+from collections.abc import Awaitable, Callable, Sequence
 from uuid import UUID
 
 from mnemos.core.errors import NotFoundError
@@ -38,6 +38,7 @@ log = get_logger(__name__)
 #: high (low-trust) default rather than an optimistic one.
 DEFAULT_TRUST_TIER = 10
 DEFAULT_RETRIEVAL_K = 8
+ProgressReporter = Callable[[int, int, str], Awaitable[None]]
 
 
 class KnowledgeService:
@@ -90,6 +91,7 @@ class KnowledgeService:
         source_kind: str,
         source_uri: str,
         trust_tier: int,
+        progress: ProgressReporter | None = None,
     ) -> DocumentSummary:
         """The worker's entry point (`B1` deliverable 4) — same body as
         `upload_document`, reused rather than duplicated, parametrized by the
@@ -116,6 +118,7 @@ class KnowledgeService:
             source_kind=source_kind,
             source_uri=source_uri,
             trust_tier=trust_tier,
+            progress=progress,
         )
 
     async def _ingest(
@@ -129,17 +132,25 @@ class KnowledgeService:
         source_kind: str,
         source_uri: str | None,
         trust_tier: int,
+        progress: ProgressReporter | None = None,
     ) -> DocumentSummary:
+        total_units = 4
         content_sha256 = hashlib.sha256(data).hexdigest()
         existing = await self._repository.find_by_content_hash(
             org_id=org_id, content_sha256=content_sha256
         )
         if existing is not None:
             log.info("knowledge.upload_deduplicated", document_id=str(existing.id))
+            if progress is not None:
+                await progress(
+                    total_units, total_units, "deduplicated against an existing document"
+                )
             return existing
 
         object_key = f"{org_id}/{content_sha256}"
         await self._objects.put(object_key, data, content_type=media_type)
+        if progress is not None:
+            await progress(1, total_units, "stored source bytes")
 
         document = await self._repository.create_document(
             org_id=org_id,
@@ -152,6 +163,8 @@ class KnowledgeService:
             source_uri=source_uri or object_key,
             object_key=object_key,
         )
+        if progress is not None:
+            await progress(2, total_units, "created document record")
 
         pages = await extract_pages(data, media_type)
         raw_chunks = []
@@ -165,6 +178,8 @@ class KnowledgeService:
                 raw_chunks.append(c)
                 ordinal += 1
             offset += len(text)
+        if progress is not None:
+            await progress(3, total_units, f"prepared {len(raw_chunks)} chunks")
 
         if raw_chunks:
             vectors = self._embedder.encode([c.content for c in raw_chunks])
@@ -177,6 +192,8 @@ class KnowledgeService:
                 acl_tag_ids=[],
                 trust_tier=trust_tier,
             )
+        if progress is not None:
+            await progress(total_units, total_units, "stored chunk embeddings")
         detail = await self._repository.get_document(org_id=org_id, document_id=document.id)
         if detail is None:  # pragma: no cover - written immediately above
             raise NotFoundError(f"document {document.id} vanished mid-ingest")

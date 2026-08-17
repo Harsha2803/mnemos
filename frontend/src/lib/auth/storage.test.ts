@@ -26,6 +26,7 @@ const STORAGE_IS_ALLOWED: Record<string, string> = {
   "lib/theme.ts": "the theme preference — a word, chosen by the user, readable by anyone",
   "components/theme/useThemePreference.ts": "reads the same preference through the store",
   "lib/auth/destination.ts": "the post-login destination — a same-origin path, validated on read",
+  "lib/layoutPreferences.ts": "non-sensitive shell widths and pinned state",
 };
 
 /** Generated from the API's OpenAPI document; its prose is not our code. */

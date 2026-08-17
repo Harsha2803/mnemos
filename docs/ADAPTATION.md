@@ -4,10 +4,9 @@
 > self-contained: architecture, the capability inventory, schema, milestones, and current
 > state. [`TRACKER.md`](../TRACKER.md) holds live task status; this holds the design.
 
-**Last updated:** 2026-08-17 — `B1` is done and merged to `main`: source connectors,
-Redis Streams, authenticated ingestion realtime, the worker's real connector-ingest path,
-and the sources UI are all built and browser-verified. The out-of-band frontend polish PR
-#18 is merged too. `B2` is next before `A4`.
+**Last updated:** 2026-08-17 — the UI enhancement handoff is implemented and live-verified
+on the rebuilt Compose stack after `B2`. It improves the existing product slices without
+changing the milestone sequence; `A4` is next.
 
 ---
 
@@ -249,7 +248,7 @@ authoritative for sequencing, not these tables' phase grouping.
 | ID | What it builds | You can now… | Status |
 |---|---|---|---|
 | **B1** | Object storage · source connectors (MinIO/S3, local FS, HTTP) · Redis Streams event bus · sources UI | **connect a source, browse it, and watch ingestion events arrive live** | ✅ 2026-08-17 — all 5/5 deliverables done, browser-verified against the rebuilt stack |
-| **B2** | Ingestion jobs at scale: heartbeat, retries, status history, stuck-job reaper · per-job progress UI | **ingest a folder and watch every job's progress — including one that dies, surfaced as stuck rather than silently lost** | ⬜ **after `B1`** |
+| **B2** | Ingestion jobs at scale: heartbeat, retries, status history, stuck-job reaper · per-job progress UI | **ingest a folder and watch every job's progress — including one that dies, surfaced as stuck rather than silently lost** | ✅ 2026-08-17 — verified against the rebuilt stack |
 | **B3** | MCP tool runtime: registry, per-user credentials, trust tiers, approval gates · tool console | **register a tool, have the assistant call it, and approve a gated call** — with a denial that names the offending source on screen | ⬜ |
 | **B4** | Agent flow: bounded state machine over tools, checkpoints, step trace | **give it a multi-step task and watch it plan, call tools and finish — with every step inspectable** | ⬜ |
 
@@ -307,10 +306,10 @@ for typography, spatial rhythm, materials and motion character. §0 there record
 Apple assets are off-limits (SF Pro as a webfont, SF Symbols) and what is used instead.
 
 **Current position.** `main` has `A0` (PR #11), `A1` (PR #13), `A2` (PR #14), `A3`
-(PR #15), `B1` (PR #16), the per-session log files (PR #17), and the out-of-band frontend
-polish work (PR #18). `B1`'s Sources screen was verified against the rebuilt compose stack
-on 2026-08-17. The next milestone is `B2` (ingestion at scale), still before `A4` per the
-2026-08-15 re-sequencing.
+(PR #15), `B1` (PR #16), the per-session log files (PR #17), the out-of-band frontend
+polish work (PR #18), and `B2` plus its final UI/correctness review (PR #19). The next
+milestone is `A4`, returning to the normal sequence after the 2026-08-15 `B1`/`B2`
+ingestion detour.
 
 `M3`'s exit criterion "RLS blocks cross-org" turned out to be unmet by `M2` rather than
 merely untested; that is written up in §8 and in
@@ -319,6 +318,32 @@ merely untested; that is written up in §8 and in
 ---
 
 ## 8. Current state
+
+### Product polish — UI enhancement handoff (2026-08-17, not a milestone)
+
+This pass turns the existing milestone screens into a more coherent operating surface
+without inventing backend capabilities. The overview summarizes documents, sources,
+active jobs, conversations, recent activity, and service readiness. Knowledge adds a
+searchable/filterable document table and a per-file upload queue with validation, retry,
+removal, and batch feedback. Sources adds provider-specific registration guidance, source
+activity, item search/filter/select-all, and an expandable job timeline that exposes status
+history, progress, attempts, owner, heartbeat, lease, errors, and copyable job IDs.
+
+Chat's selection model now covers whole answers, citations, SQL runs, and the future bundle
+view. Citation markers provide hover/focus previews and click through to an evidence
+inspector with navigation; the transcript respects manual scroll position; the conversation
+list is searchable and grouped by recency. The SQL panel makes authorization and denial
+explicit, keeps results labelled and copyable, and exposes execution metadata. Shell widths,
+pinning, and collapsed state persist in an allowlisted non-sensitive preference record; the
+authentication storage test continues to reject credentials or unknown keys.
+
+Verification against the rebuilt stack: backend `make test` (433 passed), `make lint`,
+`make types`, and `make check`; frontend `npm run test` (112 passed), `npm run lint`,
+`npm run typecheck`, and `npm run build`; `docker compose up -d --build` with api/web and
+stateful dependencies healthy; `/readyz` with Postgres, Redis, Ollama, and object storage
+all `ok`; and the complete Playwright suite, 12/12 passed (auth, storage safety, chat,
+upload/RAG/citations, allowed and denied NL2SQL, and Sources ingestion). This remains
+out-of-band polish: it does not claim `A4`'s classifier or `C4`'s context-bundle compiler.
 
 ### Dev tooling — per-session log files (2026-08-16, not a milestone)
 
@@ -874,6 +899,46 @@ the whole `up`. It does now, so plain `docker compose up -d` brings the frontend
 everything else and `web` has a healthcheck of its own — a stack whose UI needs a
 remembered extra flag is a stack whose UI does not get looked at.
 
+### B2 — ingestion at scale ✅ verified 2026-08-17
+
+`B2` is built over `B1`'s connector ingestion path without a schema migration. The existing
+`ingest_job` columns (`attempts`, `max_attempts`, owner/heartbeat/lease fields,
+`done_units`, `total_units`) and `ingest_job_event` table now carry real operational depth:
+`IngestJobRepository` can list recent jobs with event history, renew a running job's lease,
+record progress, skip queued jobs until their retry delay elapses, and move a failed attempt
+to either retryable `queued` or terminal `failed`.
+
+`entrypoints/worker/main.py` now heartbeats while a connector item is being processed and
+passes an optional progress callback into `KnowledgeService.ingest_connector_item`. Progress
+updates write `done_units`/`total_units`, append `running -> running` history rows, and publish
+the richer live/durable payload (`attempts`, `max_attempts`, progress units, and error detail)
+to the authenticated ingestion WebSocket path and Redis Streams. The stuck-job reaper now
+surfaces expired leases as `running -> stuck -> queued/failed`, so a dead worker is visible in
+history instead of being silently rewritten back to the queue.
+
+The final review tightened the concurrency contract: only a claim increments `attempts`, and
+all progress/failure/success mutations are fenced by both `status = running` and the current
+`owner_id`. An obsolete worker therefore cannot overwrite the attempt that replaced it after
+lease reclamation. Retry claims clear stale progress/error state, job mutations advance
+`updated_at`, event reads are explicitly tenant-filtered and deterministically ordered, and
+unexpected internal exception detail is logged rather than returned over the API/WebSocket.
+
+The product slice is `GET /connectors/jobs`, `GET /connectors/jobs/{job_id}`, and the Sources
+activity feed. The feed hydrates recent jobs after reload before merging WebSocket events, and
+rejects an older hydration response if a newer live transition already arrived. Each row now
+shows a labelled `stuck` state, attempts, a progress bar, and error detail. The generated
+frontend schema was regenerated from the edited FastAPI OpenAPI document rather than hand-edited.
+
+Evidence after the final review: focused backend tests for worker/repository/router — 17
+passed; full backend `make test` — 434 passed; `make lint`, `make types`, and `make check`
+clean. Frontend: `npm run test -- --run` — 114 passed; `npm run lint`, `npx tsc --noEmit`,
+and `npm run build` clean.
+After `docker compose up -d --build`, `/readyz` returned postgres, redis, ollama and
+objectstore all `ok`, and `npx playwright test e2e/sources.spec.ts` passed against the rebuilt
+stack.
+PR #19's backend, frontend, and Compose GitHub Actions checks also passed before the
+completed milestone was marked ready and merged to `main`.
+
 ### B1 — connect a source and watch it ingest ✅ verified 2026-08-17
 
 Deliverable 1, the `SourceConnector` port + factory, is built and on `feat/b1-connectors`
@@ -1180,8 +1245,8 @@ here on signs in as `analyst@mnemos.local` instead.
 
 ### Not started
 
-**B2 through D** — §7. Phase A is complete as of `A3` (2026-08-15), and `B1` is complete
-as of 2026-08-17. Concretely, and
+**A4, then B3 through D** — §7. Phase A is complete through `A3` (2026-08-15), and `B1`/`B2`
+are complete as of 2026-08-17. Concretely, and
 stated plainly because the gap between what `docs/` describes and what runs is the thing
 this file exists to keep honest:
 
@@ -1193,10 +1258,9 @@ this file exists to keep honest:
   claim-and-process loop, and `entrypoints/api/routers/connectors.py` +
   `frontend/src/app/(app)/sources/` make the flow usable from the app. Full evidence is in
   [TRACKER's 2026-08-17 dated note](../TRACKER.md).
-- **There is no `B2` ingestion-at-scale depth yet.** The job machinery exists and one
-  connector item can be ingested live, but heartbeat renewal, retry/backoff depth, richer
-  status history, explicit stuck-job surfacing, replay/progress depth, and the per-job
-  progress UI are still the next milestone.
+- **`B2` is done.** Connector ingestion jobs heartbeat, retry with backoff, expose richer
+  status/progress history, surface stuck leases, hydrate recent job state after reload, and
+  show per-job progress in Sources. Full evidence is in TRACKER's 2026-08-17 B2 note.
 - ~~The realtime WebSocket gateway is unauthenticated.~~ **Closed in `B1` deliverable 3
   (2026-08-16):** the WS handshake now validates the platform JWT and derives the
   subscribed channel from the caller's own org, never from client-supplied path data.
@@ -1205,9 +1269,8 @@ this file exists to keep honest:
   reaper itself also had a latent bug fixed alongside this — it ran unscoped and so
   reclaimed nothing under RLS, ever; see the dated note in TRACKER for detail.
 - **There is no router.** A person still has to tick "Use documents" or "Ask your data" to
-  get a grounded answer; nothing classifies a message to a flow on its own. `A4` — moved
-  after `B1`/`B2` in the 2026-08-15 (evening) re-sequencing — and both provisional selectors
-  are written down as provisional so `A4` knows what to remove.
+  get a grounded answer; nothing classifies a message to a flow on its own. `A4` is next, and
+  both provisional selectors are written down as provisional so `A4` knows what to remove.
 - **There is no tool runtime, no agent flow, no prompt store and no cost ledger.** `B3`,
   `B4`, `C2`.
 - **The context inspector shows a cited passage, not a context bundle.** `A2` gave it its
@@ -1253,6 +1316,10 @@ click-through citations. Evidence for each is above.
   who trusts neither.
 - **Every branch gets a PR when it is created**, so no branch is lost track of. Push and
   open it as soon as the branch has its first commit, in draft if the work is unfinished.
+- **A completed task closes its repository lifecycle.** After verification and green CI,
+  mark the PR ready, merge it with the repository's normal strategy, sync `main`, and
+  update `prompt.txt` alongside TRACKER/ADAPTATION so the next handoff describes what is
+  actually merged rather than what merely exists on a branch.
 - **Milestone IDs are `A0`–`D1` now, not `M4`–`M14`.** If you find an old ID in a document,
   a docstring or a commit message, §7's mapping table is the translation — do not guess,
   and do not leave a reader holding a number that no longer names anything.

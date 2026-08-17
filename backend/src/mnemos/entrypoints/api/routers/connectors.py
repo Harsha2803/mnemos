@@ -9,9 +9,11 @@ transitions a job past `queued`; this router only ever writes that first row.
 
 from __future__ import annotations
 
+from datetime import datetime
 from typing import Annotated, Literal
+from uuid import UUID
 
-from fastapi import APIRouter, Depends, Request, status
+from fastapi import APIRouter, Depends, Query, Request, status
 from pydantic import BaseModel
 from sqlalchemy.exc import IntegrityError
 
@@ -22,7 +24,12 @@ from mnemos.features.connectors.application.service import ConnectorService
 from mnemos.features.connectors.domain import SourceItem
 from mnemos.features.identity.application.principals import AuthenticatedCaller
 from mnemos.features.knowledge.adapters.jobs_repository import IngestJobRepository
-from mnemos.features.knowledge.domain import CONNECTOR_INGEST_KIND
+from mnemos.features.knowledge.domain import (
+    CONNECTOR_INGEST_KIND,
+    IngestJobEventRecord,
+    IngestJobRecord,
+    JobId,
+)
 
 router = APIRouter(prefix="/connectors", tags=["connectors"])
 
@@ -69,6 +76,37 @@ class IngestResponse(BaseModel):
     uri: str
 
 
+class IngestJobEventResponse(BaseModel):
+    id: str
+    from_status: str | None
+    to_status: str
+    owner_id: str | None
+    detail: str | None
+    occurred_at: datetime
+
+
+class IngestJobResponse(BaseModel):
+    id: str
+    kind: str
+    status: str
+    payload: dict[str, str]
+    document_id: str | None
+    attempts: int
+    max_attempts: int
+    done_units: int
+    total_units: int
+    owner_id: str | None
+    heartbeat_at: datetime | None
+    lease_expires_at: datetime | None
+    started_at: datetime | None
+    finished_at: datetime | None
+    error_code: str | None
+    error_detail: str | None
+    created_at: datetime
+    updated_at: datetime
+    events: list[IngestJobEventResponse]
+
+
 def _source_response(record: ContentSourceRecord) -> SourceResponse:
     return SourceResponse(
         id=str(record.id),
@@ -87,6 +125,41 @@ def _item_response(item: SourceItem) -> ItemResponse:
         size_bytes=item.size_bytes,
         content_type=item.content_type,
         modified_at=item.modified_at.isoformat() if item.modified_at else None,
+    )
+
+
+def _event_response(record: IngestJobEventRecord) -> IngestJobEventResponse:
+    return IngestJobEventResponse(
+        id=str(record.id),
+        from_status=record.from_status,
+        to_status=record.to_status,
+        owner_id=record.owner_id,
+        detail=record.detail,
+        occurred_at=record.occurred_at,
+    )
+
+
+def _job_response(record: IngestJobRecord) -> IngestJobResponse:
+    return IngestJobResponse(
+        id=str(record.id),
+        kind=record.kind,
+        status=record.status,
+        payload=dict(record.payload),
+        document_id=str(record.document_id) if record.document_id else None,
+        attempts=record.attempts,
+        max_attempts=record.max_attempts,
+        done_units=record.done_units,
+        total_units=record.total_units,
+        owner_id=record.owner_id,
+        heartbeat_at=record.heartbeat_at,
+        lease_expires_at=record.lease_expires_at,
+        started_at=record.started_at,
+        finished_at=record.finished_at,
+        error_code=record.error_code,
+        error_detail=record.error_detail,
+        created_at=record.created_at,
+        updated_at=record.updated_at,
+        events=[_event_response(event) for event in record.events],
     )
 
 
@@ -156,6 +229,28 @@ async def list_sources(
 ) -> list[SourceResponse]:
     sources = await service.list_sources(org_id=caller.principal.org_id)
     return [_source_response(s) for s in sources]
+
+
+@router.get("/jobs")
+async def list_jobs(
+    caller: Annotated[AuthenticatedCaller, Depends(require_caller)],
+    jobs: Annotated[IngestJobRepository, Depends(_jobs)],
+    limit: Annotated[int, Query(ge=1, le=100)] = 50,
+) -> list[IngestJobResponse]:
+    records = await jobs.list_recent(org_id=caller.principal.org_id, limit=limit)
+    return [_job_response(job) for job in records]
+
+
+@router.get("/jobs/{job_id}")
+async def get_job(
+    job_id: UUID,
+    caller: Annotated[AuthenticatedCaller, Depends(require_caller)],
+    jobs: Annotated[IngestJobRepository, Depends(_jobs)],
+) -> IngestJobResponse:
+    record = await jobs.get_for_org(org_id=caller.principal.org_id, job_id=JobId(job_id))
+    if record is None:
+        raise NotFoundError(f"ingest job {job_id} not found")
+    return _job_response(record)
 
 
 @router.get("/{slug}/items")

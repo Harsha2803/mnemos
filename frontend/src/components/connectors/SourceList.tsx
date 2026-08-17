@@ -11,6 +11,7 @@ export type SourceListProps = {
   sources: ContentSource[];
   selectedSlug: string | null;
   onSelect: (slug: string) => void;
+  lastActivityBySlug?: Record<string, string>;
 };
 
 const KIND_ICON: Record<string, LucideIcon> = {
@@ -20,7 +21,7 @@ const KIND_ICON: Record<string, LucideIcon> = {
   http: Globe,
 };
 
-export function SourceList({ sources, selectedSlug, onSelect }: SourceListProps) {
+export function SourceList({ sources, selectedSlug, onSelect, lastActivityBySlug = {} }: SourceListProps) {
   if (sources.length === 0) {
     return (
       <EmptyState
@@ -36,6 +37,7 @@ export function SourceList({ sources, selectedSlug, onSelect }: SourceListProps)
     <List label="Sources">
       {sources.map((source) => {
         const Icon = KIND_ICON[source.kind] ?? FolderOpen;
+        const lastActivity = lastActivityBySlug[source.slug];
         return (
           <ListItem
             key={source.id}
@@ -52,10 +54,26 @@ export function SourceList({ sources, selectedSlug, onSelect }: SourceListProps)
               <span className="block text-footnote text-label-secondary">
                 {source.slug} · {source.kind}
               </span>
+              <span className="block text-caption text-label-tertiary">
+                {source.is_enabled ? "Enabled" : "Disabled"} · Added {formatDate(source.created_at)}
+                {lastActivity ? ` · Active ${relativeTime(lastActivity)}` : ""}
+              </span>
             </button>
           </ListItem>
         );
       })}
     </List>
   );
+}
+
+function formatDate(value: string): string {
+  return new Intl.DateTimeFormat(undefined, { dateStyle: "medium" }).format(new Date(value));
+}
+
+function relativeTime(value: string): string {
+  const minutes = Math.max(0, Math.floor((Date.now() - new Date(value).getTime()) / 60_000));
+  if (minutes < 1) return "just now";
+  if (minutes < 60) return `${minutes}m ago`;
+  if (minutes < 1440) return `${Math.floor(minutes / 60)}h ago`;
+  return `${Math.floor(minutes / 1440)}d ago`;
 }

@@ -111,7 +111,7 @@ test("test_you_can_connect_a_local_fs_source_ingest_an_item_and_watch_it_succeed
   await page.getByRole("button", { name: /Ingest 1/ }).click();
 
   const feed = page.getByRole("list", { name: "Ingestion activity" });
-  const feedRow = feed.getByRole("listitem").filter({ hasText: "handbook.txt" });
+  const feedRow = feed.getByRole("listitem").filter({ hasText: "handbook.txt" }).first();
 
   // Optimistic first: the UI's own "ingest requested" state, before any
   // socket message has necessarily arrived.

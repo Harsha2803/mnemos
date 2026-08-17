@@ -49,6 +49,7 @@ from mnemos.features.knowledge.adapters.retrieval import SqlRetriever
 from mnemos.features.knowledge.application.service import KnowledgeService
 from mnemos.features.knowledge.domain import (
     CONNECTOR_INGEST_KIND,
+    DocumentId,
     HashingEmbedder,
     HeuristicTokenizer,
 )
@@ -256,6 +257,22 @@ async def test_claim_next_returns_none_when_the_queue_is_empty(jobs: IngestJobRe
     assert await jobs.claim_next(owner_id=OWNER, lease_seconds=60) is None
 
 
+async def test_claim_next_skips_a_queued_job_until_its_retry_delay_passes(
+    jobs: IngestJobRepository, postgres: Postgres, org_id: OrgId
+) -> None:
+    job_id = await jobs.enqueue(org_id=org_id, kind="t", payload={"n": "retry"})
+    conn = await asyncpg.connect(postgres.owner_dsn)
+    try:
+        await conn.execute(
+            "UPDATE ingest_job SET lease_expires_at = now() + interval '30 seconds' WHERE id = $1",
+            job_id,
+        )
+    finally:
+        await conn.close()
+
+    assert await jobs.claim_next(owner_id=OWNER, lease_seconds=60) is None
+
+
 async def test_two_concurrent_claimers_never_claim_the_same_job(
     jobs: IngestJobRepository, org_id: OrgId
 ) -> None:
@@ -279,6 +296,91 @@ async def test_enqueue_is_idempotent_per_item(jobs: IngestJobRepository, org_id:
 
     with pytest.raises(ConflictError):
         await jobs.enqueue(org_id=org_id, kind="t", payload={}, idempotency_key="fixtures:a.txt")
+
+
+async def test_heartbeat_extends_the_running_jobs_lease(
+    jobs: IngestJobRepository, postgres: Postgres, org_id: OrgId
+) -> None:
+    job_id = await jobs.enqueue(org_id=org_id, kind="t", payload={})
+    claimed = await jobs.claim_next(owner_id=OWNER, lease_seconds=10)
+    assert claimed is not None
+
+    renewed = await jobs.heartbeat(job_id=job_id, org_id=org_id, owner_id=OWNER, lease_seconds=120)
+
+    assert renewed is True
+    conn = await asyncpg.connect(postgres.owner_dsn)
+    try:
+        row = await conn.fetchrow(
+            "SELECT owner_id, heartbeat_at, lease_expires_at FROM ingest_job WHERE id = $1",
+            job_id,
+        )
+        assert row is not None
+        assert row["owner_id"] == OWNER
+        assert row["heartbeat_at"] is not None
+        assert row["lease_expires_at"] is not None
+    finally:
+        await conn.close()
+
+
+async def test_an_obsolete_worker_cannot_update_a_job_after_ownership_changes(
+    jobs: IngestJobRepository, postgres: Postgres, org_id: OrgId
+) -> None:
+    job_id = await jobs.enqueue(org_id=org_id, kind="t", payload={})
+    claimed = await jobs.claim_next(owner_id=OWNER, lease_seconds=60)
+    assert claimed is not None
+
+    conn = await asyncpg.connect(postgres.owner_dsn)
+    try:
+        await conn.execute(
+            "UPDATE ingest_job SET owner_id = 'replacement-worker:1' WHERE id = $1", job_id
+        )
+    finally:
+        await conn.close()
+
+    assert not await jobs.record_progress(
+        job_id=job_id,
+        org_id=org_id,
+        owner_id=OWNER,
+        done_units=3,
+        total_units=4,
+        detail="obsolete progress",
+    )
+    assert (
+        await jobs.mark_attempt_failed(
+            job_id=job_id,
+            org_id=org_id,
+            owner_id=OWNER,
+            error_code="ObsoleteWorker",
+            error_detail="obsolete failure",
+        )
+        is None
+    )
+    assert not await jobs.mark_succeeded(
+        job_id=job_id,
+        org_id=org_id,
+        owner_id=OWNER,
+        document_id=DocumentId(uuid7()),
+    )
+
+    conn = await asyncpg.connect(postgres.owner_dsn)
+    try:
+        row = await conn.fetchrow(
+            "SELECT status, owner_id, done_units, error_code FROM ingest_job WHERE id = $1", job_id
+        )
+        assert row is not None
+        assert dict(row) == {
+            "status": "running",
+            "owner_id": "replacement-worker:1",
+            "done_units": 0,
+            "error_code": None,
+        }
+    finally:
+        await conn.close()
+
+    events = await _fetch_events(postgres, job_id)
+    assert [(event["from_status"], event["to_status"]) for event in events] == [
+        ("queued", "running")
+    ]
 
 
 # ------------------------------------------------------------ process a job
@@ -322,10 +424,11 @@ async def test_process_next_job_ingests_a_connector_item_end_to_end(
     assert job_row["finished_at"] is not None
 
     events = await _fetch_events(postgres, job_row["id"])
-    assert [(e["from_status"], e["to_status"]) for e in events] == [
-        ("queued", "running"),
-        ("running", "succeeded"),
-    ]
+    transitions = [(e["from_status"], e["to_status"]) for e in events]
+    assert transitions[0] == ("queued", "running")
+    assert ("running", "running") in transitions
+    assert transitions[-1] == ("running", "succeeded")
+    assert job_row["done_units"] == job_row["total_units"] == 4
 
     conn = await asyncpg.connect(postgres.owner_dsn)
     try:
@@ -348,11 +451,17 @@ async def test_process_next_job_ingests_a_connector_item_end_to_end(
 
     # -- the live pub/sub relay ------------------------------------------
     seen: list[dict[str, object]] = []
-    for _ in range(2):
+    for _ in range(8):
         message = await pubsub.get_message(timeout=2)
         if message and message["type"] == "message":
             seen.append(json.loads(message["data"]))
-    assert [m["status"] for m in seen] == ["running", "succeeded"]
+            if seen[-1]["status"] == "succeeded":
+                break
+    statuses = [m["status"] for m in seen]
+    assert next(iter(statuses)) == "running"
+    assert statuses[-1] == "succeeded"
+    assert seen[-1]["done_units"] == 4
+    assert seen[-1]["total_units"] == 4
     assert all(m["job_id"] == str(job_row["id"]) for m in seen)
     await pubsub.unsubscribe(topic)
     await pubsub.aclose()
@@ -360,9 +469,10 @@ async def test_process_next_job_ingests_a_connector_item_end_to_end(
     # -- the durable Streams entry ----------------------------------------
     stream = f"mnemos:events:org:{org_id}:ingestion"
     raw_entries = await cache.client.xrange(stream, "-", "+")
-    assert len(raw_entries) == 2
+    assert len(raw_entries) >= 3
     statuses = [fields["status"] for _entry_id, fields in raw_entries]
-    assert statuses == ["running", "succeeded"]
+    assert statuses[0] == "running"
+    assert statuses[-1] == "succeeded"
 
 
 async def test_process_next_job_marks_a_missing_item_as_failed(
@@ -396,6 +506,15 @@ async def test_process_next_job_marks_a_missing_item_as_failed(
             "content_type": "text/plain",
         },
     )
+    conn = await asyncpg.connect(postgres.owner_dsn)
+    try:
+        await conn.execute(
+            "UPDATE ingest_job SET max_attempts = 1 WHERE org_id = $1 AND kind = $2",
+            org_id,
+            CONNECTOR_INGEST_KIND,
+        )
+    finally:
+        await conn.close()
 
     claimed = await process_next_job(
         jobs=jobs,
@@ -420,6 +539,57 @@ async def test_process_next_job_marks_a_missing_item_as_failed(
     ]
 
 
+async def test_process_next_job_retries_a_failed_attempt_before_terminal_failure(
+    jobs: IngestJobRepository,
+    connectors: ConnectorService,
+    knowledge: KnowledgeService,
+    cache: Cache,
+    event_bus: RedisStreamsEventBus,
+    postgres: Postgres,
+    org_id: OrgId,
+    tmp_path: Path,
+) -> None:
+    await connectors.register(
+        org_id=org_id,
+        slug="fixtures",
+        name="Fixtures",
+        kind="local_fs",
+        config={"root": str(tmp_path)},
+    )
+    await jobs.enqueue(
+        org_id=org_id,
+        kind=CONNECTOR_INGEST_KIND,
+        payload={
+            "source_slug": "fixtures",
+            "item_uri": "not-yet-there.txt",
+            "item_name": "not-yet-there.txt",
+            "content_type": "text/plain",
+        },
+    )
+
+    claimed = await process_next_job(
+        jobs=jobs,
+        connectors=connectors,
+        knowledge=knowledge,
+        cache=cache,
+        event_bus=event_bus,
+        owner=OWNER,
+    )
+    assert claimed is True
+
+    job_row = await _job_row_by_kind(postgres, org_id=org_id, kind=CONNECTOR_INGEST_KIND)
+    assert job_row["status"] == "queued"
+    assert job_row["attempts"] == 1
+    assert job_row["lease_expires_at"] is not None
+    assert job_row["error_code"] == "NotFoundError"
+
+    events = await _fetch_events(postgres, job_row["id"])
+    assert [(e["from_status"], e["to_status"]) for e in events] == [
+        ("queued", "running"),
+        ("running", "queued"),
+    ]
+
+
 # -------------------------------------------------------------------- reap
 
 
@@ -439,7 +609,7 @@ async def test_reap_stuck_jobs_reclaims_an_expired_lease_under_real_rls(
             INSERT INTO ingest_job (id, org_id, kind, status, owner_id, heartbeat_at,
                                      lease_expires_at, attempts, max_attempts)
             VALUES ($1, $2, 'connector_ingest', 'running', 'dead-worker:1',
-                    now() - interval '2 minutes', now() - interval '90 seconds', 0, 3)
+                    now() - interval '2 minutes', now() - interval '90 seconds', 1, 3)
             """,
             job_id,
             org_id,
@@ -448,7 +618,8 @@ async def test_reap_stuck_jobs_reclaims_an_expired_lease_under_real_rls(
         await conn.close()
 
     reclaimed = await reap_stuck_jobs(db)
-    assert reclaimed == 1
+    assert len(reclaimed) == 1
+    assert reclaimed[0].status == "queued"
 
     conn = await asyncpg.connect(postgres.owner_dsn)
     try:
@@ -461,3 +632,9 @@ async def test_reap_stuck_jobs_reclaims_an_expired_lease_under_real_rls(
         assert row["attempts"] == 1
     finally:
         await conn.close()
+
+    events = await _fetch_events(postgres, job_id)
+    assert [(e["from_status"], e["to_status"]) for e in events] == [
+        ("running", "stuck"),
+        ("stuck", "queued"),
+    ]

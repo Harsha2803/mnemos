@@ -121,5 +121,5 @@ test("test_you_can_ask_mnemos_a_question_and_watch_it_stream_and_persist", async
   // Still there — this is the "a conversation that is still there tomorrow"
   // half of the sentence, not merely "the stream worked".
   await expect(page).toHaveURL(sessionUrl);
-  await expect(page.getByText("Say the single word: hello")).toBeVisible();
+  await expect(page.getByRole("main").getByText("Say the single word: hello")).toBeVisible();
 });
