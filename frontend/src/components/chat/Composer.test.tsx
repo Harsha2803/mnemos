@@ -11,10 +11,6 @@ function renderComposer(overrides: Partial<ComposerProps> = {}) {
     onSend: vi.fn(),
     onStop: vi.fn(),
     streaming: false,
-    useDocuments: false,
-    onUseDocumentsChange: vi.fn(),
-    useDatasource: false,
-    onUseDatasourceChange: vi.fn(),
     ...overrides,
   };
   return { ...render(<Composer {...props} />), props };
@@ -64,61 +60,12 @@ describe("the composer", () => {
     expect(onStop).toHaveBeenCalledTimes(1);
   });
 
-  it("test_the_answer_mode_control_is_a_real_radiogroup_and_reports_its_changes", async () => {
-    const onUseDocumentsChange = vi.fn();
-    renderComposer({ onUseDocumentsChange });
+  it("test_the_composer_requires_no_answer_mode_selection", () => {
+    renderComposer();
 
-    // By role, so this fails if it is ever "simplified" into styled divs —
-    // which would be unreachable by keyboard and silent to a screen reader.
-    // `chat` is selected by default: a real, nameable third state, not the
-    // absence of a choice.
-    expect(screen.getByRole("radio", { name: "Chat" })).toHaveAttribute("aria-checked", "true");
-    const documents = screen.getByRole("radio", { name: "Use documents" });
-    expect(documents).toHaveAttribute("aria-checked", "false");
-
-    await userEvent.click(documents);
-
-    expect(onUseDocumentsChange).toHaveBeenCalledWith(true);
-  });
-
-  it("test_the_use_datasource_option_reports_its_changes", async () => {
-    const onUseDatasourceChange = vi.fn();
-    renderComposer({ onUseDatasourceChange });
-
-    const toggle = screen.getByRole("radio", { name: "Ask your data" });
-    expect(toggle).toHaveAttribute("aria-checked", "false");
-
-    await userEvent.click(toggle);
-
-    expect(onUseDatasourceChange).toHaveBeenCalledWith(true);
-  });
-
-  it("the three answer modes are mutually exclusive by construction", () => {
-    // Reflects the backend's own rule: sending both `use_documents` and
-    // `use_datasource` as `true` is a 422. A `radiogroup` cannot represent
-    // two selections at once, so there is no separate "disable the sibling"
-    // logic to test — the control itself makes the impossible state
-    // unbuildable.
-    const usingDocuments = renderComposer({ useDocuments: true });
-    expect(screen.getByRole("radio", { name: "Use documents" })).toHaveAttribute(
-      "aria-checked",
-      "true",
-    );
-    expect(screen.getByRole("radio", { name: "Ask your data" })).toHaveAttribute(
-      "aria-checked",
-      "false",
-    );
-    usingDocuments.unmount();
-
-    renderComposer({ useDatasource: true });
-    expect(screen.getByRole("radio", { name: "Ask your data" })).toHaveAttribute(
-      "aria-checked",
-      "true",
-    );
-    expect(screen.getByRole("radio", { name: "Use documents" })).toHaveAttribute(
-      "aria-checked",
-      "false",
-    );
+    expect(screen.queryByRole("radio")).toBeNull();
+    expect(screen.queryByText("Use documents")).toBeNull();
+    expect(screen.queryByText("Ask your data")).toBeNull();
   });
 
   it("test_the_composer_has_no_axe_violations", async () => {

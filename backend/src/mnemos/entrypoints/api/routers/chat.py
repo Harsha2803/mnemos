@@ -23,9 +23,9 @@ from typing import Annotated, Any, Literal
 
 from fastapi import APIRouter, Depends, Query, Request, status
 from fastapi.responses import StreamingResponse
-from pydantic import BaseModel, Field
+from pydantic import BaseModel, ConfigDict, Field
 
-from mnemos.core.errors import NotFoundError, ValidationError
+from mnemos.core.errors import NotFoundError
 from mnemos.entrypoints.api.security import require_caller
 from mnemos.features.chat.application.service import ChatService
 from mnemos.features.chat.domain import (
@@ -40,6 +40,8 @@ from mnemos.features.chat.domain import (
 from mnemos.features.identity.application.principals import AuthenticatedCaller
 from mnemos.flows.nl2sql.application import Nl2SqlFlow
 from mnemos.flows.rag.application import RagFlow
+from mnemos.flows.router.application import RouterService
+from mnemos.flows.router.domain import RouteDecision, RouteFlow
 
 router = APIRouter(prefix="/chat", tags=["chat"])
 
@@ -67,6 +69,7 @@ class ChatMessageResponse(BaseModel):
     role: Literal["system", "user", "assistant", "tool"]
     content: str
     flow: str | None
+    router_rationale: str | None
     prompt_tokens: int
     completion_tokens: int
     latency_ms: int | None
@@ -103,16 +106,9 @@ class RenameSessionRequest(BaseModel):
 
 
 class SendMessageRequest(BaseModel):
+    model_config = ConfigDict(extra="forbid")
+
     content: str = Field(min_length=1, max_length=32_000)
-    #: Manual for now — `A4`'s classifier replaces both this and
-    #: `use_datasource` with real routing (TRACKER §5 deliverable 5's
-    #: explicit, written-down provisionality).
-    use_documents: bool = False
-    #: Same provisionality, for `A3`'s NL2SQL flow. There is exactly one
-    #: registered datasource in this build (no registry UI — TRACKER §5,
-    #: "explicitly not in A3"), so this selects *that one*, not a specific
-    #: slug.
-    use_datasource: bool = False
 
 
 def _session_response(summary: ChatSessionSummary) -> ChatSessionResponse:
@@ -135,6 +131,7 @@ def _message_response(record: ChatMessageRecord) -> ChatMessageResponse:
         role=record.role.value,
         content=record.content,
         flow=record.flow,
+        router_rationale=record.router_rationale,
         prompt_tokens=record.prompt_tokens,
         completion_tokens=record.completion_tokens,
         latency_ms=record.latency_ms,
@@ -181,6 +178,14 @@ def _nl2sql(request: Request) -> Nl2SqlFlow:
         msg = "the NL2SQL flow is not configured"
         raise RuntimeError(msg)
     return flow
+
+
+def _router(request: Request) -> RouterService:
+    service = getattr(request.app.state, "router_service", None)
+    if not isinstance(service, RouterService):  # pragma: no cover - the lifespan sets it
+        msg = "router service is not configured"
+        raise RuntimeError(msg)
+    return service
 
 
 @router.post("/sessions", status_code=status.HTTP_201_CREATED)
@@ -271,27 +276,25 @@ async def send_message(
     service: Annotated[ChatService, Depends(_service)],
     rag: Annotated[RagFlow, Depends(_rag)],
     nl2sql: Annotated[Nl2SqlFlow, Depends(_nl2sql)],
+    message_router: Annotated[RouterService, Depends(_router)],
 ) -> StreamingResponse:
-    if body.use_documents and body.use_datasource:
-        raise ValidationError(
-            "use_documents and use_datasource are mutually exclusive until A4's router "
-            "can combine flows",
-            field="use_datasource",
-        )
-    if body.use_datasource:
+    decision = message_router.classify(body.content)
+    if decision.flow is RouteFlow.NL2SQL:
         events = nl2sql.stream_reply(
             org_id=caller.principal.org_id,
             user_id=caller.principal.principal_id,
             session_id=_parse_session_id(session_id),
             content=body.content,
+            router_rationale=decision.reason,
         )
-    elif body.use_documents:
+    elif decision.flow is RouteFlow.RAG:
         events = rag.stream_reply(
             org_id=caller.principal.org_id,
             user_id=caller.principal.principal_id,
             caller_tags=tuple(caller.principal.tags.slugs),
             session_id=_parse_session_id(session_id),
             content=body.content,
+            router_rationale=decision.reason,
         )
     else:
         events = service.stream_reply(
@@ -299,6 +302,7 @@ async def send_message(
             user_id=caller.principal.principal_id,
             session_id=_parse_session_id(session_id),
             content=body.content,
+            router_rationale=decision.reason,
         )
     # Priming: the first `__anext__()` runs everything up to (and possibly
     # past) the first token — session lookup, persisting the user's message,
@@ -313,6 +317,7 @@ async def send_message(
 
     async def body_stream() -> AsyncIterator[bytes]:
         try:
+            yield _route_sse_frame(decision)
             if first is not None:
                 yield _sse_frame(first)
             async for event in events:
@@ -329,6 +334,11 @@ async def send_message(
             "Connection": "keep-alive",
         },
     )
+
+
+def _route_sse_frame(decision: RouteDecision) -> bytes:
+    payload = {"flow": decision.flow.value, "reason": decision.reason}
+    return f"event: route\ndata: {json.dumps(payload)}\n\n".encode()
 
 
 def _sse_frame(event: AssistantToken | AssistantDone | AssistantError) -> bytes:

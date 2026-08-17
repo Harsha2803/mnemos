@@ -111,6 +111,9 @@ test("test_you_can_ask_mnemos_a_question_and_watch_it_stream_and_persist", async
   await expect(page.getByRole("button", { name: "Send message" })).toBeVisible({
     timeout: 30_000,
   });
+  await expect(
+    page.getByLabel("Routed to Chat: No document or database context is needed."),
+  ).toBeVisible();
   await expect(page.getByText("You").first()).toBeVisible();
   await expect(page.getByText("Mnemos").first()).toBeVisible();
 
@@ -122,4 +125,7 @@ test("test_you_can_ask_mnemos_a_question_and_watch_it_stream_and_persist", async
   // half of the sentence, not merely "the stream worked".
   await expect(page).toHaveURL(sessionUrl);
   await expect(page.getByRole("main").getByText("Say the single word: hello")).toBeVisible();
+  await expect(
+    page.getByLabel("Routed to Chat: No document or database context is needed."),
+  ).toBeVisible();
 });

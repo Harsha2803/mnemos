@@ -120,10 +120,13 @@ test("test_you_can_upload_a_document_ask_about_it_and_click_the_citation", async
   await page.getByRole("main").getByRole("button", { name: "New chat" }).click();
   await page.waitForURL(new RegExp(`^${WEB}/chat/`));
 
-  await page.getByRole("radio", { name: "Use documents" }).click();
   const composer = page.getByRole("textbox", { name: "Message" });
-  await composer.fill("How many days of unused leave can I carry over?");
+  await composer.fill("According to the uploaded handbook, how many leave days carry over?");
   await composer.press("Enter");
+
+  await expect(
+    page.getByLabel("Routed to Documents: Asks about documents or cited knowledge."),
+  ).toBeVisible();
 
   await expect(page.getByRole("button", { name: "Send message" })).toBeVisible({
     timeout: 90_000,

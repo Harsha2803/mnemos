@@ -3,11 +3,11 @@
 **An enterprise AI assistant — chat over your documents (RAG), your database (NL2SQL) and
 your tools (MCP). Multi-tenant, authenticated, audited.**
 
-One conversation surface. Ask it something and a router decides whether the answer needs
-your documents, your database, a tool, memory, or a combination — then answers with
-citations you can click into. Underneath it is per-tenant row-level security, real OIDC,
-RBAC, an audit trail and a cost ledger, because that is what separates an assistant from a
-demo.
+One conversation surface. Today, ask it something and a router selects plain chat, your
+documents, or your database, then shows which flow answered and why. Tools, memory, and
+combined multi-step work are the next platform layers. Underneath it is per-tenant row-level
+security and real OIDC; the planned RBAC depth, audit trail, and cost ledger are stated below
+rather than implied to exist already.
 
 Everything is free and self-hosted: Postgres + pgvector, Redis, MinIO, Keycloak and Ollama
 in containers. No API key is required for any capability.
@@ -35,25 +35,23 @@ you to discover. `docs/` is the full target architecture; this is the honest sta
 | **Sign-in** | A sign-in screen over the OIDC round trip, sessions that survive a reload, real sign-out, and a fail-closed route guard — a route that declares nothing is authenticated |
 | **Chat** | An Ollama-backed gateway behind a `ChatModel` port, persisted sessions and messages, and SSE streaming that renders token by token |
 | **RAG** | Upload → extract → chunk → embed onto pgvector HNSW → hybrid retrieval (vector + trigram, RRF-fused, deduplicated) → an answer with citations you click into. **Authorization is a predicate inside the scan and superseded revisions are excluded there too**, both pinned by tests rather than asserted |
+| **NL2SQL** | Schema introspection + business glossary → Ollama SQL generation → AST read-only allowlist → execution as `mnemos_ro` → narration and a visible SQL/result/denial panel. The parser guard and database role are independent defences |
+| **Automatic routing** | A deterministic, local-first classifier selects chat, RAG, or NL2SQL for every message. The stream and persisted assistant turn carry a compact reason shown beside the answer; there is no manual mode selector |
+| **Source ingestion** | MinIO/S3, local-filesystem, and curated-HTTP connectors feed durable Redis Streams jobs. Workers heartbeat, retry with backoff, surface stuck leases, and publish per-job progress/history to the Sources screen |
 
 **Not built yet.** Stated plainly, because a README that lets you assume otherwise is
 lying by omission:
 
-- **There is no NL2SQL.** The `mnemos_analytics` warehouse is seeded and its `mnemos_ro`
-  role is proven read-only, but nothing generates SQL against it.
-- **There is no router.** You tick a box to answer from your documents; nothing classifies
-  a message to a flow on its own.
 - **There is no tool runtime, no agent flow, no prompt store and no cost dashboard.**
 - **The context inspector shows a cited passage, not a compiled context bundle.** The
   compiler, the budget allocator and the bitemporal memory layer that produced the numbers
   below are still quarantined in `backend/src/mnemos/_v1/` on SQLite. Retrieval has been
   ported onto Postgres; memory and the compiler have not, which is why the benchmark below
   is still labelled as measured on SQLite.
-- **Ingestion is synchronous.** It runs in the request handler; the job machinery —
-  heartbeat, retries, stuck-job detection — exists in the schema and is not yet wired.
 
-**Phase A builds the product surface** — sign-in, then chat, then documents, then the
-database, then the router. The milestone plan is [`TRACKER.md`](TRACKER.md) §3.0 and the
+**Phase A's product surface is complete** — sign-in, chat, documents, database, and router.
+`B3` is next: the single-call MCP tool runtime and console. The milestone plan is
+[`TRACKER.md`](TRACKER.md) §3.0 and the
 architecture is [`docs/ADAPTATION.md`](docs/ADAPTATION.md); `TRACKER.md` §3 is the
 authoritative list of what is built, with the evidence for each claim.
 
@@ -84,7 +82,7 @@ nothing that exists.
 Check it came up:
 
 ```bash
-curl http://localhost:8000/readyz             # {"status":"ready","checks":{"postgres":"ok","redis":"ok"}}
+curl http://localhost:8000/readyz             # postgres, redis, ollama, objectstore → ok
 docker compose exec api mnemosctl db doctor   # 41 tables, 40 with FORCE row-level security
 ```
 

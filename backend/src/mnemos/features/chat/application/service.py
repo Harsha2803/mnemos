@@ -122,7 +122,13 @@ class ChatService:
         await self._repository.delete_session(org_id=org_id, session_id=session_id)
 
     async def stream_reply(
-        self, *, org_id: OrgId, user_id: UserId, session_id: ChatSessionId, content: str
+        self,
+        *,
+        org_id: OrgId,
+        user_id: UserId,
+        session_id: ChatSessionId,
+        content: str,
+        router_rationale: str | None = None,
     ) -> AsyncGenerator[ChatStreamEvent, None]:
         """Persist the question, stream the answer, persist it only if it
         finishes. Raises `NotFoundError` before yielding anything if the
@@ -160,6 +166,8 @@ class ChatService:
                         latency_ms=latency_ms,
                         model=self._model.model_name,
                         finish_reason=event.finish_reason,
+                        flow="chat",
+                        router_rationale=router_rationale,
                     )
                     yield AssistantDone(message=message)
                     return

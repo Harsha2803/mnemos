@@ -84,6 +84,7 @@ from mnemos.features.knowledge.domain import HashingEmbedder, HeuristicTokenizer
 from mnemos.features.llm.adapters.ollama import OllamaChatModel
 from mnemos.flows.nl2sql.application import Nl2SqlFlow
 from mnemos.flows.rag.application import RagFlow
+from mnemos.flows.router.application import RouterService
 from mnemos.platform.cache import Cache
 from mnemos.platform.db import Database
 from mnemos.platform.objectstore.s3 import S3ObjectStore
@@ -174,6 +175,7 @@ async def lifespan(app: FastAPI) -> AsyncIterator[None]:
         model=app.state.chat_model,
         history_turns=settings.chat_history_turns,
     )
+    app.state.router_service = RouterService()
 
     # --- knowledge: object storage, extraction, chunking, embedding, retrieval
     app.state.object_store = S3ObjectStore(

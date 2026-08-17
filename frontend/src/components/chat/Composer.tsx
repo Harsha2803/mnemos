@@ -1,7 +1,6 @@
 "use client";
 
-import * as ToggleGroup from "@radix-ui/react-toggle-group";
-import { ArrowUp, Database, FileText, MessageSquare, Square, type LucideIcon } from "lucide-react";
+import { ArrowUp, Square } from "lucide-react";
 import { useEffect, useRef, type KeyboardEvent } from "react";
 
 import { Button } from "@/components/ui/Button";
@@ -10,37 +9,7 @@ export type ComposerProps = {
   onSend: (content: string) => void;
   onStop: () => void;
   streaming: boolean;
-  useDocuments: boolean;
-  onUseDocumentsChange: (value: boolean) => void;
-  /** Answer by generating and running SQL against the datasource, rather than chat or RAG. */
-  useDatasource: boolean;
-  onUseDatasourceChange: (value: boolean) => void;
 };
-
-type Mode = "chat" | "documents" | "datasource";
-
-type ModeOption = {
-  value: Mode;
-  label: string;
-  Icon: LucideIcon;
-};
-
-/**
- * "Chat" is offered first and named, the same reasoning `ThemeToggle`'s
- * "Match system" option gives: it is the default, and a user who wants to go
- * back to it needs somewhere to click, not an absence of a choice.
- */
-const MODE_OPTIONS: readonly ModeOption[] = [
-  { value: "chat", label: "Chat", Icon: MessageSquare },
-  { value: "documents", label: "Use documents", Icon: FileText },
-  { value: "datasource", label: "Ask your data", Icon: Database },
-];
-
-function modeFor(useDocuments: boolean, useDatasource: boolean): Mode {
-  if (useDatasource) return "datasource";
-  if (useDocuments) return "documents";
-  return "chat";
-}
 
 /**
  * A textarea that grows with its content, up to a cap — DesignSystem §4's
@@ -50,26 +19,15 @@ function modeFor(useDocuments: boolean, useDatasource: boolean): Mode {
  * Enter sends; Shift+Enter inserts a newline. Disabled while a response
  * streams, with a visible stop control in its place (TRACKER §5 deliverable 5).
  *
- * The three answer modes are one Radix `ToggleGroup` (single-select,
- * `radiogroup` semantics from a component that already has roving focus and
- * ARIA right — the same primitive `ThemeToggle` uses for Appearance), not two
- * independent checkboxes with mutual exclusion bolted on: "chat" is a real,
- * nameable third state, and a `radiogroup` is what a mutually exclusive
- * choice among three options *is*, semantically. `useDocuments`/
- * `useDatasource` stay the props this component is driven by and reports
- * through — only the on-screen control changed shape.
+ * A4 deliberately exposes no answer-mode control: one conversation surface
+ * accepts the question and the router explains its choice beside the answer.
  */
 export function Composer({
   onSend,
   onStop,
   streaming,
-  useDocuments,
-  onUseDocumentsChange,
-  useDatasource,
-  onUseDatasourceChange,
 }: ComposerProps) {
   const ref = useRef<HTMLTextAreaElement>(null);
-  const mode = modeFor(useDocuments, useDatasource);
 
   useEffect(() => {
     const el = ref.current;
@@ -93,15 +51,6 @@ export function Composer({
       event.preventDefault();
       submit();
     }
-  }
-
-  function onModeChange(next: string): void {
-    // Radix emits "" when the pressed item is toggled off — a `radiogroup`
-    // always has an answer, so an empty value means "no change", never "no
-    // mode", the same reasoning `ThemeToggle` applies to Appearance.
-    if (next === "") return;
-    onUseDocumentsChange(next === "documents");
-    onUseDatasourceChange(next === "datasource");
   }
 
   return (
@@ -142,31 +91,6 @@ export function Composer({
         )}
       </div>
 
-      <ToggleGroup.Root
-        type="single"
-        value={mode}
-        onValueChange={onModeChange}
-        aria-label="Answer using"
-        className="inline-flex w-fit items-center gap-1 self-start rounded-md bg-fill-tertiary p-1"
-      >
-        {MODE_OPTIONS.map(({ value, label, Icon }) => (
-          <ToggleGroup.Item
-            key={value}
-            value={value}
-            disabled={streaming}
-            className={[
-              "hit-target inline-flex cursor-pointer items-center gap-1.5 rounded-md px-2.5",
-              "text-footnote text-label-secondary transition-colors duration-150 ease-standard",
-              "hover:bg-fill-secondary hover:text-label",
-              "data-[state=on]:bg-bg data-[state=on]:text-label data-[state=on]:shadow-sm",
-              "disabled:pointer-events-none disabled:opacity-40",
-            ].join(" ")}
-          >
-            <Icon className="size-4" strokeWidth={1.5} aria-hidden="true" />
-            {label}
-          </ToggleGroup.Item>
-        ))}
-      </ToggleGroup.Root>
     </div>
   );
 }

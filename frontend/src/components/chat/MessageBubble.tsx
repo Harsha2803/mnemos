@@ -11,6 +11,9 @@ export type DisplayMessage = {
   id: string;
   role: "user" | "assistant";
   content: string;
+  /** The backend-selected answer pipeline and its compact display rationale. */
+  flow?: string | null;
+  routeReason?: string | null;
   /** True for the one assistant bubble currently filling with tokens. */
   streaming?: boolean;
   /**
@@ -83,6 +86,14 @@ export function MessageBubble({
       <span className="px-1 text-footnote text-label-secondary">
         {isUser ? "You" : "Mnemos"}
       </span>
+      {!isUser && message.flow != null && message.routeReason != null && (
+        <span
+          className="px-1 text-caption font-semibold text-info"
+          aria-label={`Routed to ${flowLabel(message.flow)}: ${message.routeReason}`}
+        >
+          {flowLabel(message.flow)} · {message.routeReason}
+        </span>
+      )}
       <div
         aria-live={message.streaming === true ? "polite" : undefined}
         className={[
@@ -141,6 +152,12 @@ export function MessageBubble({
       {message.nl2sql !== undefined && <SqlPanel result={message.nl2sql} />}
     </div>
   );
+}
+
+function flowLabel(flow: string): string {
+  if (flow === "rag") return "Documents";
+  if (flow === "nl2sql") return "Data";
+  return "Chat";
 }
 
 function renderWithCitations(

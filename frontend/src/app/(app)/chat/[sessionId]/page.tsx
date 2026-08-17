@@ -39,8 +39,6 @@ export default function ChatSessionPage() {
 
   const [messages, setMessages] = useState<DisplayMessage[]>([]);
   const [streaming, setStreaming] = useState(false);
-  const [useDocuments, setUseDocuments] = useState(false);
-  const [useDatasource, setUseDatasource] = useState(false);
   const abortRef = useRef<AbortController | null>(null);
   const loadedFor = useRef<string | null>(null);
 
@@ -53,6 +51,8 @@ export default function ChatSessionPage() {
         id: message.id,
         role: message.role === "user" ? "user" : "assistant",
         content: message.content,
+        flow: message.flow,
+        routeReason: message.router_rationale,
         citations: citations.filter((c) => c.message_id === message.id),
       })),
     );
@@ -83,6 +83,13 @@ export default function ChatSessionPage() {
       sessionId,
       content,
       {
+        onRoute: ({ flow, reason }) => {
+          setMessages((prev) =>
+            prev.map((m) =>
+              m.id === assistantMessageId ? { ...m, flow, routeReason: reason } : m,
+            ),
+          );
+        },
         onToken: (text) => {
           setMessages((prev) =>
             prev.map((m) =>
@@ -94,7 +101,14 @@ export default function ChatSessionPage() {
           setMessages((prev) =>
             prev.map((m) =>
               m.id === assistantMessageId
-                ? { id: message.id, role: "assistant", content: message.content, nl2sql }
+                ? {
+                    id: message.id,
+                    role: "assistant",
+                    content: message.content,
+                    flow: message.flow,
+                    routeReason: message.router_rationale,
+                    nl2sql,
+                  }
                 : m,
             ),
           );
@@ -139,7 +153,6 @@ export default function ChatSessionPage() {
         },
       },
       controller.signal,
-      { useDocuments, useDatasource },
     );
   }
 
@@ -211,10 +224,6 @@ export default function ChatSessionPage() {
         onSend={handleSend}
         onStop={handleStop}
         streaming={streaming}
-        useDocuments={useDocuments}
-        onUseDocumentsChange={setUseDocuments}
-        useDatasource={useDatasource}
-        onUseDatasourceChange={setUseDatasource}
       />
     </div>
   );

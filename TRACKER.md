@@ -6,19 +6,49 @@
 > **and [`docs/ADAPTATION.md`](docs/ADAPTATION.md)** *in the same commit* — a stale
 > tracker is worse than none.
 
-**Last updated:** 2026-08-17 — the completed `B2`/UI-enhancement branch received a final
-correctness and accessibility review. Retry accounting, worker lease ownership, public
-error detail, live-vs-hydrated job ordering, persisted layout restoration, and interactive
-target semantics are now covered explicitly. See the first dated note below for evidence.
-**Phase:** **A — make it a chatbot.** `B1`/`B2` are now complete after the one documented
-build-order deviation; return to Phase A for `A4`.
-**Next task:** `A4` — stop choosing a mode: classify each message to chat / RAG / NL2SQL,
-run the chosen flow, and show which flow answered and why. Remove the provisional
-`use_documents` / `use_datasource` selectors once the classifier owns that decision.
-**Branch right now:** `main`; completed `B2` and the UI enhancement work landed through
-PR #19 after its backend, frontend, and Compose checks passed. No milestone branch is
-pending. Start `A4` on a fresh branch after confirming the active GitHub account is
-`Harsha2803`.
+**Last updated:** 2026-08-17 — `A4` is complete and verified locally: every message is
+classified to chat, RAG, or NL2SQL; the chosen flow and compact rationale are persisted and
+shown in the transcript; the manual mode selectors are gone. See the first dated note below.
+**Phase:** **B — make it a platform.** Phase A is complete; resume Phase B at `B3`.
+**Next task:** `B3` — build the single-call MCP tool runtime: registry, per-user credentials,
+trust-tier authorization, durable approvals, invocation records, and the tool console.
+**Branch right now:** `agent/a4-message-router`; all five `A4` deliverables are committed and
+verified. Repository publication is the remaining lifecycle step; local `gh` authentication
+for `Harsha2803` must be renewed before the first push or PR mutation.
+
+> ### 2026-08-17 — `A4` done: every question routes itself and explains the choice
+>
+> **You can now ask anything in the chat box without choosing a mode and see which flow
+> answered and why.** `flows/router/` owns a deterministic, zero-cost classifier with three
+> outcomes: explicit structured-data/metric questions select NL2SQL, explicit document or
+> citation questions select RAG, and the conservative default is plain chat. The application
+> seam deliberately keeps that local policy available as the fallback if an Ollama-backed
+> classifier is ever added later.
+>
+> `POST /chat/sessions/{id}/messages` no longer accepts `use_documents` or
+> `use_datasource`; unknown request fields are rejected instead of silently preserving a
+> hidden override. The route selects the existing A1/A2/A3 generator unchanged, emits a
+> leading `route` SSE frame, and persists both `chat_message.flow` and
+> `chat_message.router_rationale`. Those columns already existed, so no migration was
+> needed. The generated frontend schema was regenerated from FastAPI's OpenAPI document.
+>
+> The UI slice removes the three-way manual toggle group from the existing composer. Each
+> assistant turn now carries one compact `Chat`, `Documents`, or `Data` annotation plus the
+> classifier's reason; live streams receive it from the route frame and reloaded history
+> receives the same value from the persisted message. No design token or new component was
+> added.
+>
+> **Evidence:** focused classifier/chat/RAG/NL2SQL tests — 35 passed, including a
+> write-like request that automatically selected NL2SQL and remained behind the existing
+> AST guard; full backend `make test` — 441 passed; `make lint`, `make types`, and
+> `make check` clean. Frontend `npm run test -- --run` — 112 passed; `npm run lint`,
+> `npx tsc --noEmit`, and `npm run build` clean. `docker compose up -d --build` rebuilt the
+> stack and `/readyz` returned postgres, redis, ollama, and objectstore all `ok`.
+> `npx playwright test e2e/chat.spec.ts e2e/knowledge.spec.ts e2e/nl2sql.spec.ts` passed
+> all four Chromium cases: plain chat, uploaded-document RAG with a clickable citation,
+> normal NL2SQL with visible SQL/results, and the adversarial write-like request with the
+> guard/repair outcome visible. The retrieval/compile path did not move, so the benchmark
+> was not rerun.
 
 > ### 2026-08-17 — final `B2`/UI review closed lease and hydration races
 >
@@ -1150,7 +1180,7 @@ That right-hand column is not a summary — it is the exit criterion.
 | **A1** | LLM gateway (Ollama) · chat sessions + messages · SSE streaming · the chat surface | **talk to it** — ask a question and watch the answer stream in token by token | ✅ 2026-08-08 |
 | **A2** | Upload → extract → chunk → embed (pgvector HNSW) · retrieval ported from `_v1` · RAG flow · citations · knowledge library | **upload a document and ask questions about it**, with citations you click into | ✅ merged (PR #14) |
 | **A3** | NL2SQL: introspection · glossary · generate · AST read-only guard · `mnemos_ro` execution · narration · SQL panel | **ask a question about your data in English** and see the SQL, the rows and the narration — and see the guard visibly refuse a write | ✅ verified 2026-08-15, PR #15 |
-| **A4** | Router: classify a message → chat / RAG / NL2SQL · flow indicator | **ask anything without choosing a mode**, and see which flow answered and why | ⬜ — built **after** `B1`/`B2`, see below |
+| **A4** | Router: classify a message → chat / RAG / NL2SQL · flow indicator | **ask anything without choosing a mode**, and see which flow answered and why | ✅ 2026-08-17 — verified against the rebuilt stack |
 
 **At the end of Phase A the thing this project is for exists.** Everything after deepens it.
 
@@ -1214,6 +1244,28 @@ discarded. If you find a reference to an old ID anywhere, this is the translatio
 | `M12` router | `A4` | Moved **earlier**: without it the user has to pick a mode, which is not what a chatbot is |
 | `M13` frontend | dissolved into `F0` + a UI slice per milestone | Unchanged by this re-plan |
 | `M14` realtime + e2e + docs | `D1` | |
+
+### ✅ A4 — stop choosing a mode, verified 2026-08-17
+
+**You can now ask anything without choosing a mode and see which flow answered and why.**
+`flows/router/domain/decision.py` provides the deterministic local-first classifier;
+`RouterService` is the application seam the API composition root owns. Explicit database,
+SQL, or business-metric intent selects NL2SQL; explicit document/citation intent selects
+RAG; everything else conservatively stays in chat.
+
+The existing chat endpoint now dispatches to the existing A1/A2/A3 flow selected by that
+decision. It emits a `route` SSE frame before answer frames and stores the same flow and
+rationale on the assistant message, so the decision survives reloads. The former
+`use_documents`/`use_datasource` flags are removed and rejected as unknown fields. No
+NL2SQL guard, retrieval behavior, or model-provider default changed, and the already-present
+`chat_message.flow`/`router_rationale` columns meant no schema migration was needed.
+
+The UI slice is the original composer and transcript: the mode toggle group is gone, and
+assistant answers carry one compact `Chat`, `Documents`, or `Data` line with the reason.
+Focused backend coverage passed 35 tests; the full backend passed 441 with lint, strict
+types, and Alembic drift clean. The frontend passed 112 tests, lint, typecheck, and build.
+After a full Compose rebuild, readiness was fully green and four Chromium cases proved
+plain chat, RAG, ordinary NL2SQL, and the adversarial guarded-write route live.
 
 ### ✅ B2 — ingestion at scale, verified 2026-08-17
 
@@ -2747,63 +2799,71 @@ Recorded so they are not rediscovered as surprises:
 
 ## 5. NEXT TASK
 
-`A3`, `B1`, and `B2` are all done and verified. The one documented build-order deviation
-(`B1`/`B2` immediately after `A3`) is over; return to Phase A.
+`A4` is done and verified. Phase A is complete; resume the interrupted Phase-B sequence.
 
-### `A4` — stop choosing a mode
+### `B3` — register and safely call one MCP tool
 
-**The sentence (C14):** ask anything in the chat box without manually choosing a mode, and
-see which flow answered — plain chat, RAG over documents, or NL2SQL over the demo warehouse
-— with a compact on-screen explanation of why that flow was selected.
+**The sentence (C14):** register a self-hosted MCP server, let the assistant propose one
+tool call, approve a gated invocation, and see its result and audit state in the app — while
+an untrusted-document-motivated call is denied with the offending source named on screen.
 
 **What already exists and must be reused, not rebuilt:**
-- `A1` chat sessions/messages/SSE streaming and the composer are the single conversation
-  surface. Do not add a second ask box.
-- `A2` RAG already answers when `use_documents=true`, creates citations, and renders those
-  citations in the transcript/inspector. The flag is provisional; `A4` replaces the user's
-  manual choice with a classifier decision, not a second RAG implementation.
-- `A3` NL2SQL already answers when `use_datasource=true`, including schema/glossary context,
-  read-only AST guard, `mnemos_ro` execution, narration, SQL panel, and denial/repair states.
-  That flag is provisional for the same reason.
-- The generated frontend API client is still the way typed JSON calls are made. If the chat
-  request/response contract changes, regenerate `frontend/src/lib/api/schema.ts`; never hand
-  edit it.
-- `B1`/`B2` source ingestion is now a platform capability, not part of routing a chat message.
-  Do not fold ingestion jobs into `A4` except where the classifier needs to know documents may
-  exist.
+- `features/tools/adapters/models.py` and the M2 schema already contain `mcp_server`,
+  `mcp_tool`, `mcp_credential`, `mcp_grant`, and `mcp_invocation`. Reconcile code to those
+  real columns before proposing a migration; do not create a parallel tool schema.
+- A4's single chat surface and router remain the entry point. Extend routing narrowly for a
+  single tool request; do not add a second ask box or turn B3 into B4's multi-step agent.
+- `AuthenticatedCaller` supplies the live principal and database-derived roles. Credentials
+  are per user; there is no shared-server credential fallback, and no role may come from a
+  request header.
+- `TrustTier` already distinguishes user-authored (`USER`) from retrieved (`RETRIEVED`)
+  content. The invocation boundary must persist the motivating tier and deny insufficiently
+  trusted calls even if the model asks confidently.
+- Reuse the connector SSRF work where its endpoint policy fits: registered destinations,
+  DNS-rebinding-safe resolution, explicit timeouts, and no redirect-following shortcut.
+  MCP output is untrusted (`RETRIEVED` today) and never becomes instruction authority.
 
 **Deliverables, in build order — one commit (or a small adjacent group) per numbered item:**
 
-1. **Classifier domain + service.** Add a small, deterministic first pass that classifies an
-   incoming message as `chat`, `rag`, or `nl2sql`, with a reason string suitable for display.
-   The default should be conservative and local-first: obvious data/SQL/table/metric questions
-   go to NL2SQL, obvious document/upload/citation questions go to RAG, and ordinary assistant
-   questions go to chat. If an Ollama-backed classifier is added, it must have a deterministic
-   fallback and zero paid-provider dependency.
-2. **Backend chat route integration.** Replace the provisional request flags' decision point
-   with the classifier result. Preserve backward compatibility only as a temporary override if
-   tests or existing UI need it during the commit, and write down any override in code comments
-   as transitional. The response/stream metadata must name the selected flow and the reason.
-3. **Frontend composer cleanup.** Remove or demote the manual `Use documents` / `Ask your data`
-   selectors so a person can simply ask. The transcript must show the selected flow and reason
-   near the answer without becoming a verbose explainer panel.
-4. **Tests for routing decisions and visible flow state.** Unit-test classifier examples and
-   backend route behavior for all three flows, including one adversarial write-like NL2SQL
-   request that still reaches the existing guard and is visibly refused. Frontend tests should
-   prove the composer no longer requires mode picking and that the flow indicator appears.
-5. **Live verification.** Rebuild the compose stack, check `/readyz`, and exercise at least one
-   plain chat, one document/RAG, and one NL2SQL question in a browser or Playwright. The close
-   evidence must include the commands and observed results in this file and `docs/ADAPTATION.md`.
+1. **Tool domain, repositories, and credential boundary.** Define frozen domain records and
+   ports for servers, discovered tools, grants, per-user credentials, and invocations. Build
+   org-scoped repositories over the existing tables, explicit `org_id` predicates plus RLS,
+   and encrypted credential storage with production rejecting the dev key. Secrets must never
+   be returned by read models, logged, or shared between users.
+2. **MCP client + discovery.** Implement the first free, self-hosted transport end to end
+   (streamable HTTP is sufficient for the slice) with initialize/list-tools/call-tool JSON-RPC,
+   registered-endpoint/SSRF enforcement, timeouts, response-size caps, and JSON-Schema argument
+   validation before dispatch. Ship a deterministic local demo MCP server/fixture so the
+   milestone needs no third-party account. Cache discovery in `mcp_tool`; no round trip is
+   required merely to render the catalog.
+3. **Trust policy, grants, and durable approval.** Resolve grants against the current user and
+   live role bindings, compare the motivating trust tier with the server/tool requirement,
+   and always create an `mcp_invocation` record. Mutating or configured-gated calls enter
+   `pending_approval`; approve/deny endpoints transition that persisted state and only an
+   approved call can dispatch. A trust-tier denial records a stable public reason and the
+   offending source/bundle item; internal errors and decrypted credentials stay server-side.
+4. **Single-call chat flow + tool console.** Extend A4 routing/model prompting only far enough
+   to select one available tool with validated arguments, run or pause that one invocation,
+   then narrate its result in the existing transcript. Add authenticated server registration,
+   discovery, credential/grant, approval, and invocation-history APIs plus a typed frontend
+   Tool console. The transcript/console must visibly distinguish proposed, awaiting approval,
+   denied, succeeded, and failed; the trust denial names the source that lowered authority.
+5. **Tests and live verification.** Unit-test policy/argument validation; integration-test RLS,
+   per-user credential isolation, discovery, approval persistence across service restart, and
+   invocation audit rows against real Postgres and the local MCP fixture. Prove a
+   `TrustTier.RETRIEVED` source cannot trigger a user-tier tool and that the denial names it. Rebuild
+   Compose, check `/readyz`, then use Chromium to register/discover the demo server, ask for a
+   tool call, approve it, and see the result/history.
 
-**Explicitly NOT `A4`, so nobody drifts:** replacing Ollama, building tool calls/agents,
-adding RBAC/API keys, moving manual upload onto the ingestion queue, or changing the NL2SQL
-safety model. Those are later milestones or already-settled constraints.
+**Explicitly NOT `B3`, so nobody drifts:** multi-step planning, checkpoints, replay, loops,
+or recovery across several calls (`B4`); the full context compiler/bitemporal memory (`C4`);
+generated MCP servers from arbitrary OpenAPI, every transport, or paid SaaS integrations.
+Keep Ollama and the free self-hosted path as the default.
 
 ### Then, in order — this list is the plan, and it no longer matches phase order exactly
 
 Each item below is one session (or a small coherent group), and each carries its own "you
-can now ___" (C14). **As of 2026-08-17, `B1`/`B2` are complete and sequencing returns to
-`A4` before the rest of Phase B.**
+can now ___" (C14). **As of 2026-08-17, `A4` is complete and Phase B resumes at `B3`.**
 
 - **`A3` — ask about your data.** ✅ Done, all 5/5 deliverables, verified 2026-08-15.
 - **`B1` — connect a source and watch it ingest.** ✅ Done, all 5/5 deliverables, verified
@@ -2816,11 +2876,13 @@ can now ___" (C14). **As of 2026-08-17, `B1`/`B2` are complete and sequencing re
 - **`B2` — ingestion at scale.** ✅ Done, verified 2026-08-17. Heartbeat renewal,
   retry/backoff, status history, stuck-job surfacing, replay-via-recent-jobs, and per-job
   progress UI are built over `B1`'s connector job path.
-- **`A4` — stop choosing a mode.** ⬅ **next.** Classify each message to chat / RAG / NL2SQL
-  and show which flow answered and why. This is where the two provisional selectors — `A2`'s
-  `use_documents` and `A3`'s NL2SQL equivalent — are replaced by a real classifier.
+- **`A4` — stop choosing a mode.** ✅ Done, verified 2026-08-17. The deterministic router,
+  persisted flow/rationale metadata, compact transcript annotation, and selector removal are
+  all live.
+- **`B3` — register and safely call one MCP tool.** ⬅ **next.** Registry, per-user
+  credentials, trust-tier enforcement, durable approval, invocation audit, and Tool console.
 
-Then `B3`, `B4` (the rest of Phase B), Phase C (`C1`–`C4`), Phase D (`D1`) — §3.0, unchanged.
+Then `B4` (the rest of Phase B), Phase C (`C1`–`C4`), Phase D (`D1`) — §3.0, unchanged.
 
 **Commit shape:** one commit per numbered deliverable, not one per milestone. A backend
 deliverable and its UI slice may share a commit or be adjacent commits — never adjacent

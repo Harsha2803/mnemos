@@ -4,9 +4,9 @@
 > self-contained: architecture, the capability inventory, schema, milestones, and current
 > state. [`TRACKER.md`](../TRACKER.md) holds live task status; this holds the design.
 
-**Last updated:** 2026-08-17 — the UI enhancement handoff is implemented and live-verified
-on the rebuilt Compose stack after `B2`. It improves the existing product slices without
-changing the milestone sequence; `A4` is next.
+**Last updated:** 2026-08-17 — `A4` is implemented and live-verified. The chat surface now
+routes every message to chat, RAG, or NL2SQL, persists and displays the compact reason, and
+has no manual answer-mode selector. Phase A is complete; `B3` is next.
 
 ---
 
@@ -234,7 +234,7 @@ Two rules govern every row.
 | **A1** | LLM gateway (Ollama) · chat sessions + messages · SSE streaming · the chat surface | **talk to it** — ask a question and watch the answer stream in token by token | ✅ 2026-08-08 |
 | **A2** | Upload → extract → chunk → embed (pgvector HNSW) · retrieval ported from `_v1` · RAG flow · citations · knowledge library | **upload a document and ask questions about it**, with citations you click into | ✅ 2026-08-11 (PR #14) |
 | **A3** | NL2SQL: introspection · glossary · generate · AST read-only guard · `mnemos_ro` execution · narration · SQL panel | **ask a question about your data in English** and see the SQL, the rows and the narration — and see the guard visibly refuse a write | ✅ 2026-08-15 (PR #15) — verified end to end in a real browser |
-| **A4** | Router: classify a message → chat / RAG / NL2SQL · flow indicator | **ask anything without choosing a mode**, and see which flow answered and why | ⬜ — built **after** `B1`/`B2` |
+| **A4** | Router: classify a message → chat / RAG / NL2SQL · flow indicator | **ask anything without choosing a mode**, and see which flow answered and why | ✅ 2026-08-17 — verified end to end against the rebuilt stack |
 
 **At the end of Phase A the thing this project is for exists.** Everything after deepens it.
 
@@ -307,9 +307,9 @@ Apple assets are off-limits (SF Pro as a webfont, SF Symbols) and what is used i
 
 **Current position.** `main` has `A0` (PR #11), `A1` (PR #13), `A2` (PR #14), `A3`
 (PR #15), `B1` (PR #16), the per-session log files (PR #17), the out-of-band frontend
-polish work (PR #18), and `B2` plus its final UI/correctness review (PR #19). The next
-milestone is `A4`, returning to the normal sequence after the 2026-08-15 `B1`/`B2`
-ingestion detour.
+polish work (PR #18), and `B2` plus its final UI/correctness review (PR #19). `A4` is
+complete and verified on `agent/a4-message-router`; publication is waiting only for renewed
+personal `Harsha2803` authentication. Once closed, `B3` is next.
 
 `M3`'s exit criterion "RLS blocks cross-org" turned out to be unmet by `M2` rather than
 merely untested; that is written up in §8 and in
@@ -899,6 +899,36 @@ the whole `up`. It does now, so plain `docker compose up -d` brings the frontend
 everything else and `web` has a healthcheck of its own — a stack whose UI needs a
 remembered extra flag is a stack whose UI does not get looked at.
 
+### A4 — automatic chat routing ✅ verified 2026-08-17
+
+`flows/router/` now owns a deterministic, local-first classifier and its application seam.
+It selects NL2SQL for explicit database/SQL concepts and business metrics, RAG for explicit
+document/citation intent, and conservatively defaults ordinary questions to chat. There is
+no paid or remote classifier dependency, and the policy remains the mandatory fallback if
+an Ollama classifier is added later.
+
+The existing chat endpoint dispatches into the already-built A1/A2/A3 flows and emits a
+leading `route` SSE frame containing the selected flow and display-safe rationale. The same
+metadata is persisted in the pre-existing `chat_message.flow` and `router_rationale`
+columns, so it survives history reloads without a migration. The provisional
+`use_documents` and `use_datasource` request fields are removed and rejected as unknown;
+the generated TypeScript schema was regenerated from FastAPI OpenAPI.
+
+The C12 UI slice is the existing composer and transcript. The manual three-mode toggle is
+gone; each assistant answer shows a compact `Chat`, `Documents`, or `Data` annotation plus
+the reason. Live answers take it from the stream and historical answers take it from the
+persisted response. No new component or design token was needed.
+
+Evidence: 35 focused classifier/chat/RAG/NL2SQL tests passed, including automatic routing
+of a write-like request through the unchanged NL2SQL AST guard. Full backend `make test`
+passed 441; `make lint`, `make types`, and `make check` were clean. Frontend tests passed
+112; lint, TypeScript, and production build were clean. A full Compose rebuild returned
+postgres, redis, ollama, and objectstore all `ok` from `/readyz`. Four Chromium cases
+across `chat.spec.ts`, `knowledge.spec.ts`, and `nl2sql.spec.ts` passed: plain chat,
+uploaded-document RAG with citation inspection, normal NL2SQL, and the adversarial
+write-like NL2SQL route. The retrieval/compiler path did not change, so benchmark numbers
+remain untouched.
+
 ### B2 — ingestion at scale ✅ verified 2026-08-17
 
 `B2` is built over `B1`'s connector ingestion path without a schema migration. The existing
@@ -1245,8 +1275,7 @@ here on signs in as `analyst@mnemos.local` instead.
 
 ### Not started
 
-**A4, then B3 through D** — §7. Phase A is complete through `A3` (2026-08-15), and `B1`/`B2`
-are complete as of 2026-08-17. Concretely, and
+**B3 through D** — §7. Phase A and `B1`/`B2` are complete as of 2026-08-17. Concretely, and
 stated plainly because the gap between what `docs/` describes and what runs is the thing
 this file exists to keep honest:
 
@@ -1268,9 +1297,9 @@ this file exists to keep honest:
   4 (2026-08-16):** the worker claims and processes real `ingest_job` rows end to end. The
   reaper itself also had a latent bug fixed alongside this — it ran unscoped and so
   reclaimed nothing under RLS, ever; see the dated note in TRACKER for detail.
-- **There is no router.** A person still has to tick "Use documents" or "Ask your data" to
-  get a grounded answer; nothing classifies a message to a flow on its own. `A4` is next, and
-  both provisional selectors are written down as provisional so `A4` knows what to remove.
+- ~~**There is no router.**~~ **Built in `A4`.** Every message now selects chat, RAG, or
+  NL2SQL automatically; the persisted compact reason is visible beside the answer and the
+  provisional selectors/request flags are gone.
 - **There is no tool runtime, no agent flow, no prompt store and no cost ledger.** `B3`,
   `B4`, `C2`.
 - **The context inspector shows a cited passage, not a context bundle.** `A2` gave it its
@@ -1284,11 +1313,12 @@ this file exists to keep honest:
   onto pgvector HNSW, retrieve with the ACL predicate inside the scan, cite.
 - ~~**There is no conversation surface.**~~ **Built in `A1`.**
 
-What *is* built is the foundation those stand on: the container stack, the 41-table schema
-with row-level security that is in force rather than merely declared, identity through a
-full OIDC round trip and platform JWT with refresh rotation, `mnemosctl bootstrap`, CI, the
-app shell, a working conversation surface, and retrieval over uploaded documents with
-click-through citations. Evidence for each is above.
+What *is* built is the product surface and foundation those stand on: the container stack,
+the 41-table schema with row-level security that is in force rather than merely declared,
+identity through a full OIDC round trip and platform JWT with refresh rotation,
+`mnemosctl bootstrap`, CI, the app shell, a routed conversation surface, retrieval over
+uploaded documents with click-through citations, and guarded NL2SQL over the demo warehouse.
+Evidence for each is above.
 
 ---
 
@@ -1332,6 +1362,12 @@ click-through citations. Evidence for each is above.
   into a prefix match. If a handler needs to know who is calling, it asks for
   `require_caller`; if it forgets and needs one anyway, it raises — that is deliberate, and
   making the caller optional to silence it is how a route quietly stops being scoped.
+- **`B3` is a single-call tool runtime, not the agent.** Reuse the existing MCP tables,
+  keep credentials per user, authorize again at the invocation boundary with the motivating
+  trust tier, and persist approval before dispatch. Multi-step planning/checkpoints are `B4`.
+- **The local MCP fixture is part of `B3`'s exit evidence.** The default path may not depend
+  on a SaaS account or paid API, and a malicious/remote endpoint still needs the connector
+  path's SSRF/rebinding discipline, timeouts, schema validation, and response cap.
 - **The frontend test suite is offline by construction** (`A0`). `vitest.setup.ts` installs
   a `fetch` that answers 401 before any test runs, which is also what
   `vi.unstubAllGlobals()` restores. A test that reaches the real network will pass on a
@@ -1342,6 +1378,6 @@ click-through citations. Evidence for each is above.
 - `docs/` (Architecture, SystemDesign, DatabaseDesign, APIContract, ThreatModel, 12 ADRs)
   describes a larger target than what is built. That gap is stated in the README and is
   intentional; keep it stated.
-- Known weakness carried from v0.1: brute-force cosine over all chunks per query. Fine at
-  demo scale, must become a pgvector HNSW index query in `A2`.
+- The v0.1 brute-force retrieval weakness was closed in `A2` with pgvector HNSW; keep ACL
+  and revision predicates inside that scan if retrieval is touched later.
 - Do not re-run `pkill -f mnemos` — it matches the agent's own shell. Kill by port/PID.

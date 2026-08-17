@@ -77,6 +77,18 @@ describe("the chat session surface", () => {
     const textarea = await screen.findByRole("textbox", { name: "Message" });
     await userEvent.type(textarea, "hello there{Enter}");
 
+    sse.push("route", {
+      flow: "chat",
+      reason: "No document or database context is needed.",
+    });
+    await waitFor(() =>
+      expect(
+        screen.getByLabelText(
+          "Routed to Chat: No document or database context is needed.",
+        ),
+      ).toBeInTheDocument(),
+    );
+
     // Nothing from the model yet: the assistant bubble exists (never a
     // spinner over a blank region) but carries no text.
     expect(screen.queryByText("Hel")).toBeNull();
@@ -98,6 +110,8 @@ describe("the chat session surface", () => {
         ordinal: 1,
         role: "assistant",
         content: "Hello",
+        flow: "chat",
+        router_rationale: "No document or database context is needed.",
         prompt_tokens: 3,
         completion_tokens: 2,
         latency_ms: 12,

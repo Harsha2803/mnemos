@@ -151,6 +151,7 @@ class SqlChatRepository:
         model: str,
         finish_reason: str,
         flow: str | None = None,
+        router_rationale: str | None = None,
     ) -> ChatMessageRecord:
         return await self._append_message(
             org_id=org_id,
@@ -163,6 +164,7 @@ class SqlChatRepository:
             model=model,
             finish_reason=finish_reason,
             flow=flow,
+            router_rationale=router_rationale,
         )
 
     async def add_citations(
@@ -213,6 +215,7 @@ class SqlChatRepository:
         model: str | None = None,
         finish_reason: str | None = None,
         flow: str | None = None,
+        router_rationale: str | None = None,
     ) -> ChatMessageRecord:
         new_id = self._ids.new()
         next_ordinal = (
@@ -229,6 +232,7 @@ class SqlChatRepository:
                 role=role.value,
                 content=content,
                 flow=flow,
+                router_rationale=router_rationale,
                 prompt_tokens=prompt_tokens,
                 completion_tokens=completion_tokens,
                 latency_ms=latency_ms,
@@ -267,6 +271,7 @@ def _message_record(row: ChatMessage) -> ChatMessageRecord:
         role=MessageRole(row.role),
         content=row.content,
         flow=row.flow,
+        router_rationale=row.router_rationale,
         prompt_tokens=row.prompt_tokens,
         completion_tokens=row.completion_tokens,
         latency_ms=row.latency_ms,

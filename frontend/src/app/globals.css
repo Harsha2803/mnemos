@@ -181,7 +181,7 @@
   --measure: 46rem;
 
   /* The chat conversation column's own width — wider than the prose measure,
-     because it is chrome (the composer, its mode toggles, `SqlPanel`'s
+     because it is chrome (the composer, its flow annotations, `SqlPanel`'s
      tabular data) as much as it is prose. Each bubble still clamps to
      `--measure` on its own (`MessageBubble.tsx`), so a line of text is never
      wider even though the column around it is. */

@@ -73,6 +73,7 @@ class RagFlow:
         caller_tags: tuple[str, ...],
         session_id: ChatSessionId,
         content: str,
+        router_rationale: str | None = None,
     ) -> AsyncGenerator[ChatStreamEvent, None]:
         session = await self._chat.get_session(org_id=org_id, session_id=session_id)
         if session is None or session.user_id != user_id:
@@ -118,6 +119,7 @@ class RagFlow:
                         model=self._model.model_name,
                         finish_reason=event.finish_reason,
                         flow=FLOW_NAME,
+                        router_rationale=router_rationale,
                     )
                     targets = extract_citations(answer, chunks)
                     if targets:
