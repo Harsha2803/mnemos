@@ -13,8 +13,8 @@ dated note below.
 **Phase:** **Portfolio finish.** Three committed milestones remain: `B3` → `C4` → `D1`.
 **Next task:** `B3` — build the single-call MCP tool runtime: registry, per-user credentials,
 trust-tier authorization, durable approvals, invocation records, and the tool console.
-**Branch right now:** `agent/resume-focused-roadmap`; documentation-only scope reset after
-`A4` merged to `main`. Merge this plan PR before starting `B3`.
+**Branch right now:** `agent/resume-focused-roadmap`, draft PR #21; documentation-only
+scope reset after `A4` merged to `main`. Merge this plan PR before starting `B3`.
 
 > ### 2026-08-18 — the portfolio finish is `B3` → `C4` → reduced `D1`
 >

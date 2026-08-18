@@ -10,9 +10,9 @@ Repository state at this handoff:
   - The roadmap has been deliberately narrowed for a resume-focused portfolio finish.
     Only `B3`, `C4`, and reduced `D1` remain committed; `B4` and `C1`–`C3` are
     deferred unless the owner explicitly reopens them after `D1`.
-  - The documentation-only scope reset is on `agent/resume-focused-roadmap`. If its PR
-    is still open, finish that repository lifecycle before starting implementation. If
-    live GitHub state says it is merged, trust it and start from clean `main`.
+  - The documentation-only scope reset is on `agent/resume-focused-roadmap`, PR #21. If
+    that PR is still open, finish its repository lifecycle before starting implementation.
+    If live GitHub state says it is merged, trust it and start from clean `main`.
 
 Read first, in order:
 
