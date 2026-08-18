@@ -13,7 +13,7 @@ PIP  := $(VENV)/bin/pip
 .DEFAULT_GOAL := help
 .PHONY: help venv install install-neural up down logs ps rebuild bootstrap doctor \
         migrate migrate-down check test test-fast lint types web-install web-dev \
-        web-test web-build bench bench-neural ask clean
+        web-test web-build bench ask clean
 
 help: ## Show available targets
 	@grep -E '^[a-zA-Z_-]+:.*?## .*$$' $(MAKEFILE_LIST) \
@@ -114,19 +114,14 @@ web-test: ## Vitest + Testing Library
 web-build: ## Lint, typecheck and production build — the frontend half of CI
 	cd frontend && npm run lint && npx tsc --noEmit && npm run build
 
-# ------------------------------------------------------------------ v0.1 bench
-# The v0.1 kernel is quarantined in backend/src/mnemos/_v1/ and still owns the
-# published benchmark. It is ported in halves — retrieval in A2, memory and the
-# context compiler in C4 — and the numbers are re-measured on Postgres there.
-# Until then these run against SQLite, which is what the README says they are.
+# --------------------------------------------------------------- Postgres bench
+# Self-contained: starts pgvector Postgres with testcontainers, applies the real
+# migrations, seeds the frozen corpus, then uses the current retrieval, memory,
+# and compiler paths. The JSON records this exact reproduction command.
 
 bench: ## Benchmark with the zero-download embedder
-	cd backend && ../$(VENV)/bin/python -m mnemos._v1.cli bench \
+	cd backend && ../$(VENV)/bin/python -m mnemos.features.context.benchmark \
 	  --budgets 800,1500,3000 --json ../bench_results/hashing.json
-
-bench-neural: ## Benchmark with bge-small-en-v1.5 (requires install-neural)
-	cd backend && ../$(VENV)/bin/python -m mnemos._v1.cli bench \
-	  --budgets 800,1500,3000 --embedder neural --json ../bench_results/neural.json
 
 ask: ## Compile one question. Usage: make ask Q="your question"
 	cd backend && ../$(VENV)/bin/python -m mnemos._v1.cli ask "$(Q)" --explain

@@ -37,6 +37,7 @@ class ChatMessageRecord:
     content: str
     flow: str | None
     router_rationale: str | None
+    bundle_id: UUID | None
     prompt_tokens: int
     completion_tokens: int
     latency_ms: int | None

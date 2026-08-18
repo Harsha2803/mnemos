@@ -6,14 +6,42 @@
 > **and [`docs/ADAPTATION.md`](docs/ADAPTATION.md)** *in the same commit* — a stale
 > tracker is worse than none.
 
-**Last updated:** 2026-08-18 — `B3` is complete on PR #23: the self-hosted MCP runtime,
-per-user credentials, live-role/trust authorization, durable approval, invocation history,
-single-call chat route, and Tool console are implemented and live-verified.
-**Phase:** **Portfolio finish.** Two committed milestones remain: `C4` → reduced `D1`.
-**Next task:** `C4` — port bitemporal memory and the budgeted context compiler to Postgres,
-make every bundle inspectable, and replace the SQLite benchmark with Postgres measurements.
-**Branch right now:** `agent/b3-safe-mcp-tools`, draft PR #23; `B3` implementation and
-evidence complete. Close its repository lifecycle before starting `C4`.
+**Last updated:** 2026-08-18 — `C4` is complete on PR #24: bitemporal Postgres memory,
+the hard-budget context compiler, persisted bundles, the Memory screen and Bundle inspector,
+and the unchanged benchmark reproduced on Postgres.
+**Phase:** **Portfolio finish.** One committed milestone remains: reduced `D1`.
+**Next task:** reduced `D1` — prove clean-clone Compose, cover the critical journeys in
+Playwright, add the deterministic walkthrough, and finish the measured portfolio README.
+**Branch right now:** `agent/c4-governed-context`, PR #24; `C4` implementation and evidence
+complete. Close its repository lifecycle before starting reduced `D1`.
+
+> ### 2026-08-18 — `C4` done: context is governed, persisted, and inspectable
+>
+> **Every supported answer flow now compiles and persists the exact context artifact it
+> used, attaches it through `chat_message.bundle_id`, and replays that stored artifact in
+> the inspector.** The Bundle tab exposes exact spend against the hard budget, admitted and
+> rejected candidates, explicit reasons, operators, trust, authorization, conflicts,
+> memory lineage, provenance, digest, and the compiled prompt.
+>
+> Memory is immutable and bitemporal over the existing Postgres tables. Create,
+> supersede, retract and two-clock as-of history are available through authenticated APIs
+> and the Memory screen. Fact supersession closes belief time and adds a lineage edge in
+> one transaction; the exclusion constraint, cycle trigger, forced RLS, explicit org
+> predicates and scan-time tag ACL remain database-backed controls rather than UI claims.
+>
+> The unchanged 8-document / 56-chunk / 8-memory / 23-question benchmark now starts
+> pgvector Postgres, applies the real migrations and uses the current retrieval, memory and
+> compiler paths. At 800 tokens, the governed arm retained 95.7% of answers versus 91.3%
+> for the fair scan-authorized control, with 0% ACL leaks, stale memory, obsolete documents
+> and budget overruns, plus 100% provenance. `make bench` reproduces
+> `bench_results/hashing.json`; the intentionally unfair no-ACL and post-filter arms remain
+> labelled as such.
+>
+> Evidence: backend `pytest` 463 passed; Ruff format/lint and `mypy --strict` over 216
+> source files passed; `alembic check` found no drift; frontend lint, typecheck and 114
+> Vitest assertions passed; rebuilt Compose reported every `/readyz` dependency `ok`; and
+> Chromium created, superseded and retracted memory, asked a routed question, reloaded the
+> answer, and inspected its persisted bundle.
 
 > ### 2026-08-18 — `B3` done: one MCP call is gated, durable, and inspectable
 >
@@ -1262,7 +1290,7 @@ order" list is the authoritative next-up sequence; the note above it explains wh
 | **C1** | API keys (old `M3.5`) · full RBAC permission matrix + tag-scoped document ACLs (old `M3.6`) · keys UI + real 403 states | **issue an API key, call the API with it, and watch a user without the permission be refused** — in the UI and at the wire | ⏸ deferred — existing OIDC/JWT/RLS already carries the core security signal |
 | **C2** | Versioned prompt store (diff, activate) · cost + token ledger · prompt manager + cost dashboard | **change the prompt behind a flow, activate the new version, and see what every answer cost** | ⏸ deferred — operations breadth, not a finish-line differentiator |
 | **C3** | Chat history depth: folders, bookmarks, feedback · audit log · search over history | **organise, bookmark, rate and search your conversations, and read the audit trail of who did what** | ⏸ deferred — conventional product depth |
-| **C4** | **The context layer.** Bitemporal memory + supersession · the budgeted context compiler · the context inspector · re-run the benchmark on Postgres | **open any answer and see its compiled context** — what was admitted, what was excluded and why, and the token spend against budget | ⬜ |
+| **C4** | **The context layer.** Bitemporal memory + supersession · the budgeted context compiler · the context inspector · re-run the benchmark on Postgres | **open any answer and see its compiled context** — what was admitted, what was excluded and why, and the token spend against budget | ✅ 2026-08-18 (PR #24) — Postgres, Compose and Chromium verified |
 
 **Phase D — ship it.**
 
@@ -2862,84 +2890,63 @@ Recorded so they are not rediscovered as surprises:
 
 ## 5. NEXT TASK
 
-`B3` is done and verified. Do not continue into deferred `B4`; the deep context claim is next.
+`C4` is done and verified. Do not reopen deferred `B4` or `C1`–`C3`; finish the portfolio.
 
-### `C4` — make context compiled, governed, and inspectable
+### Reduced `D1` — ship the reproducible portfolio release
 
-**The sentence (C14):** open any answer and inspect the exact context bundle that produced
-it — every admitted item, every exclusion and reason, memory lineage, trust tier, and token
-spend against a hard budget — with the published benchmark reproduced on Postgres.
+**The sentence:** a reviewer can clone Mnemos, start it without a paid key, follow one
+deterministic walkthrough across its strongest journeys, and reproduce every material
+security and benchmark claim in the README.
 
 **What already exists and must be reused, not rebuilt:**
-- The quarantined `backend/src/mnemos/_v1/` kernel is the independent reference implementation
-  for bitemporal memory, retrieval fusion/conflict handling, the six-phase compiler, inspector
-  data, and benchmark. Port behavior behind the current typed architecture; do not import the
-  SQLite store into runtime code or rewrite proven algorithms without evidence.
-- M2 already created `subject`, `memory`, `memory_edge`, `context_plan`, `context_bundle`, and
-  `bundle_item`, including the bitemporal exclusion constraint, cycle trigger, budget CHECK,
-  foreign keys, indexes, and forced RLS. Reconcile repositories to those real columns before
-  proposing migrations; keep explicit `org_id` predicates as well as RLS.
-- A2 already owns Postgres vector/lexical retrieval, in-scan ACL and revision exclusion,
-  fusion, deduplication, and citations. The compiler must consume those ports and persisted
-  candidates, not reintroduce `_v1`'s brute-force scan or a second retrieval implementation.
-- A1/A2/A3/B3 already persist sessions, messages, citations, SQL/tool outcomes, and the
-  selected flow. Compile the context used by those answers and attach its existing
-  `chat_message.bundle_id`; do not add a second conversation surface.
-- `Clock`, `IdGenerator`, `TrustTier`, tokenizer/embedder ports, and the empty Bundle inspector
-  state already exist. Preserve the zero-download hashing default and keep benchmark arms fair.
+- Compose has the complete ten-service default stack, health checks, migrations, bootstrap,
+  deterministic demo MCP server, Keycloak realm fixture, MinIO and demo warehouse.
+- Browser proofs already exist for auth, chat, RAG/citations, NL2SQL, sources/jobs, tools,
+  and governed context. Consolidate the critical journey rather than inventing product scope.
+- `make bench`, `bench_results/hashing.json`, `/readyz`, database doctor, the test suite and
+  CI are the reproducible evidence surface. Do not replace deterministic measurements with
+  screenshots or an LLM judge.
+- The README already records architecture and benchmark details. D1 edits it for reviewer
+  flow and exact clean-clone evidence; it does not reopen deferred features.
 
 **Deliverables, in build order — one commit (or a small adjacent group) per numbered item:**
 
-1. **Bitemporal memory domain and Postgres lifecycle.** Port frozen memory/subject records,
-   ports, and create/supersede/retract/as-of semantics from `_v1`. Implement org-scoped
-   repositories over the existing tables, preserving belief time (`recorded_at` /
-   `retracted_at`), validity time (`valid_from` / `valid_to`), lineage edges, one-live-fact
-   enforcement, cycle prevention, and transactional supersession. Add focused domain and
-   real-Postgres invariant/RLS tests; no overwrite API may exist.
-2. **Budgeted compiler over current operators.** Port planning, calibrated utility, trust
-   fences, rank fusion inputs, near-duplicate removal, conflict demotion, section floors and
-   ceilings, and final exact-token verification behind `features/context/` ports. Reuse A2
-   retrieval plus memory/history/SQL/tool inputs where available, enforce deadlines and
-   deterministic degradation, and keep `tokens_consumed <= token_budget` true after all
-   headers, provenance labels, and fences are rendered.
-3. **Persist and attach the explainable artifact.** Write `context_plan`, `context_bundle`,
-   and ordered `bundle_item` rows atomically, including digest, operator/provenance, trust,
-   score/utility/density, ACL decision, per-section spend, and explicit rejection reasons.
-   Attach the bundle to the assistant message for each supported flow and ensure replay reads
-   the persisted artifact rather than silently recompiling different context.
-4. **Memory/context API and inspector UI.** Add the smallest authenticated memory lifecycle
-   slice needed to demonstrate create, supersede, retract, and as-of history. Replace the
-   Bundle tab's empty state with a typed inspector for admissions, exclusions, conflicts,
-   provenance, trust, lineage, and budget bars; keep citations/SQL/tool panels intact. A
-   stranger must be able to see both why an item entered and why another did not.
-5. **Benchmark and end-to-end evidence.** Port the benchmark store/path to Postgres without
-   changing the corpus, seeds, budgets, metrics, or fair naive arm. Run invariant/property,
-   bitemporal, compiler, RLS, and persistence tests; rebuild Compose; verify `/readyz`; and
-   use Chromium to create/supersede memory, ask a routed question, and inspect its persisted
-   bundle. Commit machine-readable Postgres results and replace every SQLite-labelled README
-   number with the exact reproduction command and honest limitations.
+1. **Clean-clone Compose proof.** From a fresh worktree or clone with no existing volumes,
+   run the documented one-command startup, migrations and bootstrap. Make every missing
+   dependency or failed health check actionable. Keep the default free and self-hosted;
+   no Kubernetes, cloud account, paid model or deployment abstraction.
+2. **Critical-path Playwright.** Make the portfolio journeys reliable in Chromium:
+   authentication, routed chat, RAG with citation inspection, guarded NL2SQL, connector
+   progress/retry, MCP approval and denial, and memory/context inspection. Reuse fixtures,
+   remove timing races, and keep skips explicit about the missing dependency.
+3. **Deterministic walkthrough.** Add the smallest repeatable seed/demo command and a concise
+   script that exercises documents, database, one MCP call and the governed Bundle inspector.
+   It must be suitable for a screen recording and an interview without hand-edited database
+   state or external credentials.
+4. **Measured release documentation.** Rewrite the README around the verified walkthrough,
+   exact commands, architecture choices, security controls, Postgres benchmark and honest
+   limitations. Synchronize ADAPTATION, Roadmap, ImplementationPlan and this handoff. Tag or
+   publish only if the repository's established lifecycle calls for it.
+5. **Release verification and lifecycle.** Run the full backend/frontend gates, clean-clone
+   Compose proof, `/readyz`, Chromium suite and `make bench`; commit scoped evidence, make the
+   PR ready, merge green, fast-forward clean `main`, and stop.
 
-**Explicitly NOT `C4`, so nobody drifts:** API keys/full RBAC UI (`C1`), prompt/cost
-management (`C2`), folders/bookmarks/expanded audit (`C3`), multi-step tools (`B4`), a new
-vector database, graph database, or paid model. `C4` ports and exposes the governed kernel;
-it does not reopen the deferred enterprise roadmap.
+**Explicitly NOT `D1`:** multi-step plans/loops/replay (`B4`), API keys/full RBAC/tag ACL UI
+(`C1`), prompt/cost management (`C2`), folders/bookmarks/expanded audit (`C3`), Kubernetes,
+nginx or realtime presence unless a measured release blocker requires one.
 
 ### Then, in order — the complete committed finish
 
-Each item is one session and one repository lifecycle. Exactly two committed milestones remain:
+Each item is one session and one repository lifecycle. Exactly one committed milestone remains:
 
-1. **`C4` — make context compiled and inspectable.** ⬅ **next.** Port bitemporal memory and the budgeted
-   compiler to Postgres, expose bundle `EXPLAIN` in the app, and re-run the benchmark.
-2. **Reduced `D1` — ship the portfolio release.** Prove clean-clone Compose, cover the
+1. **Reduced `D1` — ship the portfolio release.** ⬅ **next.** Prove clean-clone Compose, cover the
    critical journeys in Chromium, add a deterministic walkthrough, and rewrite the README
    around reproducible measurements and honest limitations.
 
 `B4` and `C1`–`C3` are deliberately deferred. Do not start them after `B3` or insert them
 between `C4` and `D1`; only an explicit future owner decision may reopen that scope.
 
-**Commit shape:** one commit per numbered deliverable, not one per milestone. A backend
-deliverable and its UI slice may share a commit or be adjacent commits — never adjacent
-*milestones* (C12).
+**Commit shape:** one commit per numbered deliverable, not one bulk release commit.
 
 ---
 

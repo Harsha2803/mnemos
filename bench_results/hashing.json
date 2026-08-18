@@ -1,28 +1,42 @@
 {
   "meta": {
-    "embedder": "hashing-256",
+    "backend": "postgresql",
+    "postgres_image": "pgvector/pgvector:pg16",
+    "embedder": "hashing-384",
     "documents": 8,
     "chunks": 56,
     "corpus_tokens": 5387,
     "questions": 23,
     "memory_claims": 8,
-    "generated_at": "2026-07-26T10:41:34Z"
+    "budgets": [
+      800,
+      1500,
+      3000
+    ],
+    "reproduction_command": "make bench",
+    "generated_at": "2026-08-18T15:24:27Z",
+    "arms": {
+      "naive": "unfair: no authorization",
+      "naive_postfilter": "unfair: authorization after top-k",
+      "naive_prefilter": "fair control: authorization inside SQL scan",
+      "mnemos_compiled": "governed: ACL and currency inside Postgres scans"
+    }
   },
   "by_budget": {
     "800": {
       "naive": {
         "name": "naive",
-        "answer_retention": 0.8260869565217391,
+        "answer_retention": 0.9130434782608695,
         "budget_overrun_rate": 0.0,
         "mean_tokens": 800,
         "p95_tokens": 800,
-        "duplicate_waste": 0.11752717143204677,
-        "acl_leak_rate": 0.43478260869565216,
-        "stale_fact_rate": 0.5652173913043478,
-        "outdated_doc_rate": 0.7391304347826086,
+        "duplicate_waste": 0.11405489766815659,
+        "acl_leak_rate": 0.08695652173913043,
+        "stale_fact_rate": 0.6521739130434783,
+        "outdated_doc_rate": 0.9130434782608695,
         "provenance": 0.0,
-        "mean_latency_ms": 8.46471147815464,
-        "p95_latency_ms": 9.16,
+        "mean_latency_ms": 12.108908696656885,
+        "p95_latency_ms": 17.08,
         "detail": [
           {
             "qid": "q01",
@@ -32,37 +46,49 @@
             "acl_leak": false,
             "stale": true,
             "outdated_doc": true,
-            "truncated": true
+            "truncated": true,
+            "manifest_items": 0,
+            "evicted": 0,
+            "digest": null
           },
           {
             "qid": "q02",
-            "retained": false,
+            "retained": true,
             "tokens": 800,
             "over_budget": false,
             "acl_leak": true,
             "stale": false,
             "outdated_doc": true,
-            "truncated": true
+            "truncated": true,
+            "manifest_items": 0,
+            "evicted": 0,
+            "digest": null
           },
           {
             "qid": "q03",
             "retained": true,
             "tokens": 800,
             "over_budget": false,
-            "acl_leak": true,
+            "acl_leak": false,
             "stale": false,
-            "outdated_doc": false,
-            "truncated": true
+            "outdated_doc": true,
+            "truncated": true,
+            "manifest_items": 0,
+            "evicted": 0,
+            "digest": null
           },
           {
             "qid": "q04",
             "retained": false,
             "tokens": 800,
             "over_budget": false,
-            "acl_leak": true,
-            "stale": false,
-            "outdated_doc": false,
-            "truncated": true
+            "acl_leak": false,
+            "stale": true,
+            "outdated_doc": true,
+            "truncated": true,
+            "manifest_items": 0,
+            "evicted": 0,
+            "digest": null
           },
           {
             "qid": "q05",
@@ -72,17 +98,23 @@
             "acl_leak": false,
             "stale": true,
             "outdated_doc": true,
-            "truncated": true
+            "truncated": true,
+            "manifest_items": 0,
+            "evicted": 0,
+            "digest": null
           },
           {
             "qid": "q06",
-            "retained": true,
+            "retained": false,
             "tokens": 800,
             "over_budget": false,
             "acl_leak": false,
             "stale": true,
             "outdated_doc": true,
-            "truncated": true
+            "truncated": true,
+            "manifest_items": 0,
+            "evicted": 0,
+            "digest": null
           },
           {
             "qid": "q07",
@@ -92,27 +124,36 @@
             "acl_leak": false,
             "stale": false,
             "outdated_doc": true,
-            "truncated": true
+            "truncated": true,
+            "manifest_items": 0,
+            "evicted": 0,
+            "digest": null
           },
           {
             "qid": "q08",
             "retained": true,
             "tokens": 800,
             "over_budget": false,
-            "acl_leak": true,
+            "acl_leak": false,
             "stale": true,
             "outdated_doc": true,
-            "truncated": true
+            "truncated": true,
+            "manifest_items": 0,
+            "evicted": 0,
+            "digest": null
           },
           {
             "qid": "q09",
             "retained": true,
             "tokens": 800,
             "over_budget": false,
-            "acl_leak": true,
+            "acl_leak": false,
             "stale": true,
             "outdated_doc": true,
-            "truncated": true
+            "truncated": true,
+            "manifest_items": 0,
+            "evicted": 0,
+            "digest": null
           },
           {
             "qid": "q10",
@@ -120,9 +161,12 @@
             "tokens": 800,
             "over_budget": false,
             "acl_leak": false,
-            "stale": true,
+            "stale": false,
             "outdated_doc": true,
-            "truncated": true
+            "truncated": true,
+            "manifest_items": 0,
+            "evicted": 0,
+            "digest": null
           },
           {
             "qid": "q11",
@@ -130,9 +174,12 @@
             "tokens": 800,
             "over_budget": false,
             "acl_leak": false,
-            "stale": true,
-            "outdated_doc": true,
-            "truncated": true
+            "stale": false,
+            "outdated_doc": false,
+            "truncated": true,
+            "manifest_items": 0,
+            "evicted": 0,
+            "digest": null
           },
           {
             "qid": "q12",
@@ -142,7 +189,10 @@
             "acl_leak": false,
             "stale": false,
             "outdated_doc": true,
-            "truncated": true
+            "truncated": true,
+            "manifest_items": 0,
+            "evicted": 0,
+            "digest": null
           },
           {
             "qid": "q13",
@@ -152,27 +202,36 @@
             "acl_leak": false,
             "stale": true,
             "outdated_doc": true,
-            "truncated": true
+            "truncated": true,
+            "manifest_items": 0,
+            "evicted": 0,
+            "digest": null
           },
           {
             "qid": "q14",
             "retained": true,
             "tokens": 800,
             "over_budget": false,
-            "acl_leak": true,
-            "stale": false,
+            "acl_leak": false,
+            "stale": true,
             "outdated_doc": true,
-            "truncated": true
+            "truncated": true,
+            "manifest_items": 0,
+            "evicted": 0,
+            "digest": null
           },
           {
             "qid": "q15",
             "retained": true,
             "tokens": 800,
             "over_budget": false,
-            "acl_leak": false,
+            "acl_leak": true,
             "stale": true,
             "outdated_doc": true,
-            "truncated": true
+            "truncated": true,
+            "manifest_items": 0,
+            "evicted": 0,
+            "digest": null
           },
           {
             "qid": "q16",
@@ -182,47 +241,62 @@
             "acl_leak": false,
             "stale": true,
             "outdated_doc": true,
-            "truncated": true
+            "truncated": true,
+            "manifest_items": 0,
+            "evicted": 0,
+            "digest": null
           },
           {
             "qid": "q17",
             "retained": true,
             "tokens": 800,
             "over_budget": false,
-            "acl_leak": true,
+            "acl_leak": false,
             "stale": false,
             "outdated_doc": true,
-            "truncated": true
+            "truncated": true,
+            "manifest_items": 0,
+            "evicted": 0,
+            "digest": null
           },
           {
             "qid": "q18",
-            "retained": false,
+            "retained": true,
             "tokens": 800,
             "over_budget": false,
             "acl_leak": false,
             "stale": true,
-            "outdated_doc": false,
-            "truncated": true
+            "outdated_doc": true,
+            "truncated": true,
+            "manifest_items": 0,
+            "evicted": 0,
+            "digest": null
           },
           {
             "qid": "q19",
             "retained": true,
             "tokens": 800,
             "over_budget": false,
-            "acl_leak": true,
-            "stale": false,
+            "acl_leak": false,
+            "stale": true,
             "outdated_doc": true,
-            "truncated": true
+            "truncated": true,
+            "manifest_items": 0,
+            "evicted": 0,
+            "digest": null
           },
           {
             "qid": "q20",
             "retained": true,
             "tokens": 800,
             "over_budget": false,
-            "acl_leak": true,
-            "stale": false,
-            "outdated_doc": false,
-            "truncated": true
+            "acl_leak": false,
+            "stale": true,
+            "outdated_doc": true,
+            "truncated": true,
+            "manifest_items": 0,
+            "evicted": 0,
+            "digest": null
           },
           {
             "qid": "q21",
@@ -232,43 +306,52 @@
             "acl_leak": false,
             "stale": false,
             "outdated_doc": true,
-            "truncated": true
+            "truncated": true,
+            "manifest_items": 0,
+            "evicted": 0,
+            "digest": null
           },
           {
             "qid": "q22",
-            "retained": false,
+            "retained": true,
             "tokens": 800,
             "over_budget": false,
             "acl_leak": false,
             "stale": true,
             "outdated_doc": false,
-            "truncated": true
+            "truncated": true,
+            "manifest_items": 0,
+            "evicted": 0,
+            "digest": null
           },
           {
             "qid": "q23",
             "retained": true,
             "tokens": 800,
             "over_budget": false,
-            "acl_leak": true,
+            "acl_leak": false,
             "stale": true,
-            "outdated_doc": false,
-            "truncated": true
+            "outdated_doc": true,
+            "truncated": true,
+            "manifest_items": 0,
+            "evicted": 0,
+            "digest": null
           }
         ]
       },
       "naive_postfilter": {
         "name": "naive_postfilter",
-        "answer_retention": 0.8260869565217391,
+        "answer_retention": 0.9130434782608695,
         "budget_overrun_rate": 0.0,
         "mean_tokens": 800,
         "p95_tokens": 800,
-        "duplicate_waste": 0.11206575561381867,
+        "duplicate_waste": 0.11677553617734238,
         "acl_leak_rate": 0.0,
-        "stale_fact_rate": 0.5652173913043478,
-        "outdated_doc_rate": 0.7391304347826086,
+        "stale_fact_rate": 0.6521739130434783,
+        "outdated_doc_rate": 0.9130434782608695,
         "provenance": 0.0,
-        "mean_latency_ms": 8.719831565189372,
-        "p95_latency_ms": 9.74,
+        "mean_latency_ms": 16.728234782298703,
+        "p95_latency_ms": 34.83,
         "detail": [
           {
             "qid": "q01",
@@ -278,17 +361,23 @@
             "acl_leak": false,
             "stale": true,
             "outdated_doc": true,
-            "truncated": true
+            "truncated": true,
+            "manifest_items": 0,
+            "evicted": 0,
+            "digest": null
           },
           {
             "qid": "q02",
-            "retained": false,
+            "retained": true,
             "tokens": 800,
             "over_budget": false,
             "acl_leak": false,
             "stale": false,
             "outdated_doc": true,
-            "truncated": true
+            "truncated": true,
+            "manifest_items": 0,
+            "evicted": 0,
+            "digest": null
           },
           {
             "qid": "q03",
@@ -297,8 +386,11 @@
             "over_budget": false,
             "acl_leak": false,
             "stale": false,
-            "outdated_doc": false,
-            "truncated": true
+            "outdated_doc": true,
+            "truncated": true,
+            "manifest_items": 0,
+            "evicted": 0,
+            "digest": null
           },
           {
             "qid": "q04",
@@ -306,9 +398,12 @@
             "tokens": 800,
             "over_budget": false,
             "acl_leak": false,
-            "stale": false,
-            "outdated_doc": false,
-            "truncated": true
+            "stale": true,
+            "outdated_doc": true,
+            "truncated": true,
+            "manifest_items": 0,
+            "evicted": 0,
+            "digest": null
           },
           {
             "qid": "q05",
@@ -318,17 +413,23 @@
             "acl_leak": false,
             "stale": true,
             "outdated_doc": true,
-            "truncated": true
+            "truncated": true,
+            "manifest_items": 0,
+            "evicted": 0,
+            "digest": null
           },
           {
             "qid": "q06",
-            "retained": true,
+            "retained": false,
             "tokens": 800,
             "over_budget": false,
             "acl_leak": false,
             "stale": true,
             "outdated_doc": true,
-            "truncated": true
+            "truncated": true,
+            "manifest_items": 0,
+            "evicted": 0,
+            "digest": null
           },
           {
             "qid": "q07",
@@ -338,7 +439,10 @@
             "acl_leak": false,
             "stale": false,
             "outdated_doc": true,
-            "truncated": true
+            "truncated": true,
+            "manifest_items": 0,
+            "evicted": 0,
+            "digest": null
           },
           {
             "qid": "q08",
@@ -348,7 +452,10 @@
             "acl_leak": false,
             "stale": true,
             "outdated_doc": true,
-            "truncated": true
+            "truncated": true,
+            "manifest_items": 0,
+            "evicted": 0,
+            "digest": null
           },
           {
             "qid": "q09",
@@ -358,7 +465,10 @@
             "acl_leak": false,
             "stale": true,
             "outdated_doc": true,
-            "truncated": true
+            "truncated": true,
+            "manifest_items": 0,
+            "evicted": 0,
+            "digest": null
           },
           {
             "qid": "q10",
@@ -366,9 +476,12 @@
             "tokens": 800,
             "over_budget": false,
             "acl_leak": false,
-            "stale": true,
+            "stale": false,
             "outdated_doc": true,
-            "truncated": true
+            "truncated": true,
+            "manifest_items": 0,
+            "evicted": 0,
+            "digest": null
           },
           {
             "qid": "q11",
@@ -376,9 +489,12 @@
             "tokens": 800,
             "over_budget": false,
             "acl_leak": false,
-            "stale": true,
-            "outdated_doc": true,
-            "truncated": true
+            "stale": false,
+            "outdated_doc": false,
+            "truncated": true,
+            "manifest_items": 0,
+            "evicted": 0,
+            "digest": null
           },
           {
             "qid": "q12",
@@ -388,7 +504,10 @@
             "acl_leak": false,
             "stale": false,
             "outdated_doc": true,
-            "truncated": true
+            "truncated": true,
+            "manifest_items": 0,
+            "evicted": 0,
+            "digest": null
           },
           {
             "qid": "q13",
@@ -398,7 +517,10 @@
             "acl_leak": false,
             "stale": true,
             "outdated_doc": true,
-            "truncated": true
+            "truncated": true,
+            "manifest_items": 0,
+            "evicted": 0,
+            "digest": null
           },
           {
             "qid": "q14",
@@ -406,9 +528,12 @@
             "tokens": 800,
             "over_budget": false,
             "acl_leak": false,
-            "stale": false,
+            "stale": true,
             "outdated_doc": true,
-            "truncated": true
+            "truncated": true,
+            "manifest_items": 0,
+            "evicted": 0,
+            "digest": null
           },
           {
             "qid": "q15",
@@ -418,7 +543,10 @@
             "acl_leak": false,
             "stale": true,
             "outdated_doc": true,
-            "truncated": true
+            "truncated": true,
+            "manifest_items": 0,
+            "evicted": 0,
+            "digest": null
           },
           {
             "qid": "q16",
@@ -428,7 +556,10 @@
             "acl_leak": false,
             "stale": true,
             "outdated_doc": true,
-            "truncated": true
+            "truncated": true,
+            "manifest_items": 0,
+            "evicted": 0,
+            "digest": null
           },
           {
             "qid": "q17",
@@ -438,17 +569,23 @@
             "acl_leak": false,
             "stale": false,
             "outdated_doc": true,
-            "truncated": true
+            "truncated": true,
+            "manifest_items": 0,
+            "evicted": 0,
+            "digest": null
           },
           {
             "qid": "q18",
-            "retained": false,
+            "retained": true,
             "tokens": 800,
             "over_budget": false,
             "acl_leak": false,
             "stale": true,
-            "outdated_doc": false,
-            "truncated": true
+            "outdated_doc": true,
+            "truncated": true,
+            "manifest_items": 0,
+            "evicted": 0,
+            "digest": null
           },
           {
             "qid": "q19",
@@ -456,9 +593,12 @@
             "tokens": 800,
             "over_budget": false,
             "acl_leak": false,
-            "stale": false,
+            "stale": true,
             "outdated_doc": true,
-            "truncated": true
+            "truncated": true,
+            "manifest_items": 0,
+            "evicted": 0,
+            "digest": null
           },
           {
             "qid": "q20",
@@ -466,9 +606,12 @@
             "tokens": 800,
             "over_budget": false,
             "acl_leak": false,
-            "stale": false,
-            "outdated_doc": false,
-            "truncated": true
+            "stale": true,
+            "outdated_doc": true,
+            "truncated": true,
+            "manifest_items": 0,
+            "evicted": 0,
+            "digest": null
           },
           {
             "qid": "q21",
@@ -478,17 +621,23 @@
             "acl_leak": false,
             "stale": false,
             "outdated_doc": true,
-            "truncated": true
+            "truncated": true,
+            "manifest_items": 0,
+            "evicted": 0,
+            "digest": null
           },
           {
             "qid": "q22",
-            "retained": false,
+            "retained": true,
             "tokens": 800,
             "over_budget": false,
             "acl_leak": false,
             "stale": true,
             "outdated_doc": false,
-            "truncated": true
+            "truncated": true,
+            "manifest_items": 0,
+            "evicted": 0,
+            "digest": null
           },
           {
             "qid": "q23",
@@ -497,24 +646,27 @@
             "over_budget": false,
             "acl_leak": false,
             "stale": true,
-            "outdated_doc": false,
-            "truncated": true
+            "outdated_doc": true,
+            "truncated": true,
+            "manifest_items": 0,
+            "evicted": 0,
+            "digest": null
           }
         ]
       },
       "naive_prefilter": {
         "name": "naive_prefilter",
-        "answer_retention": 0.8260869565217391,
+        "answer_retention": 0.9130434782608695,
         "budget_overrun_rate": 0.0,
         "mean_tokens": 800,
         "p95_tokens": 800,
-        "duplicate_waste": 0.11206575561381867,
+        "duplicate_waste": 0.11677553617734238,
         "acl_leak_rate": 0.0,
-        "stale_fact_rate": 0.5652173913043478,
-        "outdated_doc_rate": 0.7391304347826086,
+        "stale_fact_rate": 0.6521739130434783,
+        "outdated_doc_rate": 0.9130434782608695,
         "provenance": 0.0,
-        "mean_latency_ms": 8.192499826216828,
-        "p95_latency_ms": 9.1,
+        "mean_latency_ms": 10.762834651319755,
+        "p95_latency_ms": 12.25,
         "detail": [
           {
             "qid": "q01",
@@ -524,17 +676,23 @@
             "acl_leak": false,
             "stale": true,
             "outdated_doc": true,
-            "truncated": true
+            "truncated": true,
+            "manifest_items": 0,
+            "evicted": 0,
+            "digest": null
           },
           {
             "qid": "q02",
-            "retained": false,
+            "retained": true,
             "tokens": 800,
             "over_budget": false,
             "acl_leak": false,
             "stale": false,
             "outdated_doc": true,
-            "truncated": true
+            "truncated": true,
+            "manifest_items": 0,
+            "evicted": 0,
+            "digest": null
           },
           {
             "qid": "q03",
@@ -543,8 +701,11 @@
             "over_budget": false,
             "acl_leak": false,
             "stale": false,
-            "outdated_doc": false,
-            "truncated": true
+            "outdated_doc": true,
+            "truncated": true,
+            "manifest_items": 0,
+            "evicted": 0,
+            "digest": null
           },
           {
             "qid": "q04",
@@ -552,9 +713,12 @@
             "tokens": 800,
             "over_budget": false,
             "acl_leak": false,
-            "stale": false,
-            "outdated_doc": false,
-            "truncated": true
+            "stale": true,
+            "outdated_doc": true,
+            "truncated": true,
+            "manifest_items": 0,
+            "evicted": 0,
+            "digest": null
           },
           {
             "qid": "q05",
@@ -564,17 +728,23 @@
             "acl_leak": false,
             "stale": true,
             "outdated_doc": true,
-            "truncated": true
+            "truncated": true,
+            "manifest_items": 0,
+            "evicted": 0,
+            "digest": null
           },
           {
             "qid": "q06",
-            "retained": true,
+            "retained": false,
             "tokens": 800,
             "over_budget": false,
             "acl_leak": false,
             "stale": true,
             "outdated_doc": true,
-            "truncated": true
+            "truncated": true,
+            "manifest_items": 0,
+            "evicted": 0,
+            "digest": null
           },
           {
             "qid": "q07",
@@ -584,7 +754,10 @@
             "acl_leak": false,
             "stale": false,
             "outdated_doc": true,
-            "truncated": true
+            "truncated": true,
+            "manifest_items": 0,
+            "evicted": 0,
+            "digest": null
           },
           {
             "qid": "q08",
@@ -594,7 +767,10 @@
             "acl_leak": false,
             "stale": true,
             "outdated_doc": true,
-            "truncated": true
+            "truncated": true,
+            "manifest_items": 0,
+            "evicted": 0,
+            "digest": null
           },
           {
             "qid": "q09",
@@ -604,7 +780,10 @@
             "acl_leak": false,
             "stale": true,
             "outdated_doc": true,
-            "truncated": true
+            "truncated": true,
+            "manifest_items": 0,
+            "evicted": 0,
+            "digest": null
           },
           {
             "qid": "q10",
@@ -612,9 +791,12 @@
             "tokens": 800,
             "over_budget": false,
             "acl_leak": false,
-            "stale": true,
+            "stale": false,
             "outdated_doc": true,
-            "truncated": true
+            "truncated": true,
+            "manifest_items": 0,
+            "evicted": 0,
+            "digest": null
           },
           {
             "qid": "q11",
@@ -622,9 +804,12 @@
             "tokens": 800,
             "over_budget": false,
             "acl_leak": false,
-            "stale": true,
-            "outdated_doc": true,
-            "truncated": true
+            "stale": false,
+            "outdated_doc": false,
+            "truncated": true,
+            "manifest_items": 0,
+            "evicted": 0,
+            "digest": null
           },
           {
             "qid": "q12",
@@ -634,7 +819,10 @@
             "acl_leak": false,
             "stale": false,
             "outdated_doc": true,
-            "truncated": true
+            "truncated": true,
+            "manifest_items": 0,
+            "evicted": 0,
+            "digest": null
           },
           {
             "qid": "q13",
@@ -644,7 +832,10 @@
             "acl_leak": false,
             "stale": true,
             "outdated_doc": true,
-            "truncated": true
+            "truncated": true,
+            "manifest_items": 0,
+            "evicted": 0,
+            "digest": null
           },
           {
             "qid": "q14",
@@ -652,9 +843,12 @@
             "tokens": 800,
             "over_budget": false,
             "acl_leak": false,
-            "stale": false,
+            "stale": true,
             "outdated_doc": true,
-            "truncated": true
+            "truncated": true,
+            "manifest_items": 0,
+            "evicted": 0,
+            "digest": null
           },
           {
             "qid": "q15",
@@ -664,7 +858,10 @@
             "acl_leak": false,
             "stale": true,
             "outdated_doc": true,
-            "truncated": true
+            "truncated": true,
+            "manifest_items": 0,
+            "evicted": 0,
+            "digest": null
           },
           {
             "qid": "q16",
@@ -674,7 +871,10 @@
             "acl_leak": false,
             "stale": true,
             "outdated_doc": true,
-            "truncated": true
+            "truncated": true,
+            "manifest_items": 0,
+            "evicted": 0,
+            "digest": null
           },
           {
             "qid": "q17",
@@ -684,17 +884,23 @@
             "acl_leak": false,
             "stale": false,
             "outdated_doc": true,
-            "truncated": true
+            "truncated": true,
+            "manifest_items": 0,
+            "evicted": 0,
+            "digest": null
           },
           {
             "qid": "q18",
-            "retained": false,
+            "retained": true,
             "tokens": 800,
             "over_budget": false,
             "acl_leak": false,
             "stale": true,
-            "outdated_doc": false,
-            "truncated": true
+            "outdated_doc": true,
+            "truncated": true,
+            "manifest_items": 0,
+            "evicted": 0,
+            "digest": null
           },
           {
             "qid": "q19",
@@ -702,9 +908,12 @@
             "tokens": 800,
             "over_budget": false,
             "acl_leak": false,
-            "stale": false,
+            "stale": true,
             "outdated_doc": true,
-            "truncated": true
+            "truncated": true,
+            "manifest_items": 0,
+            "evicted": 0,
+            "digest": null
           },
           {
             "qid": "q20",
@@ -712,9 +921,12 @@
             "tokens": 800,
             "over_budget": false,
             "acl_leak": false,
-            "stale": false,
-            "outdated_doc": false,
-            "truncated": true
+            "stale": true,
+            "outdated_doc": true,
+            "truncated": true,
+            "manifest_items": 0,
+            "evicted": 0,
+            "digest": null
           },
           {
             "qid": "q21",
@@ -724,17 +936,23 @@
             "acl_leak": false,
             "stale": false,
             "outdated_doc": true,
-            "truncated": true
+            "truncated": true,
+            "manifest_items": 0,
+            "evicted": 0,
+            "digest": null
           },
           {
             "qid": "q22",
-            "retained": false,
+            "retained": true,
             "tokens": 800,
             "over_budget": false,
             "acl_leak": false,
             "stale": true,
             "outdated_doc": false,
-            "truncated": true
+            "truncated": true,
+            "manifest_items": 0,
+            "evicted": 0,
+            "digest": null
           },
           {
             "qid": "q23",
@@ -743,300 +961,326 @@
             "over_budget": false,
             "acl_leak": false,
             "stale": true,
-            "outdated_doc": false,
-            "truncated": true
+            "outdated_doc": true,
+            "truncated": true,
+            "manifest_items": 0,
+            "evicted": 0,
+            "digest": null
           }
         ]
       },
       "mnemos_compiled": {
         "name": "mnemos_compiled",
-        "answer_retention": 1.0,
+        "answer_retention": 0.9565217391304348,
         "budget_overrun_rate": 0.0,
-        "mean_tokens": 771.2608695652174,
-        "p95_tokens": 790,
-        "duplicate_waste": 0.017739919382353638,
+        "mean_tokens": 763.2608695652174,
+        "p95_tokens": 792,
+        "duplicate_waste": 0.02178398848508435,
         "acl_leak_rate": 0.0,
         "stale_fact_rate": 0.0,
         "outdated_doc_rate": 0.0,
         "provenance": 1.0,
-        "mean_latency_ms": 11.631299391213005,
-        "p95_latency_ms": 14.24,
+        "mean_latency_ms": 15.702039435500806,
+        "p95_latency_ms": 19.52,
         "detail": [
           {
             "qid": "q01",
             "retained": true,
-            "tokens": 771,
+            "tokens": 754,
             "over_budget": false,
             "acl_leak": false,
             "stale": false,
             "outdated_doc": false,
+            "truncated": false,
             "manifest_items": 12,
-            "evicted": 23,
-            "digest": "sha256:4fd394fac3a3"
+            "evicted": 6,
+            "digest": "0207de760166aadf075644d0dbd205cef121bc5a267dafac6718a25f1eba1be5"
           },
           {
             "qid": "q02",
             "retained": true,
-            "tokens": 769,
+            "tokens": 776,
             "over_budget": false,
             "acl_leak": false,
             "stale": false,
             "outdated_doc": false,
+            "truncated": false,
             "manifest_items": 12,
-            "evicted": 16,
-            "digest": "sha256:6b82160d2bb3"
+            "evicted": 6,
+            "digest": "2ffd3fdbe9a9416df5face72212c9bb450128dd835fe26a2c251a2963a417df7"
           },
           {
             "qid": "q03",
             "retained": true,
-            "tokens": 761,
+            "tokens": 745,
             "over_budget": false,
             "acl_leak": false,
             "stale": false,
             "outdated_doc": false,
+            "truncated": false,
             "manifest_items": 12,
-            "evicted": 27,
-            "digest": "sha256:db042c989dd6"
+            "evicted": 6,
+            "digest": "7dd27ef556c762cc72e845373fd38cc1f73757fd8a7e1ee7709cd5f97a8ef09f"
           },
           {
             "qid": "q04",
-            "retained": true,
-            "tokens": 794,
-            "over_budget": false,
-            "acl_leak": false,
-            "stale": false,
-            "outdated_doc": false,
-            "manifest_items": 12,
-            "evicted": 19,
-            "digest": "sha256:5f23f423f433"
-          },
-          {
-            "qid": "q05",
-            "retained": true,
-            "tokens": 755,
-            "over_budget": false,
-            "acl_leak": false,
-            "stale": false,
-            "outdated_doc": false,
-            "manifest_items": 11,
-            "evicted": 8,
-            "digest": "sha256:aac5e92a9217"
-          },
-          {
-            "qid": "q06",
-            "retained": true,
-            "tokens": 787,
-            "over_budget": false,
-            "acl_leak": false,
-            "stale": false,
-            "outdated_doc": false,
-            "manifest_items": 12,
-            "evicted": 14,
-            "digest": "sha256:e49ec5b742ce"
-          },
-          {
-            "qid": "q07",
-            "retained": true,
-            "tokens": 766,
-            "over_budget": false,
-            "acl_leak": false,
-            "stale": false,
-            "outdated_doc": false,
-            "manifest_items": 12,
-            "evicted": 25,
-            "digest": "sha256:bb48725ee500"
-          },
-          {
-            "qid": "q08",
-            "retained": true,
-            "tokens": 787,
-            "over_budget": false,
-            "acl_leak": false,
-            "stale": false,
-            "outdated_doc": false,
-            "manifest_items": 11,
-            "evicted": 15,
-            "digest": "sha256:7460eeec5495"
-          },
-          {
-            "qid": "q09",
-            "retained": true,
-            "tokens": 780,
-            "over_budget": false,
-            "acl_leak": false,
-            "stale": false,
-            "outdated_doc": false,
-            "manifest_items": 11,
-            "evicted": 19,
-            "digest": "sha256:0766a37c3485"
-          },
-          {
-            "qid": "q10",
-            "retained": true,
-            "tokens": 777,
-            "over_budget": false,
-            "acl_leak": false,
-            "stale": false,
-            "outdated_doc": false,
-            "manifest_items": 12,
-            "evicted": 19,
-            "digest": "sha256:001ae00fe926"
-          },
-          {
-            "qid": "q11",
-            "retained": true,
-            "tokens": 778,
-            "over_budget": false,
-            "acl_leak": false,
-            "stale": false,
-            "outdated_doc": false,
-            "manifest_items": 14,
-            "evicted": 20,
-            "digest": "sha256:89b8a5fbf7cf"
-          },
-          {
-            "qid": "q12",
-            "retained": true,
-            "tokens": 755,
-            "over_budget": false,
-            "acl_leak": false,
-            "stale": false,
-            "outdated_doc": false,
-            "manifest_items": 10,
-            "evicted": 18,
-            "digest": "sha256:236e5849ccc4"
-          },
-          {
-            "qid": "q13",
-            "retained": true,
-            "tokens": 749,
-            "over_budget": false,
-            "acl_leak": false,
-            "stale": false,
-            "outdated_doc": false,
-            "manifest_items": 13,
-            "evicted": 17,
-            "digest": "sha256:8145b71bfe0b"
-          },
-          {
-            "qid": "q14",
-            "retained": true,
-            "tokens": 762,
-            "over_budget": false,
-            "acl_leak": false,
-            "stale": false,
-            "outdated_doc": false,
-            "manifest_items": 12,
-            "evicted": 22,
-            "digest": "sha256:ce7eb6e13b59"
-          },
-          {
-            "qid": "q15",
-            "retained": true,
-            "tokens": 783,
-            "over_budget": false,
-            "acl_leak": false,
-            "stale": false,
-            "outdated_doc": false,
-            "manifest_items": 13,
-            "evicted": 12,
-            "digest": "sha256:b3efa42ee3ec"
-          },
-          {
-            "qid": "q16",
-            "retained": true,
-            "tokens": 788,
-            "over_budget": false,
-            "acl_leak": false,
-            "stale": false,
-            "outdated_doc": false,
-            "manifest_items": 11,
-            "evicted": 16,
-            "digest": "sha256:d885b4cee1ea"
-          },
-          {
-            "qid": "q17",
             "retained": true,
             "tokens": 753,
             "over_budget": false,
             "acl_leak": false,
             "stale": false,
             "outdated_doc": false,
+            "truncated": false,
             "manifest_items": 11,
-            "evicted": 25,
-            "digest": "sha256:d7ae39571940"
+            "evicted": 7,
+            "digest": "54ca8dc54845bcca4c7426cf1384b9b44f52ad7d5c4ae578b5a9ee52e61bf97b"
           },
           {
-            "qid": "q18",
+            "qid": "q05",
             "retained": true,
-            "tokens": 740,
+            "tokens": 783,
             "over_budget": false,
             "acl_leak": false,
             "stale": false,
             "outdated_doc": false,
-            "manifest_items": 12,
-            "evicted": 23,
-            "digest": "sha256:bebdaff20dda"
-          },
-          {
-            "qid": "q19",
-            "retained": true,
-            "tokens": 747,
-            "over_budget": false,
-            "acl_leak": false,
-            "stale": false,
-            "outdated_doc": false,
-            "manifest_items": 12,
-            "evicted": 18,
-            "digest": "sha256:c9d4aff5683e"
-          },
-          {
-            "qid": "q20",
-            "retained": true,
-            "tokens": 777,
-            "over_budget": false,
-            "acl_leak": false,
-            "stale": false,
-            "outdated_doc": false,
+            "truncated": false,
             "manifest_items": 11,
-            "evicted": 24,
-            "digest": "sha256:7480727091a6"
+            "evicted": 7,
+            "digest": "fd7f28c6c25dd970af76d1574ce629ad0a22300b2e73a58cf975a715a2bd09bd"
           },
           {
-            "qid": "q21",
+            "qid": "q06",
+            "retained": false,
+            "tokens": 737,
+            "over_budget": false,
+            "acl_leak": false,
+            "stale": false,
+            "outdated_doc": false,
+            "truncated": false,
+            "manifest_items": 10,
+            "evicted": 8,
+            "digest": "00cf4d60fcb61b3c069ba0dfe89c33523df56f45668da98ad97d76cbcb1e21d1"
+          },
+          {
+            "qid": "q07",
+            "retained": true,
+            "tokens": 776,
+            "over_budget": false,
+            "acl_leak": false,
+            "stale": false,
+            "outdated_doc": false,
+            "truncated": false,
+            "manifest_items": 12,
+            "evicted": 6,
+            "digest": "9f959a61b978a41fdee64ac52a9c81691ea9d9e5bcdb716db2d8210941e557e6"
+          },
+          {
+            "qid": "q08",
+            "retained": true,
+            "tokens": 715,
+            "over_budget": false,
+            "acl_leak": false,
+            "stale": false,
+            "outdated_doc": false,
+            "truncated": false,
+            "manifest_items": 10,
+            "evicted": 8,
+            "digest": "4ab2bf3b9521d9fb30a136ddadf5bda94f215fefc9cbde8606a20dd61321a77c"
+          },
+          {
+            "qid": "q09",
+            "retained": true,
+            "tokens": 783,
+            "over_budget": false,
+            "acl_leak": false,
+            "stale": false,
+            "outdated_doc": false,
+            "truncated": false,
+            "manifest_items": 12,
+            "evicted": 6,
+            "digest": "53ea63447eb0a8b68410af54e1f5aad94789bf70037bc4add1464a1d5c9ba764"
+          },
+          {
+            "qid": "q10",
+            "retained": true,
+            "tokens": 792,
+            "over_budget": false,
+            "acl_leak": false,
+            "stale": false,
+            "outdated_doc": false,
+            "truncated": false,
+            "manifest_items": 12,
+            "evicted": 6,
+            "digest": "5561c701676495b698b8a5ec0011b7895b0db7f8798a3b30c12a5df3535ba962"
+          },
+          {
+            "qid": "q11",
+            "retained": true,
+            "tokens": 780,
+            "over_budget": false,
+            "acl_leak": false,
+            "stale": false,
+            "outdated_doc": false,
+            "truncated": false,
+            "manifest_items": 13,
+            "evicted": 5,
+            "digest": "c4fe124eeed7c07be2fba1e85465ed2ceaebd5547216f52602a94475c720dbde"
+          },
+          {
+            "qid": "q12",
+            "retained": true,
+            "tokens": 773,
+            "over_budget": false,
+            "acl_leak": false,
+            "stale": false,
+            "outdated_doc": false,
+            "truncated": false,
+            "manifest_items": 11,
+            "evicted": 7,
+            "digest": "d890a01ad3bef4a45ae20ad3d9602839910fcd1fb7c592135b53bf987c565d2f"
+          },
+          {
+            "qid": "q13",
+            "retained": true,
+            "tokens": 794,
+            "over_budget": false,
+            "acl_leak": false,
+            "stale": false,
+            "outdated_doc": false,
+            "truncated": false,
+            "manifest_items": 13,
+            "evicted": 5,
+            "digest": "59a07f22dfaabd3a4145adbbc0c48e9df1a7858e5c80468cd9b94af51c29f565"
+          },
+          {
+            "qid": "q14",
+            "retained": true,
+            "tokens": 785,
+            "over_budget": false,
+            "acl_leak": false,
+            "stale": false,
+            "outdated_doc": false,
+            "truncated": false,
+            "manifest_items": 12,
+            "evicted": 6,
+            "digest": "2f3ccd94e6920ea3d001b48ad14e799c3be3bef00ccf15f3f1bd49b392d0e16a"
+          },
+          {
+            "qid": "q15",
+            "retained": true,
+            "tokens": 756,
+            "over_budget": false,
+            "acl_leak": false,
+            "stale": false,
+            "outdated_doc": false,
+            "truncated": false,
+            "manifest_items": 11,
+            "evicted": 7,
+            "digest": "07d35f78f917a4d4638e9681b9ac05534b187e02a5125621ac15ea686098698e"
+          },
+          {
+            "qid": "q16",
             "retained": true,
             "tokens": 784,
             "over_budget": false,
             "acl_leak": false,
             "stale": false,
             "outdated_doc": false,
+            "truncated": false,
+            "manifest_items": 11,
+            "evicted": 7,
+            "digest": "ac58377139d12c3aa4ee42d4d1e343be3fb83b88c4d3f6bb4b91b8c030e4a730"
+          },
+          {
+            "qid": "q17",
+            "retained": true,
+            "tokens": 775,
+            "over_budget": false,
+            "acl_leak": false,
+            "stale": false,
+            "outdated_doc": false,
+            "truncated": false,
             "manifest_items": 12,
-            "evicted": 20,
-            "digest": "sha256:c92131f0208a"
+            "evicted": 6,
+            "digest": "a17f85f47110adf84d9e2e4ba3d221c8bc29cfb3f8d24567abafc077377a7b5d"
+          },
+          {
+            "qid": "q18",
+            "retained": true,
+            "tokens": 792,
+            "over_budget": false,
+            "acl_leak": false,
+            "stale": false,
+            "outdated_doc": false,
+            "truncated": false,
+            "manifest_items": 12,
+            "evicted": 6,
+            "digest": "2dc9d0a256fed42c7a7934549e3ae8a1c3dc4e6933f5750872aa95d3a226bb77"
+          },
+          {
+            "qid": "q19",
+            "retained": true,
+            "tokens": 701,
+            "over_budget": false,
+            "acl_leak": false,
+            "stale": false,
+            "outdated_doc": false,
+            "truncated": false,
+            "manifest_items": 11,
+            "evicted": 7,
+            "digest": "db5ff79971957c64a93734f5e932dda7c23961a606163f9649e46297238562e7"
+          },
+          {
+            "qid": "q20",
+            "retained": true,
+            "tokens": 682,
+            "over_budget": false,
+            "acl_leak": false,
+            "stale": false,
+            "outdated_doc": false,
+            "truncated": false,
+            "manifest_items": 11,
+            "evicted": 7,
+            "digest": "898ba920111c65674b8257c90d404efbaa08253126f6d7604da5541f07e8cafa"
+          },
+          {
+            "qid": "q21",
+            "retained": true,
+            "tokens": 771,
+            "over_budget": false,
+            "acl_leak": false,
+            "stale": false,
+            "outdated_doc": false,
+            "truncated": false,
+            "manifest_items": 12,
+            "evicted": 6,
+            "digest": "de9f6fbb96f300e737f882eb702323a747e4b4d0ee916a47300bd30872056a10"
           },
           {
             "qid": "q22",
             "retained": true,
-            "tokens": 786,
+            "tokens": 759,
             "over_budget": false,
             "acl_leak": false,
             "stale": false,
             "outdated_doc": false,
-            "manifest_items": 13,
-            "evicted": 14,
-            "digest": "sha256:c520c6ed954e"
+            "truncated": false,
+            "manifest_items": 10,
+            "evicted": 8,
+            "digest": "6788d26afbfba0370131848dd20fa5f23bb0b77d94a2513b9fe58f7e49f9792b"
           },
           {
             "qid": "q23",
             "retained": true,
-            "tokens": 790,
+            "tokens": 789,
             "over_budget": false,
             "acl_leak": false,
             "stale": false,
             "outdated_doc": false,
-            "manifest_items": 11,
-            "evicted": 15,
-            "digest": "sha256:78ca35b17504"
+            "truncated": false,
+            "manifest_items": 10,
+            "evicted": 8,
+            "digest": "ff9ebc90402e15b866b86e91d20bd65c71db30c1db6fe0c95ab2aa0971310223"
           }
         ]
       }
@@ -1046,125 +1290,158 @@
         "name": "naive",
         "answer_retention": 0.9565217391304348,
         "budget_overrun_rate": 0.0,
-        "mean_tokens": 1277,
+        "mean_tokens": 1297.608695652174,
         "p95_tokens": 1500,
-        "duplicate_waste": 0.20480792893701502,
-        "acl_leak_rate": 0.43478260869565216,
-        "stale_fact_rate": 0.5652173913043478,
-        "outdated_doc_rate": 0.9130434782608695,
+        "duplicate_waste": 0.22196515936983105,
+        "acl_leak_rate": 0.13043478260869565,
+        "stale_fact_rate": 0.6521739130434783,
+        "outdated_doc_rate": 0.9565217391304348,
         "provenance": 0.0,
-        "mean_latency_ms": 5.535040825990386,
-        "p95_latency_ms": 13.12,
+        "mean_latency_ms": 10.081739958284585,
+        "p95_latency_ms": 15.44,
         "detail": [
           {
             "qid": "q01",
             "retained": true,
-            "tokens": 1104,
+            "tokens": 1227,
             "over_budget": false,
             "acl_leak": false,
             "stale": true,
             "outdated_doc": true,
-            "truncated": false
+            "truncated": false,
+            "manifest_items": 0,
+            "evicted": 0,
+            "digest": null
           },
           {
             "qid": "q02",
-            "retained": false,
-            "tokens": 1150,
+            "retained": true,
+            "tokens": 1147,
             "over_budget": false,
             "acl_leak": true,
             "stale": false,
             "outdated_doc": true,
-            "truncated": false
+            "truncated": false,
+            "manifest_items": 0,
+            "evicted": 0,
+            "digest": null
           },
           {
             "qid": "q03",
             "retained": true,
-            "tokens": 1040,
+            "tokens": 1197,
             "over_budget": false,
-            "acl_leak": true,
+            "acl_leak": false,
             "stale": false,
-            "outdated_doc": false,
-            "truncated": false
+            "outdated_doc": true,
+            "truncated": false,
+            "manifest_items": 0,
+            "evicted": 0,
+            "digest": null
           },
           {
             "qid": "q04",
             "retained": true,
-            "tokens": 1226,
+            "tokens": 1500,
             "over_budget": false,
-            "acl_leak": true,
-            "stale": false,
+            "acl_leak": false,
+            "stale": true,
             "outdated_doc": true,
-            "truncated": false
+            "truncated": true,
+            "manifest_items": 0,
+            "evicted": 0,
+            "digest": null
           },
           {
             "qid": "q05",
             "retained": true,
-            "tokens": 1470,
+            "tokens": 1450,
             "over_budget": false,
             "acl_leak": false,
             "stale": true,
             "outdated_doc": true,
-            "truncated": false
+            "truncated": false,
+            "manifest_items": 0,
+            "evicted": 0,
+            "digest": null
           },
           {
             "qid": "q06",
-            "retained": true,
+            "retained": false,
             "tokens": 1500,
             "over_budget": false,
             "acl_leak": false,
             "stale": true,
             "outdated_doc": true,
-            "truncated": true
+            "truncated": true,
+            "manifest_items": 0,
+            "evicted": 0,
+            "digest": null
           },
           {
             "qid": "q07",
             "retained": true,
-            "tokens": 1040,
+            "tokens": 1183,
             "over_budget": false,
             "acl_leak": false,
             "stale": false,
             "outdated_doc": true,
-            "truncated": false
+            "truncated": false,
+            "manifest_items": 0,
+            "evicted": 0,
+            "digest": null
           },
           {
             "qid": "q08",
-            "retained": true,
-            "tokens": 1372,
-            "over_budget": false,
-            "acl_leak": true,
-            "stale": true,
-            "outdated_doc": true,
-            "truncated": false
-          },
-          {
-            "qid": "q09",
-            "retained": true,
-            "tokens": 1356,
-            "over_budget": false,
-            "acl_leak": true,
-            "stale": true,
-            "outdated_doc": true,
-            "truncated": false
-          },
-          {
-            "qid": "q10",
             "retained": true,
             "tokens": 1500,
             "over_budget": false,
             "acl_leak": false,
             "stale": true,
             "outdated_doc": true,
-            "truncated": true
+            "truncated": true,
+            "manifest_items": 0,
+            "evicted": 0,
+            "digest": null
           },
           {
-            "qid": "q11",
+            "qid": "q09",
             "retained": true,
-            "tokens": 1008,
+            "tokens": 1108,
             "over_budget": false,
             "acl_leak": false,
             "stale": true,
             "outdated_doc": true,
-            "truncated": false
+            "truncated": false,
+            "manifest_items": 0,
+            "evicted": 0,
+            "digest": null
+          },
+          {
+            "qid": "q10",
+            "retained": true,
+            "tokens": 1292,
+            "over_budget": false,
+            "acl_leak": false,
+            "stale": false,
+            "outdated_doc": true,
+            "truncated": false,
+            "manifest_items": 0,
+            "evicted": 0,
+            "digest": null
+          },
+          {
+            "qid": "q11",
+            "retained": true,
+            "tokens": 1106,
+            "over_budget": false,
+            "acl_leak": false,
+            "stale": false,
+            "outdated_doc": true,
+            "truncated": false,
+            "manifest_items": 0,
+            "evicted": 0,
+            "digest": null
           },
           {
             "qid": "q12",
@@ -1174,243 +1451,312 @@
             "acl_leak": false,
             "stale": false,
             "outdated_doc": true,
-            "truncated": true
+            "truncated": true,
+            "manifest_items": 0,
+            "evicted": 0,
+            "digest": null
           },
           {
             "qid": "q13",
             "retained": true,
-            "tokens": 1411,
+            "tokens": 1111,
             "over_budget": false,
             "acl_leak": false,
             "stale": true,
             "outdated_doc": true,
-            "truncated": false
+            "truncated": false,
+            "manifest_items": 0,
+            "evicted": 0,
+            "digest": null
           },
           {
             "qid": "q14",
             "retained": true,
-            "tokens": 1065,
-            "over_budget": false,
-            "acl_leak": true,
-            "stale": false,
-            "outdated_doc": true,
-            "truncated": false
-          },
-          {
-            "qid": "q15",
-            "retained": true,
-            "tokens": 1484,
+            "tokens": 1155,
             "over_budget": false,
             "acl_leak": false,
             "stale": true,
             "outdated_doc": true,
-            "truncated": false
+            "truncated": false,
+            "manifest_items": 0,
+            "evicted": 0,
+            "digest": null
+          },
+          {
+            "qid": "q15",
+            "retained": true,
+            "tokens": 1339,
+            "over_budget": false,
+            "acl_leak": true,
+            "stale": true,
+            "outdated_doc": true,
+            "truncated": false,
+            "manifest_items": 0,
+            "evicted": 0,
+            "digest": null
           },
           {
             "qid": "q16",
+            "retained": true,
+            "tokens": 1362,
+            "over_budget": false,
+            "acl_leak": true,
+            "stale": true,
+            "outdated_doc": true,
+            "truncated": false,
+            "manifest_items": 0,
+            "evicted": 0,
+            "digest": null
+          },
+          {
+            "qid": "q17",
+            "retained": true,
+            "tokens": 1278,
+            "over_budget": false,
+            "acl_leak": false,
+            "stale": false,
+            "outdated_doc": true,
+            "truncated": false,
+            "manifest_items": 0,
+            "evicted": 0,
+            "digest": null
+          },
+          {
+            "qid": "q18",
+            "retained": true,
+            "tokens": 1050,
+            "over_budget": false,
+            "acl_leak": false,
+            "stale": true,
+            "outdated_doc": true,
+            "truncated": false,
+            "manifest_items": 0,
+            "evicted": 0,
+            "digest": null
+          },
+          {
+            "qid": "q19",
+            "retained": true,
+            "tokens": 1424,
+            "over_budget": false,
+            "acl_leak": false,
+            "stale": true,
+            "outdated_doc": true,
+            "truncated": false,
+            "manifest_items": 0,
+            "evicted": 0,
+            "digest": null
+          },
+          {
+            "qid": "q20",
+            "retained": true,
+            "tokens": 1323,
+            "over_budget": false,
+            "acl_leak": false,
+            "stale": true,
+            "outdated_doc": true,
+            "truncated": false,
+            "manifest_items": 0,
+            "evicted": 0,
+            "digest": null
+          },
+          {
+            "qid": "q21",
+            "retained": true,
+            "tokens": 1093,
+            "over_budget": false,
+            "acl_leak": false,
+            "stale": false,
+            "outdated_doc": true,
+            "truncated": false,
+            "manifest_items": 0,
+            "evicted": 0,
+            "digest": null
+          },
+          {
+            "qid": "q22",
             "retained": true,
             "tokens": 1500,
             "over_budget": false,
             "acl_leak": false,
             "stale": true,
-            "outdated_doc": true,
-            "truncated": true
-          },
-          {
-            "qid": "q17",
-            "retained": true,
-            "tokens": 1054,
-            "over_budget": false,
-            "acl_leak": true,
-            "stale": false,
-            "outdated_doc": true,
-            "truncated": false
-          },
-          {
-            "qid": "q18",
-            "retained": true,
-            "tokens": 1057,
-            "over_budget": false,
-            "acl_leak": false,
-            "stale": true,
-            "outdated_doc": true,
-            "truncated": false
-          },
-          {
-            "qid": "q19",
-            "retained": true,
-            "tokens": 1389,
-            "over_budget": false,
-            "acl_leak": true,
-            "stale": false,
-            "outdated_doc": true,
-            "truncated": false
-          },
-          {
-            "qid": "q20",
-            "retained": true,
-            "tokens": 1224,
-            "over_budget": false,
-            "acl_leak": true,
-            "stale": false,
-            "outdated_doc": true,
-            "truncated": false
-          },
-          {
-            "qid": "q21",
-            "retained": true,
-            "tokens": 1082,
-            "over_budget": false,
-            "acl_leak": false,
-            "stale": false,
-            "outdated_doc": true,
-            "truncated": false
-          },
-          {
-            "qid": "q22",
-            "retained": true,
-            "tokens": 1339,
-            "over_budget": false,
-            "acl_leak": false,
-            "stale": true,
             "outdated_doc": false,
-            "truncated": false
+            "truncated": true,
+            "manifest_items": 0,
+            "evicted": 0,
+            "digest": null
           },
           {
             "qid": "q23",
             "retained": true,
             "tokens": 1500,
             "over_budget": false,
-            "acl_leak": true,
+            "acl_leak": false,
             "stale": true,
             "outdated_doc": true,
-            "truncated": true
+            "truncated": true,
+            "manifest_items": 0,
+            "evicted": 0,
+            "digest": null
           }
         ]
       },
       "naive_postfilter": {
         "name": "naive_postfilter",
-        "answer_retention": 1.0,
+        "answer_retention": 0.9565217391304348,
         "budget_overrun_rate": 0.0,
-        "mean_tokens": 1271.3478260869565,
+        "mean_tokens": 1303.1739130434783,
         "p95_tokens": 1500,
-        "duplicate_waste": 0.2087757715663811,
+        "duplicate_waste": 0.22786274981008967,
         "acl_leak_rate": 0.0,
-        "stale_fact_rate": 0.5652173913043478,
+        "stale_fact_rate": 0.6521739130434783,
         "outdated_doc_rate": 0.9565217391304348,
         "provenance": 0.0,
-        "mean_latency_ms": 5.30127156510033,
-        "p95_latency_ms": 13.06,
+        "mean_latency_ms": 9.658150826631438,
+        "p95_latency_ms": 15.81,
         "detail": [
           {
             "qid": "q01",
             "retained": true,
-            "tokens": 1104,
+            "tokens": 1227,
             "over_budget": false,
             "acl_leak": false,
             "stale": true,
             "outdated_doc": true,
-            "truncated": false
+            "truncated": false,
+            "manifest_items": 0,
+            "evicted": 0,
+            "digest": null
           },
           {
             "qid": "q02",
             "retained": true,
-            "tokens": 1075,
+            "tokens": 1125,
             "over_budget": false,
             "acl_leak": false,
             "stale": false,
             "outdated_doc": true,
-            "truncated": false
+            "truncated": false,
+            "manifest_items": 0,
+            "evicted": 0,
+            "digest": null
           },
           {
             "qid": "q03",
             "retained": true,
-            "tokens": 1030,
+            "tokens": 1197,
             "over_budget": false,
             "acl_leak": false,
             "stale": false,
             "outdated_doc": true,
-            "truncated": false
+            "truncated": false,
+            "manifest_items": 0,
+            "evicted": 0,
+            "digest": null
           },
           {
             "qid": "q04",
             "retained": true,
-            "tokens": 1211,
+            "tokens": 1500,
             "over_budget": false,
             "acl_leak": false,
-            "stale": false,
+            "stale": true,
             "outdated_doc": true,
-            "truncated": false
+            "truncated": true,
+            "manifest_items": 0,
+            "evicted": 0,
+            "digest": null
           },
           {
             "qid": "q05",
             "retained": true,
-            "tokens": 1470,
+            "tokens": 1450,
             "over_budget": false,
             "acl_leak": false,
             "stale": true,
             "outdated_doc": true,
-            "truncated": false
+            "truncated": false,
+            "manifest_items": 0,
+            "evicted": 0,
+            "digest": null
           },
           {
             "qid": "q06",
-            "retained": true,
+            "retained": false,
             "tokens": 1500,
             "over_budget": false,
             "acl_leak": false,
             "stale": true,
             "outdated_doc": true,
-            "truncated": true
+            "truncated": true,
+            "manifest_items": 0,
+            "evicted": 0,
+            "digest": null
           },
           {
             "qid": "q07",
             "retained": true,
-            "tokens": 1040,
+            "tokens": 1183,
             "over_budget": false,
             "acl_leak": false,
             "stale": false,
             "outdated_doc": true,
-            "truncated": false
+            "truncated": false,
+            "manifest_items": 0,
+            "evicted": 0,
+            "digest": null
           },
           {
             "qid": "q08",
-            "retained": true,
-            "tokens": 1322,
-            "over_budget": false,
-            "acl_leak": false,
-            "stale": true,
-            "outdated_doc": true,
-            "truncated": false
-          },
-          {
-            "qid": "q09",
-            "retained": true,
-            "tokens": 1487,
-            "over_budget": false,
-            "acl_leak": false,
-            "stale": true,
-            "outdated_doc": true,
-            "truncated": false
-          },
-          {
-            "qid": "q10",
             "retained": true,
             "tokens": 1500,
             "over_budget": false,
             "acl_leak": false,
             "stale": true,
             "outdated_doc": true,
-            "truncated": true
+            "truncated": true,
+            "manifest_items": 0,
+            "evicted": 0,
+            "digest": null
           },
           {
-            "qid": "q11",
+            "qid": "q09",
             "retained": true,
-            "tokens": 1008,
+            "tokens": 1108,
             "over_budget": false,
             "acl_leak": false,
             "stale": true,
             "outdated_doc": true,
-            "truncated": false
+            "truncated": false,
+            "manifest_items": 0,
+            "evicted": 0,
+            "digest": null
+          },
+          {
+            "qid": "q10",
+            "retained": true,
+            "tokens": 1292,
+            "over_budget": false,
+            "acl_leak": false,
+            "stale": false,
+            "outdated_doc": true,
+            "truncated": false,
+            "manifest_items": 0,
+            "evicted": 0,
+            "digest": null
+          },
+          {
+            "qid": "q11",
+            "retained": true,
+            "tokens": 1106,
+            "over_budget": false,
+            "acl_leak": false,
+            "stale": false,
+            "outdated_doc": true,
+            "truncated": false,
+            "manifest_items": 0,
+            "evicted": 0,
+            "digest": null
           },
           {
             "qid": "q12",
@@ -1420,107 +1766,140 @@
             "acl_leak": false,
             "stale": false,
             "outdated_doc": true,
-            "truncated": true
+            "truncated": true,
+            "manifest_items": 0,
+            "evicted": 0,
+            "digest": null
           },
           {
             "qid": "q13",
             "retained": true,
-            "tokens": 1411,
+            "tokens": 1111,
             "over_budget": false,
             "acl_leak": false,
             "stale": true,
             "outdated_doc": true,
-            "truncated": false
+            "truncated": false,
+            "manifest_items": 0,
+            "evicted": 0,
+            "digest": null
           },
           {
             "qid": "q14",
             "retained": true,
-            "tokens": 1044,
-            "over_budget": false,
-            "acl_leak": false,
-            "stale": false,
-            "outdated_doc": true,
-            "truncated": false
-          },
-          {
-            "qid": "q15",
-            "retained": true,
-            "tokens": 1484,
+            "tokens": 1155,
             "over_budget": false,
             "acl_leak": false,
             "stale": true,
             "outdated_doc": true,
-            "truncated": false
+            "truncated": false,
+            "manifest_items": 0,
+            "evicted": 0,
+            "digest": null
+          },
+          {
+            "qid": "q15",
+            "retained": true,
+            "tokens": 1422,
+            "over_budget": false,
+            "acl_leak": false,
+            "stale": true,
+            "outdated_doc": true,
+            "truncated": false,
+            "manifest_items": 0,
+            "evicted": 0,
+            "digest": null
           },
           {
             "qid": "q16",
+            "retained": true,
+            "tokens": 1429,
+            "over_budget": false,
+            "acl_leak": false,
+            "stale": true,
+            "outdated_doc": true,
+            "truncated": false,
+            "manifest_items": 0,
+            "evicted": 0,
+            "digest": null
+          },
+          {
+            "qid": "q17",
+            "retained": true,
+            "tokens": 1278,
+            "over_budget": false,
+            "acl_leak": false,
+            "stale": false,
+            "outdated_doc": true,
+            "truncated": false,
+            "manifest_items": 0,
+            "evicted": 0,
+            "digest": null
+          },
+          {
+            "qid": "q18",
+            "retained": true,
+            "tokens": 1050,
+            "over_budget": false,
+            "acl_leak": false,
+            "stale": true,
+            "outdated_doc": true,
+            "truncated": false,
+            "manifest_items": 0,
+            "evicted": 0,
+            "digest": null
+          },
+          {
+            "qid": "q19",
+            "retained": true,
+            "tokens": 1424,
+            "over_budget": false,
+            "acl_leak": false,
+            "stale": true,
+            "outdated_doc": true,
+            "truncated": false,
+            "manifest_items": 0,
+            "evicted": 0,
+            "digest": null
+          },
+          {
+            "qid": "q20",
+            "retained": true,
+            "tokens": 1323,
+            "over_budget": false,
+            "acl_leak": false,
+            "stale": true,
+            "outdated_doc": true,
+            "truncated": false,
+            "manifest_items": 0,
+            "evicted": 0,
+            "digest": null
+          },
+          {
+            "qid": "q21",
+            "retained": true,
+            "tokens": 1093,
+            "over_budget": false,
+            "acl_leak": false,
+            "stale": false,
+            "outdated_doc": true,
+            "truncated": false,
+            "manifest_items": 0,
+            "evicted": 0,
+            "digest": null
+          },
+          {
+            "qid": "q22",
             "retained": true,
             "tokens": 1500,
             "over_budget": false,
             "acl_leak": false,
             "stale": true,
-            "outdated_doc": true,
-            "truncated": true
-          },
-          {
-            "qid": "q17",
-            "retained": true,
-            "tokens": 983,
-            "over_budget": false,
-            "acl_leak": false,
-            "stale": false,
-            "outdated_doc": true,
-            "truncated": false
-          },
-          {
-            "qid": "q18",
-            "retained": true,
-            "tokens": 1057,
-            "over_budget": false,
-            "acl_leak": false,
-            "stale": true,
-            "outdated_doc": true,
-            "truncated": false
-          },
-          {
-            "qid": "q19",
-            "retained": true,
-            "tokens": 1409,
-            "over_budget": false,
-            "acl_leak": false,
-            "stale": false,
-            "outdated_doc": true,
-            "truncated": false
-          },
-          {
-            "qid": "q20",
-            "retained": true,
-            "tokens": 1185,
-            "over_budget": false,
-            "acl_leak": false,
-            "stale": false,
-            "outdated_doc": true,
-            "truncated": false
-          },
-          {
-            "qid": "q21",
-            "retained": true,
-            "tokens": 1082,
-            "over_budget": false,
-            "acl_leak": false,
-            "stale": false,
-            "outdated_doc": true,
-            "truncated": false
-          },
-          {
-            "qid": "q22",
-            "retained": true,
-            "tokens": 1339,
-            "over_budget": false,
-            "acl_leak": false,
-            "stale": true,
             "outdated_doc": false,
-            "truncated": false
+            "truncated": true,
+            "manifest_items": 0,
+            "evicted": 0,
+            "digest": null
           },
           {
             "qid": "q23",
@@ -1530,133 +1909,169 @@
             "acl_leak": false,
             "stale": true,
             "outdated_doc": true,
-            "truncated": true
+            "truncated": true,
+            "manifest_items": 0,
+            "evicted": 0,
+            "digest": null
           }
         ]
       },
       "naive_prefilter": {
         "name": "naive_prefilter",
-        "answer_retention": 1.0,
+        "answer_retention": 0.9565217391304348,
         "budget_overrun_rate": 0.0,
-        "mean_tokens": 1271.3478260869565,
+        "mean_tokens": 1303.1739130434783,
         "p95_tokens": 1500,
-        "duplicate_waste": 0.2087757715663811,
+        "duplicate_waste": 0.22786274981008967,
         "acl_leak_rate": 0.0,
-        "stale_fact_rate": 0.5652173913043478,
+        "stale_fact_rate": 0.6521739130434783,
         "outdated_doc_rate": 0.9565217391304348,
         "provenance": 0.0,
-        "mean_latency_ms": 5.276810956591204,
-        "p95_latency_ms": 12.84,
+        "mean_latency_ms": 9.47029587025653,
+        "p95_latency_ms": 12.09,
         "detail": [
           {
             "qid": "q01",
             "retained": true,
-            "tokens": 1104,
+            "tokens": 1227,
             "over_budget": false,
             "acl_leak": false,
             "stale": true,
             "outdated_doc": true,
-            "truncated": false
+            "truncated": false,
+            "manifest_items": 0,
+            "evicted": 0,
+            "digest": null
           },
           {
             "qid": "q02",
             "retained": true,
-            "tokens": 1075,
+            "tokens": 1125,
             "over_budget": false,
             "acl_leak": false,
             "stale": false,
             "outdated_doc": true,
-            "truncated": false
+            "truncated": false,
+            "manifest_items": 0,
+            "evicted": 0,
+            "digest": null
           },
           {
             "qid": "q03",
             "retained": true,
-            "tokens": 1030,
+            "tokens": 1197,
             "over_budget": false,
             "acl_leak": false,
             "stale": false,
             "outdated_doc": true,
-            "truncated": false
+            "truncated": false,
+            "manifest_items": 0,
+            "evicted": 0,
+            "digest": null
           },
           {
             "qid": "q04",
             "retained": true,
-            "tokens": 1211,
+            "tokens": 1500,
             "over_budget": false,
             "acl_leak": false,
-            "stale": false,
+            "stale": true,
             "outdated_doc": true,
-            "truncated": false
+            "truncated": true,
+            "manifest_items": 0,
+            "evicted": 0,
+            "digest": null
           },
           {
             "qid": "q05",
             "retained": true,
-            "tokens": 1470,
+            "tokens": 1450,
             "over_budget": false,
             "acl_leak": false,
             "stale": true,
             "outdated_doc": true,
-            "truncated": false
+            "truncated": false,
+            "manifest_items": 0,
+            "evicted": 0,
+            "digest": null
           },
           {
             "qid": "q06",
-            "retained": true,
+            "retained": false,
             "tokens": 1500,
             "over_budget": false,
             "acl_leak": false,
             "stale": true,
             "outdated_doc": true,
-            "truncated": true
+            "truncated": true,
+            "manifest_items": 0,
+            "evicted": 0,
+            "digest": null
           },
           {
             "qid": "q07",
             "retained": true,
-            "tokens": 1040,
+            "tokens": 1183,
             "over_budget": false,
             "acl_leak": false,
             "stale": false,
             "outdated_doc": true,
-            "truncated": false
+            "truncated": false,
+            "manifest_items": 0,
+            "evicted": 0,
+            "digest": null
           },
           {
             "qid": "q08",
-            "retained": true,
-            "tokens": 1322,
-            "over_budget": false,
-            "acl_leak": false,
-            "stale": true,
-            "outdated_doc": true,
-            "truncated": false
-          },
-          {
-            "qid": "q09",
-            "retained": true,
-            "tokens": 1487,
-            "over_budget": false,
-            "acl_leak": false,
-            "stale": true,
-            "outdated_doc": true,
-            "truncated": false
-          },
-          {
-            "qid": "q10",
             "retained": true,
             "tokens": 1500,
             "over_budget": false,
             "acl_leak": false,
             "stale": true,
             "outdated_doc": true,
-            "truncated": true
+            "truncated": true,
+            "manifest_items": 0,
+            "evicted": 0,
+            "digest": null
           },
           {
-            "qid": "q11",
+            "qid": "q09",
             "retained": true,
-            "tokens": 1008,
+            "tokens": 1108,
             "over_budget": false,
             "acl_leak": false,
             "stale": true,
             "outdated_doc": true,
-            "truncated": false
+            "truncated": false,
+            "manifest_items": 0,
+            "evicted": 0,
+            "digest": null
+          },
+          {
+            "qid": "q10",
+            "retained": true,
+            "tokens": 1292,
+            "over_budget": false,
+            "acl_leak": false,
+            "stale": false,
+            "outdated_doc": true,
+            "truncated": false,
+            "manifest_items": 0,
+            "evicted": 0,
+            "digest": null
+          },
+          {
+            "qid": "q11",
+            "retained": true,
+            "tokens": 1106,
+            "over_budget": false,
+            "acl_leak": false,
+            "stale": false,
+            "outdated_doc": true,
+            "truncated": false,
+            "manifest_items": 0,
+            "evicted": 0,
+            "digest": null
           },
           {
             "qid": "q12",
@@ -1666,107 +2081,140 @@
             "acl_leak": false,
             "stale": false,
             "outdated_doc": true,
-            "truncated": true
+            "truncated": true,
+            "manifest_items": 0,
+            "evicted": 0,
+            "digest": null
           },
           {
             "qid": "q13",
             "retained": true,
-            "tokens": 1411,
+            "tokens": 1111,
             "over_budget": false,
             "acl_leak": false,
             "stale": true,
             "outdated_doc": true,
-            "truncated": false
+            "truncated": false,
+            "manifest_items": 0,
+            "evicted": 0,
+            "digest": null
           },
           {
             "qid": "q14",
             "retained": true,
-            "tokens": 1044,
-            "over_budget": false,
-            "acl_leak": false,
-            "stale": false,
-            "outdated_doc": true,
-            "truncated": false
-          },
-          {
-            "qid": "q15",
-            "retained": true,
-            "tokens": 1484,
+            "tokens": 1155,
             "over_budget": false,
             "acl_leak": false,
             "stale": true,
             "outdated_doc": true,
-            "truncated": false
+            "truncated": false,
+            "manifest_items": 0,
+            "evicted": 0,
+            "digest": null
+          },
+          {
+            "qid": "q15",
+            "retained": true,
+            "tokens": 1422,
+            "over_budget": false,
+            "acl_leak": false,
+            "stale": true,
+            "outdated_doc": true,
+            "truncated": false,
+            "manifest_items": 0,
+            "evicted": 0,
+            "digest": null
           },
           {
             "qid": "q16",
+            "retained": true,
+            "tokens": 1429,
+            "over_budget": false,
+            "acl_leak": false,
+            "stale": true,
+            "outdated_doc": true,
+            "truncated": false,
+            "manifest_items": 0,
+            "evicted": 0,
+            "digest": null
+          },
+          {
+            "qid": "q17",
+            "retained": true,
+            "tokens": 1278,
+            "over_budget": false,
+            "acl_leak": false,
+            "stale": false,
+            "outdated_doc": true,
+            "truncated": false,
+            "manifest_items": 0,
+            "evicted": 0,
+            "digest": null
+          },
+          {
+            "qid": "q18",
+            "retained": true,
+            "tokens": 1050,
+            "over_budget": false,
+            "acl_leak": false,
+            "stale": true,
+            "outdated_doc": true,
+            "truncated": false,
+            "manifest_items": 0,
+            "evicted": 0,
+            "digest": null
+          },
+          {
+            "qid": "q19",
+            "retained": true,
+            "tokens": 1424,
+            "over_budget": false,
+            "acl_leak": false,
+            "stale": true,
+            "outdated_doc": true,
+            "truncated": false,
+            "manifest_items": 0,
+            "evicted": 0,
+            "digest": null
+          },
+          {
+            "qid": "q20",
+            "retained": true,
+            "tokens": 1323,
+            "over_budget": false,
+            "acl_leak": false,
+            "stale": true,
+            "outdated_doc": true,
+            "truncated": false,
+            "manifest_items": 0,
+            "evicted": 0,
+            "digest": null
+          },
+          {
+            "qid": "q21",
+            "retained": true,
+            "tokens": 1093,
+            "over_budget": false,
+            "acl_leak": false,
+            "stale": false,
+            "outdated_doc": true,
+            "truncated": false,
+            "manifest_items": 0,
+            "evicted": 0,
+            "digest": null
+          },
+          {
+            "qid": "q22",
             "retained": true,
             "tokens": 1500,
             "over_budget": false,
             "acl_leak": false,
             "stale": true,
-            "outdated_doc": true,
-            "truncated": true
-          },
-          {
-            "qid": "q17",
-            "retained": true,
-            "tokens": 983,
-            "over_budget": false,
-            "acl_leak": false,
-            "stale": false,
-            "outdated_doc": true,
-            "truncated": false
-          },
-          {
-            "qid": "q18",
-            "retained": true,
-            "tokens": 1057,
-            "over_budget": false,
-            "acl_leak": false,
-            "stale": true,
-            "outdated_doc": true,
-            "truncated": false
-          },
-          {
-            "qid": "q19",
-            "retained": true,
-            "tokens": 1409,
-            "over_budget": false,
-            "acl_leak": false,
-            "stale": false,
-            "outdated_doc": true,
-            "truncated": false
-          },
-          {
-            "qid": "q20",
-            "retained": true,
-            "tokens": 1185,
-            "over_budget": false,
-            "acl_leak": false,
-            "stale": false,
-            "outdated_doc": true,
-            "truncated": false
-          },
-          {
-            "qid": "q21",
-            "retained": true,
-            "tokens": 1082,
-            "over_budget": false,
-            "acl_leak": false,
-            "stale": false,
-            "outdated_doc": true,
-            "truncated": false
-          },
-          {
-            "qid": "q22",
-            "retained": true,
-            "tokens": 1339,
-            "over_budget": false,
-            "acl_leak": false,
-            "stale": true,
             "outdated_doc": false,
-            "truncated": false
+            "truncated": true,
+            "manifest_items": 0,
+            "evicted": 0,
+            "digest": null
           },
           {
             "qid": "q23",
@@ -1776,7 +2224,10 @@
             "acl_leak": false,
             "stale": true,
             "outdated_doc": true,
-            "truncated": true
+            "truncated": true,
+            "manifest_items": 0,
+            "evicted": 0,
+            "digest": null
           }
         ]
       },
@@ -1784,291 +2235,314 @@
         "name": "mnemos_compiled",
         "answer_retention": 1.0,
         "budget_overrun_rate": 0.0,
-        "mean_tokens": 1454.8260869565217,
-        "p95_tokens": 1484,
-        "duplicate_waste": 0.07246270373358216,
+        "mean_tokens": 1260.2173913043478,
+        "p95_tokens": 1477,
+        "duplicate_waste": 0.09757952678280694,
         "acl_leak_rate": 0.0,
         "stale_fact_rate": 0.0,
         "outdated_doc_rate": 0.0,
         "provenance": 1.0,
-        "mean_latency_ms": 12.585641260794427,
-        "p95_latency_ms": 14.98,
+        "mean_latency_ms": 14.98917561105412,
+        "p95_latency_ms": 17.34,
         "detail": [
           {
             "qid": "q01",
             "retained": true,
-            "tokens": 1484,
+            "tokens": 1332,
             "over_budget": false,
             "acl_leak": false,
             "stale": false,
             "outdated_doc": false,
-            "manifest_items": 20,
-            "evicted": 15,
-            "digest": "sha256:fd4e0f758614"
+            "truncated": false,
+            "manifest_items": 17,
+            "evicted": 1,
+            "digest": "8c3c4abe6463b368f13b699771da7a661a52099631ca239b9ef62ac8600ad612"
           },
           {
             "qid": "q02",
             "retained": true,
-            "tokens": 1418,
+            "tokens": 1391,
             "over_budget": false,
             "acl_leak": false,
             "stale": false,
             "outdated_doc": false,
-            "manifest_items": 20,
-            "evicted": 8,
-            "digest": "sha256:9db8bbcff42d"
+            "truncated": false,
+            "manifest_items": 18,
+            "evicted": 0,
+            "digest": "c574e4ef7a90294adc8e5cedbc563ca10c8cecbc13fc1318e646f7314f738597"
           },
           {
             "qid": "q03",
             "retained": true,
-            "tokens": 1436,
+            "tokens": 1387,
             "over_budget": false,
             "acl_leak": false,
             "stale": false,
             "outdated_doc": false,
-            "manifest_items": 19,
-            "evicted": 20,
-            "digest": "sha256:99749216063e"
+            "truncated": false,
+            "manifest_items": 18,
+            "evicted": 0,
+            "digest": "b9e86c661cf8ec6adedcdccabe7715876a27065c38411ed092362ec764298b14"
           },
           {
             "qid": "q04",
             "retained": true,
-            "tokens": 1472,
+            "tokens": 1356,
             "over_budget": false,
             "acl_leak": false,
             "stale": false,
             "outdated_doc": false,
-            "manifest_items": 19,
-            "evicted": 12,
-            "digest": "sha256:6296ebf0635f"
+            "truncated": false,
+            "manifest_items": 15,
+            "evicted": 3,
+            "digest": "b9abc49af56d5c7c85afe2026e2a1f3a803231f4203baa93e730863244fd618e"
           },
           {
             "qid": "q05",
             "retained": true,
-            "tokens": 1495,
+            "tokens": 783,
             "over_budget": false,
             "acl_leak": false,
             "stale": false,
             "outdated_doc": false,
-            "manifest_items": 17,
-            "evicted": 2,
-            "digest": "sha256:ffa336439f20"
+            "truncated": false,
+            "manifest_items": 11,
+            "evicted": 7,
+            "digest": "1b013bcc77d285dad6e527db29bc50b9f022f1f1eb2d25b5a8b7508b655ffe54"
           },
           {
             "qid": "q06",
             "retained": true,
-            "tokens": 1469,
+            "tokens": 1493,
             "over_budget": false,
             "acl_leak": false,
             "stale": false,
             "outdated_doc": false,
-            "manifest_items": 17,
-            "evicted": 9,
-            "digest": "sha256:637f79ab690a"
+            "truncated": false,
+            "manifest_items": 16,
+            "evicted": 2,
+            "digest": "92104a09444dd757300900cb60ea884572e2bbccd5c5804c14ebea03fd1caf9c"
           },
           {
             "qid": "q07",
             "retained": true,
-            "tokens": 1473,
+            "tokens": 1296,
             "over_budget": false,
             "acl_leak": false,
             "stale": false,
             "outdated_doc": false,
-            "manifest_items": 21,
-            "evicted": 16,
-            "digest": "sha256:0963117e2f6d"
+            "truncated": false,
+            "manifest_items": 18,
+            "evicted": 0,
+            "digest": "70efd4c5c86ccab60faea4656740abe0175e4ca99d85beb1d32839621792aace"
           },
           {
             "qid": "q08",
             "retained": true,
-            "tokens": 1468,
+            "tokens": 971,
             "over_budget": false,
             "acl_leak": false,
             "stale": false,
             "outdated_doc": false,
-            "manifest_items": 17,
-            "evicted": 9,
-            "digest": "sha256:8ab597059759"
+            "truncated": false,
+            "manifest_items": 12,
+            "evicted": 6,
+            "digest": "ed68af821eac07f4a9dbe97b7261b9dee6f65ed2f6b7b2589e9724097f262dd6"
           },
           {
             "qid": "q09",
             "retained": true,
-            "tokens": 1458,
+            "tokens": 1343,
             "over_budget": false,
             "acl_leak": false,
             "stale": false,
             "outdated_doc": false,
-            "manifest_items": 20,
-            "evicted": 10,
-            "digest": "sha256:8b8bd8b34917"
+            "truncated": false,
+            "manifest_items": 18,
+            "evicted": 0,
+            "digest": "07f8ace33641ff405355c89710d7684019da61dc47680bd17b7ab594f4099a50"
           },
           {
             "qid": "q10",
             "retained": true,
-            "tokens": 1482,
+            "tokens": 1349,
             "over_budget": false,
             "acl_leak": false,
             "stale": false,
             "outdated_doc": false,
-            "manifest_items": 20,
-            "evicted": 11,
-            "digest": "sha256:275eed05381d"
+            "truncated": false,
+            "manifest_items": 17,
+            "evicted": 1,
+            "digest": "4876e41f83d3d8b1fcb3c04b8b581555d6fe582881cbc4600c50213e856574dc"
           },
           {
             "qid": "q11",
             "retained": true,
-            "tokens": 1418,
+            "tokens": 1354,
             "over_budget": false,
             "acl_leak": false,
             "stale": false,
             "outdated_doc": false,
-            "manifest_items": 19,
-            "evicted": 15,
-            "digest": "sha256:8cea1e0342c0"
+            "truncated": false,
+            "manifest_items": 18,
+            "evicted": 0,
+            "digest": "fb7407118230fd4f398a2143e6625e3ab4f8a3152823bb144f4ceb77607652db"
           },
           {
             "qid": "q12",
             "retained": true,
-            "tokens": 1452,
+            "tokens": 948,
             "over_budget": false,
             "acl_leak": false,
             "stale": false,
             "outdated_doc": false,
-            "manifest_items": 17,
-            "evicted": 11,
-            "digest": "sha256:31645c793856"
+            "truncated": false,
+            "manifest_items": 12,
+            "evicted": 6,
+            "digest": "47d9768a8bdd281885694e5a86a9e87873683208bfad019013123ec166eaa6d1"
           },
           {
             "qid": "q13",
             "retained": true,
-            "tokens": 1461,
+            "tokens": 1403,
             "over_budget": false,
             "acl_leak": false,
             "stale": false,
             "outdated_doc": false,
-            "manifest_items": 20,
-            "evicted": 10,
-            "digest": "sha256:aa7d4759287e"
+            "truncated": false,
+            "manifest_items": 18,
+            "evicted": 0,
+            "digest": "67b17285a3bb6276ce143480bae69d04c67054f8864c95df1dd37d9c93c66ff3"
           },
           {
             "qid": "q14",
             "retained": true,
-            "tokens": 1455,
+            "tokens": 1477,
             "over_budget": false,
             "acl_leak": false,
             "stale": false,
             "outdated_doc": false,
-            "manifest_items": 20,
-            "evicted": 14,
-            "digest": "sha256:fb2db6047345"
+            "truncated": false,
+            "manifest_items": 18,
+            "evicted": 0,
+            "digest": "7714e48677c784646e130db47a7d19a525eb370c9df45a71a8bfccd68939fccc"
           },
           {
             "qid": "q15",
             "retained": true,
-            "tokens": 1424,
+            "tokens": 1064,
             "over_budget": false,
             "acl_leak": false,
             "stale": false,
             "outdated_doc": false,
-            "manifest_items": 18,
-            "evicted": 7,
-            "digest": "sha256:e87621bb85b9"
+            "truncated": false,
+            "manifest_items": 13,
+            "evicted": 5,
+            "digest": "39c0f050bb1d9ea8a8ec30ac237acc10ae0d95b42a3ac327acab2acf9758d1c6"
           },
           {
             "qid": "q16",
             "retained": true,
-            "tokens": 1475,
+            "tokens": 1313,
             "over_budget": false,
             "acl_leak": false,
             "stale": false,
             "outdated_doc": false,
-            "manifest_items": 18,
-            "evicted": 9,
-            "digest": "sha256:e18dca6751e1"
+            "truncated": false,
+            "manifest_items": 15,
+            "evicted": 3,
+            "digest": "2eed70aa6553fc9df193bafa61def2c56b508bdf9ed7ea454221407d6a0c8912"
           },
           {
             "qid": "q17",
             "retained": true,
-            "tokens": 1451,
+            "tokens": 1029,
             "over_budget": false,
             "acl_leak": false,
             "stale": false,
             "outdated_doc": false,
-            "manifest_items": 20,
-            "evicted": 16,
-            "digest": "sha256:562e029a089a"
+            "truncated": false,
+            "manifest_items": 14,
+            "evicted": 4,
+            "digest": "ff305462d79401bb36a4407cf0b5dbf20c06066b52be6eaf461755f09a9b56b4"
           },
           {
             "qid": "q18",
             "retained": true,
-            "tokens": 1424,
+            "tokens": 1361,
             "over_budget": false,
             "acl_leak": false,
             "stale": false,
             "outdated_doc": false,
-            "manifest_items": 20,
-            "evicted": 15,
-            "digest": "sha256:94ab6b726a31"
+            "truncated": false,
+            "manifest_items": 18,
+            "evicted": 0,
+            "digest": "46932b0c8baf9f265e98ea2adf2a9a6348bdee927ec016d06a9ea839d9d7ec19"
           },
           {
             "qid": "q19",
             "retained": true,
-            "tokens": 1453,
+            "tokens": 1432,
             "over_budget": false,
             "acl_leak": false,
             "stale": false,
             "outdated_doc": false,
-            "manifest_items": 19,
-            "evicted": 11,
-            "digest": "sha256:3da4a4ec70f5"
+            "truncated": false,
+            "manifest_items": 16,
+            "evicted": 2,
+            "digest": "e064efb35837fa4a392deda8a4dd4b49e8e5aa5ac727b7498fab9cf82ec84fa6"
           },
           {
             "qid": "q20",
             "retained": true,
-            "tokens": 1422,
+            "tokens": 1392,
             "over_budget": false,
             "acl_leak": false,
             "stale": false,
             "outdated_doc": false,
-            "manifest_items": 17,
-            "evicted": 18,
-            "digest": "sha256:a895e9907c0e"
+            "truncated": false,
+            "manifest_items": 16,
+            "evicted": 2,
+            "digest": "d4f94f1f8e9f5ede2724ebf81f8fe6c4d0819e201f4a914925291a37524d020f"
           },
           {
             "qid": "q21",
             "retained": true,
-            "tokens": 1452,
+            "tokens": 1365,
             "over_budget": false,
             "acl_leak": false,
             "stale": false,
             "outdated_doc": false,
-            "manifest_items": 19,
-            "evicted": 13,
-            "digest": "sha256:919f11a3d951"
+            "truncated": false,
+            "manifest_items": 18,
+            "evicted": 0,
+            "digest": "3b94fc2f0ca408673aa8c8e291549f855c72bd2403f65b490b3fea1b7cf49bef"
           },
           {
             "qid": "q22",
             "retained": true,
-            "tokens": 1465,
+            "tokens": 938,
             "over_budget": false,
             "acl_leak": false,
             "stale": false,
             "outdated_doc": false,
-            "manifest_items": 18,
-            "evicted": 9,
-            "digest": "sha256:26e5043f87e0"
+            "truncated": false,
+            "manifest_items": 11,
+            "evicted": 7,
+            "digest": "e9d9b8a2797a5c614ae335e6fd364c3ea8da9de1fb446cdb38ac843630a61558"
           },
           {
             "qid": "q23",
             "retained": true,
-            "tokens": 1454,
+            "tokens": 1208,
             "over_budget": false,
             "acl_leak": false,
             "stale": false,
             "outdated_doc": false,
-            "manifest_items": 17,
-            "evicted": 9,
-            "digest": "sha256:a07c6e48ec6e"
+            "truncated": false,
+            "manifest_items": 13,
+            "evicted": 5,
+            "digest": "9fc49779222cb8985702d6bbf0e56e923989d6cceaccd3a98658bd9cb3682f4d"
           }
         ]
       }
@@ -2078,737 +2552,944 @@
         "name": "naive",
         "answer_retention": 0.9565217391304348,
         "budget_overrun_rate": 0.0,
-        "mean_tokens": 1294.5652173913043,
-        "p95_tokens": 1625,
-        "duplicate_waste": 0.2077580246203818,
-        "acl_leak_rate": 0.43478260869565216,
-        "stale_fact_rate": 0.5652173913043478,
-        "outdated_doc_rate": 0.9130434782608695,
+        "mean_tokens": 1316.391304347826,
+        "p95_tokens": 1597,
+        "duplicate_waste": 0.22429227699626944,
+        "acl_leak_rate": 0.13043478260869565,
+        "stale_fact_rate": 0.6521739130434783,
+        "outdated_doc_rate": 0.9565217391304348,
         "provenance": 0.0,
-        "mean_latency_ms": 3.4459755652278545,
-        "p95_latency_ms": 4.45,
+        "mean_latency_ms": 9.359469348134514,
+        "p95_latency_ms": 12.06,
         "detail": [
           {
             "qid": "q01",
             "retained": true,
-            "tokens": 1104,
+            "tokens": 1227,
             "over_budget": false,
             "acl_leak": false,
             "stale": true,
             "outdated_doc": true,
-            "truncated": false
+            "truncated": false,
+            "manifest_items": 0,
+            "evicted": 0,
+            "digest": null
           },
           {
             "qid": "q02",
-            "retained": false,
-            "tokens": 1150,
+            "retained": true,
+            "tokens": 1147,
             "over_budget": false,
             "acl_leak": true,
             "stale": false,
             "outdated_doc": true,
-            "truncated": false
+            "truncated": false,
+            "manifest_items": 0,
+            "evicted": 0,
+            "digest": null
           },
           {
             "qid": "q03",
             "retained": true,
-            "tokens": 1040,
+            "tokens": 1197,
             "over_budget": false,
-            "acl_leak": true,
+            "acl_leak": false,
             "stale": false,
-            "outdated_doc": false,
-            "truncated": false
+            "outdated_doc": true,
+            "truncated": false,
+            "manifest_items": 0,
+            "evicted": 0,
+            "digest": null
           },
           {
             "qid": "q04",
             "retained": true,
-            "tokens": 1226,
+            "tokens": 1656,
             "over_budget": false,
-            "acl_leak": true,
-            "stale": false,
+            "acl_leak": false,
+            "stale": true,
             "outdated_doc": true,
-            "truncated": false
+            "truncated": false,
+            "manifest_items": 0,
+            "evicted": 0,
+            "digest": null
           },
           {
             "qid": "q05",
             "retained": true,
-            "tokens": 1470,
+            "tokens": 1450,
             "over_budget": false,
             "acl_leak": false,
             "stale": true,
             "outdated_doc": true,
-            "truncated": false
+            "truncated": false,
+            "manifest_items": 0,
+            "evicted": 0,
+            "digest": null
           },
           {
             "qid": "q06",
-            "retained": true,
-            "tokens": 1625,
+            "retained": false,
+            "tokens": 1510,
             "over_budget": false,
             "acl_leak": false,
             "stale": true,
             "outdated_doc": true,
-            "truncated": false
+            "truncated": false,
+            "manifest_items": 0,
+            "evicted": 0,
+            "digest": null
           },
           {
             "qid": "q07",
             "retained": true,
-            "tokens": 1040,
+            "tokens": 1183,
             "over_budget": false,
             "acl_leak": false,
             "stale": false,
             "outdated_doc": true,
-            "truncated": false
+            "truncated": false,
+            "manifest_items": 0,
+            "evicted": 0,
+            "digest": null
           },
           {
             "qid": "q08",
             "retained": true,
-            "tokens": 1372,
+            "tokens": 1565,
             "over_budget": false,
-            "acl_leak": true,
+            "acl_leak": false,
             "stale": true,
             "outdated_doc": true,
-            "truncated": false
+            "truncated": false,
+            "manifest_items": 0,
+            "evicted": 0,
+            "digest": null
           },
           {
             "qid": "q09",
             "retained": true,
-            "tokens": 1356,
+            "tokens": 1108,
             "over_budget": false,
-            "acl_leak": true,
+            "acl_leak": false,
             "stale": true,
             "outdated_doc": true,
-            "truncated": false
+            "truncated": false,
+            "manifest_items": 0,
+            "evicted": 0,
+            "digest": null
           },
           {
             "qid": "q10",
             "retained": true,
-            "tokens": 1527,
+            "tokens": 1292,
             "over_budget": false,
             "acl_leak": false,
-            "stale": true,
+            "stale": false,
             "outdated_doc": true,
-            "truncated": false
+            "truncated": false,
+            "manifest_items": 0,
+            "evicted": 0,
+            "digest": null
           },
           {
             "qid": "q11",
             "retained": true,
-            "tokens": 1008,
+            "tokens": 1106,
             "over_budget": false,
             "acl_leak": false,
-            "stale": true,
+            "stale": false,
             "outdated_doc": true,
-            "truncated": false
+            "truncated": false,
+            "manifest_items": 0,
+            "evicted": 0,
+            "digest": null
           },
           {
             "qid": "q12",
             "retained": true,
-            "tokens": 1662,
+            "tokens": 1508,
             "over_budget": false,
             "acl_leak": false,
             "stale": false,
             "outdated_doc": true,
-            "truncated": false
+            "truncated": false,
+            "manifest_items": 0,
+            "evicted": 0,
+            "digest": null
           },
           {
             "qid": "q13",
             "retained": true,
-            "tokens": 1411,
+            "tokens": 1111,
             "over_budget": false,
             "acl_leak": false,
             "stale": true,
             "outdated_doc": true,
-            "truncated": false
+            "truncated": false,
+            "manifest_items": 0,
+            "evicted": 0,
+            "digest": null
           },
           {
             "qid": "q14",
             "retained": true,
-            "tokens": 1065,
+            "tokens": 1155,
             "over_budget": false,
-            "acl_leak": true,
-            "stale": false,
+            "acl_leak": false,
+            "stale": true,
             "outdated_doc": true,
-            "truncated": false
+            "truncated": false,
+            "manifest_items": 0,
+            "evicted": 0,
+            "digest": null
           },
           {
             "qid": "q15",
             "retained": true,
-            "tokens": 1484,
+            "tokens": 1339,
             "over_budget": false,
-            "acl_leak": false,
+            "acl_leak": true,
             "stale": true,
             "outdated_doc": true,
-            "truncated": false
+            "truncated": false,
+            "manifest_items": 0,
+            "evicted": 0,
+            "digest": null
           },
           {
             "qid": "q16",
             "retained": true,
-            "tokens": 1586,
+            "tokens": 1362,
             "over_budget": false,
-            "acl_leak": false,
+            "acl_leak": true,
             "stale": true,
             "outdated_doc": true,
-            "truncated": false
+            "truncated": false,
+            "manifest_items": 0,
+            "evicted": 0,
+            "digest": null
           },
           {
             "qid": "q17",
             "retained": true,
-            "tokens": 1054,
+            "tokens": 1278,
             "over_budget": false,
-            "acl_leak": true,
+            "acl_leak": false,
             "stale": false,
             "outdated_doc": true,
-            "truncated": false
+            "truncated": false,
+            "manifest_items": 0,
+            "evicted": 0,
+            "digest": null
           },
           {
             "qid": "q18",
             "retained": true,
-            "tokens": 1057,
+            "tokens": 1050,
             "over_budget": false,
             "acl_leak": false,
             "stale": true,
             "outdated_doc": true,
-            "truncated": false
+            "truncated": false,
+            "manifest_items": 0,
+            "evicted": 0,
+            "digest": null
           },
           {
             "qid": "q19",
             "retained": true,
-            "tokens": 1389,
+            "tokens": 1424,
             "over_budget": false,
-            "acl_leak": true,
-            "stale": false,
+            "acl_leak": false,
+            "stale": true,
             "outdated_doc": true,
-            "truncated": false
+            "truncated": false,
+            "manifest_items": 0,
+            "evicted": 0,
+            "digest": null
           },
           {
             "qid": "q20",
             "retained": true,
-            "tokens": 1224,
+            "tokens": 1323,
             "over_budget": false,
-            "acl_leak": true,
-            "stale": false,
+            "acl_leak": false,
+            "stale": true,
             "outdated_doc": true,
-            "truncated": false
+            "truncated": false,
+            "manifest_items": 0,
+            "evicted": 0,
+            "digest": null
           },
           {
             "qid": "q21",
             "retained": true,
-            "tokens": 1082,
+            "tokens": 1093,
             "over_budget": false,
             "acl_leak": false,
             "stale": false,
             "outdated_doc": true,
-            "truncated": false
+            "truncated": false,
+            "manifest_items": 0,
+            "evicted": 0,
+            "digest": null
           },
           {
             "qid": "q22",
             "retained": true,
-            "tokens": 1339,
+            "tokens": 1596,
             "over_budget": false,
             "acl_leak": false,
             "stale": true,
             "outdated_doc": false,
-            "truncated": false
+            "truncated": false,
+            "manifest_items": 0,
+            "evicted": 0,
+            "digest": null
           },
           {
             "qid": "q23",
             "retained": true,
-            "tokens": 1504,
+            "tokens": 1597,
             "over_budget": false,
-            "acl_leak": true,
+            "acl_leak": false,
             "stale": true,
             "outdated_doc": true,
-            "truncated": false
+            "truncated": false,
+            "manifest_items": 0,
+            "evicted": 0,
+            "digest": null
           }
         ]
       },
       "naive_postfilter": {
         "name": "naive_postfilter",
-        "answer_retention": 1.0,
+        "answer_retention": 0.9565217391304348,
         "budget_overrun_rate": 0.0,
-        "mean_tokens": 1291.4782608695652,
-        "p95_tokens": 1625,
-        "duplicate_waste": 0.21190493098126925,
+        "mean_tokens": 1321.9565217391305,
+        "p95_tokens": 1597,
+        "duplicate_waste": 0.23018986743652803,
         "acl_leak_rate": 0.0,
-        "stale_fact_rate": 0.5652173913043478,
+        "stale_fact_rate": 0.6521739130434783,
         "outdated_doc_rate": 0.9565217391304348,
         "provenance": 0.0,
-        "mean_latency_ms": 3.3518273477729172,
-        "p95_latency_ms": 3.83,
+        "mean_latency_ms": 9.251971565865222,
+        "p95_latency_ms": 11.85,
         "detail": [
           {
             "qid": "q01",
             "retained": true,
-            "tokens": 1104,
+            "tokens": 1227,
             "over_budget": false,
             "acl_leak": false,
             "stale": true,
             "outdated_doc": true,
-            "truncated": false
+            "truncated": false,
+            "manifest_items": 0,
+            "evicted": 0,
+            "digest": null
           },
           {
             "qid": "q02",
             "retained": true,
-            "tokens": 1075,
+            "tokens": 1125,
             "over_budget": false,
             "acl_leak": false,
             "stale": false,
             "outdated_doc": true,
-            "truncated": false
+            "truncated": false,
+            "manifest_items": 0,
+            "evicted": 0,
+            "digest": null
           },
           {
             "qid": "q03",
             "retained": true,
-            "tokens": 1030,
+            "tokens": 1197,
             "over_budget": false,
             "acl_leak": false,
             "stale": false,
             "outdated_doc": true,
-            "truncated": false
+            "truncated": false,
+            "manifest_items": 0,
+            "evicted": 0,
+            "digest": null
           },
           {
             "qid": "q04",
             "retained": true,
-            "tokens": 1211,
+            "tokens": 1656,
             "over_budget": false,
             "acl_leak": false,
-            "stale": false,
+            "stale": true,
             "outdated_doc": true,
-            "truncated": false
+            "truncated": false,
+            "manifest_items": 0,
+            "evicted": 0,
+            "digest": null
           },
           {
             "qid": "q05",
             "retained": true,
-            "tokens": 1470,
+            "tokens": 1450,
             "over_budget": false,
             "acl_leak": false,
             "stale": true,
             "outdated_doc": true,
-            "truncated": false
+            "truncated": false,
+            "manifest_items": 0,
+            "evicted": 0,
+            "digest": null
           },
           {
             "qid": "q06",
-            "retained": true,
-            "tokens": 1625,
+            "retained": false,
+            "tokens": 1510,
             "over_budget": false,
             "acl_leak": false,
             "stale": true,
             "outdated_doc": true,
-            "truncated": false
+            "truncated": false,
+            "manifest_items": 0,
+            "evicted": 0,
+            "digest": null
           },
           {
             "qid": "q07",
             "retained": true,
-            "tokens": 1040,
+            "tokens": 1183,
             "over_budget": false,
             "acl_leak": false,
             "stale": false,
             "outdated_doc": true,
-            "truncated": false
+            "truncated": false,
+            "manifest_items": 0,
+            "evicted": 0,
+            "digest": null
           },
           {
             "qid": "q08",
             "retained": true,
-            "tokens": 1322,
+            "tokens": 1565,
             "over_budget": false,
             "acl_leak": false,
             "stale": true,
             "outdated_doc": true,
-            "truncated": false
+            "truncated": false,
+            "manifest_items": 0,
+            "evicted": 0,
+            "digest": null
           },
           {
             "qid": "q09",
             "retained": true,
-            "tokens": 1487,
+            "tokens": 1108,
             "over_budget": false,
             "acl_leak": false,
             "stale": true,
             "outdated_doc": true,
-            "truncated": false
+            "truncated": false,
+            "manifest_items": 0,
+            "evicted": 0,
+            "digest": null
           },
           {
             "qid": "q10",
             "retained": true,
-            "tokens": 1527,
+            "tokens": 1292,
             "over_budget": false,
             "acl_leak": false,
-            "stale": true,
+            "stale": false,
             "outdated_doc": true,
-            "truncated": false
+            "truncated": false,
+            "manifest_items": 0,
+            "evicted": 0,
+            "digest": null
           },
           {
             "qid": "q11",
             "retained": true,
-            "tokens": 1008,
+            "tokens": 1106,
             "over_budget": false,
             "acl_leak": false,
-            "stale": true,
+            "stale": false,
             "outdated_doc": true,
-            "truncated": false
+            "truncated": false,
+            "manifest_items": 0,
+            "evicted": 0,
+            "digest": null
           },
           {
             "qid": "q12",
             "retained": true,
-            "tokens": 1662,
+            "tokens": 1508,
             "over_budget": false,
             "acl_leak": false,
             "stale": false,
             "outdated_doc": true,
-            "truncated": false
+            "truncated": false,
+            "manifest_items": 0,
+            "evicted": 0,
+            "digest": null
           },
           {
             "qid": "q13",
             "retained": true,
-            "tokens": 1411,
+            "tokens": 1111,
             "over_budget": false,
             "acl_leak": false,
             "stale": true,
             "outdated_doc": true,
-            "truncated": false
+            "truncated": false,
+            "manifest_items": 0,
+            "evicted": 0,
+            "digest": null
           },
           {
             "qid": "q14",
             "retained": true,
-            "tokens": 1044,
+            "tokens": 1155,
             "over_budget": false,
             "acl_leak": false,
-            "stale": false,
+            "stale": true,
             "outdated_doc": true,
-            "truncated": false
+            "truncated": false,
+            "manifest_items": 0,
+            "evicted": 0,
+            "digest": null
           },
           {
             "qid": "q15",
             "retained": true,
-            "tokens": 1484,
+            "tokens": 1422,
             "over_budget": false,
             "acl_leak": false,
             "stale": true,
             "outdated_doc": true,
-            "truncated": false
+            "truncated": false,
+            "manifest_items": 0,
+            "evicted": 0,
+            "digest": null
           },
           {
             "qid": "q16",
             "retained": true,
-            "tokens": 1586,
+            "tokens": 1429,
             "over_budget": false,
             "acl_leak": false,
             "stale": true,
             "outdated_doc": true,
-            "truncated": false
+            "truncated": false,
+            "manifest_items": 0,
+            "evicted": 0,
+            "digest": null
           },
           {
             "qid": "q17",
             "retained": true,
-            "tokens": 983,
+            "tokens": 1278,
             "over_budget": false,
             "acl_leak": false,
             "stale": false,
             "outdated_doc": true,
-            "truncated": false
+            "truncated": false,
+            "manifest_items": 0,
+            "evicted": 0,
+            "digest": null
           },
           {
             "qid": "q18",
             "retained": true,
-            "tokens": 1057,
+            "tokens": 1050,
             "over_budget": false,
             "acl_leak": false,
             "stale": true,
             "outdated_doc": true,
-            "truncated": false
+            "truncated": false,
+            "manifest_items": 0,
+            "evicted": 0,
+            "digest": null
           },
           {
             "qid": "q19",
             "retained": true,
-            "tokens": 1409,
+            "tokens": 1424,
             "over_budget": false,
             "acl_leak": false,
-            "stale": false,
+            "stale": true,
             "outdated_doc": true,
-            "truncated": false
+            "truncated": false,
+            "manifest_items": 0,
+            "evicted": 0,
+            "digest": null
           },
           {
             "qid": "q20",
             "retained": true,
-            "tokens": 1185,
+            "tokens": 1323,
             "over_budget": false,
             "acl_leak": false,
-            "stale": false,
+            "stale": true,
             "outdated_doc": true,
-            "truncated": false
+            "truncated": false,
+            "manifest_items": 0,
+            "evicted": 0,
+            "digest": null
           },
           {
             "qid": "q21",
             "retained": true,
-            "tokens": 1082,
+            "tokens": 1093,
             "over_budget": false,
             "acl_leak": false,
             "stale": false,
             "outdated_doc": true,
-            "truncated": false
+            "truncated": false,
+            "manifest_items": 0,
+            "evicted": 0,
+            "digest": null
           },
           {
             "qid": "q22",
             "retained": true,
-            "tokens": 1339,
+            "tokens": 1596,
             "over_budget": false,
             "acl_leak": false,
             "stale": true,
             "outdated_doc": false,
-            "truncated": false
+            "truncated": false,
+            "manifest_items": 0,
+            "evicted": 0,
+            "digest": null
           },
           {
             "qid": "q23",
             "retained": true,
-            "tokens": 1563,
+            "tokens": 1597,
             "over_budget": false,
             "acl_leak": false,
             "stale": true,
             "outdated_doc": true,
-            "truncated": false
+            "truncated": false,
+            "manifest_items": 0,
+            "evicted": 0,
+            "digest": null
           }
         ]
       },
       "naive_prefilter": {
         "name": "naive_prefilter",
-        "answer_retention": 1.0,
+        "answer_retention": 0.9565217391304348,
         "budget_overrun_rate": 0.0,
-        "mean_tokens": 1291.4782608695652,
-        "p95_tokens": 1625,
-        "duplicate_waste": 0.21190493098126925,
+        "mean_tokens": 1321.9565217391305,
+        "p95_tokens": 1597,
+        "duplicate_waste": 0.23018986743652803,
         "acl_leak_rate": 0.0,
-        "stale_fact_rate": 0.5652173913043478,
+        "stale_fact_rate": 0.6521739130434783,
         "outdated_doc_rate": 0.9565217391304348,
         "provenance": 0.0,
-        "mean_latency_ms": 3.400241652264452,
-        "p95_latency_ms": 3.69,
+        "mean_latency_ms": 8.149936479521388,
+        "p95_latency_ms": 9.62,
         "detail": [
           {
             "qid": "q01",
             "retained": true,
-            "tokens": 1104,
+            "tokens": 1227,
             "over_budget": false,
             "acl_leak": false,
             "stale": true,
             "outdated_doc": true,
-            "truncated": false
+            "truncated": false,
+            "manifest_items": 0,
+            "evicted": 0,
+            "digest": null
           },
           {
             "qid": "q02",
             "retained": true,
-            "tokens": 1075,
+            "tokens": 1125,
             "over_budget": false,
             "acl_leak": false,
             "stale": false,
             "outdated_doc": true,
-            "truncated": false
+            "truncated": false,
+            "manifest_items": 0,
+            "evicted": 0,
+            "digest": null
           },
           {
             "qid": "q03",
             "retained": true,
-            "tokens": 1030,
+            "tokens": 1197,
             "over_budget": false,
             "acl_leak": false,
             "stale": false,
             "outdated_doc": true,
-            "truncated": false
+            "truncated": false,
+            "manifest_items": 0,
+            "evicted": 0,
+            "digest": null
           },
           {
             "qid": "q04",
             "retained": true,
-            "tokens": 1211,
+            "tokens": 1656,
             "over_budget": false,
             "acl_leak": false,
-            "stale": false,
+            "stale": true,
             "outdated_doc": true,
-            "truncated": false
+            "truncated": false,
+            "manifest_items": 0,
+            "evicted": 0,
+            "digest": null
           },
           {
             "qid": "q05",
             "retained": true,
-            "tokens": 1470,
+            "tokens": 1450,
             "over_budget": false,
             "acl_leak": false,
             "stale": true,
             "outdated_doc": true,
-            "truncated": false
+            "truncated": false,
+            "manifest_items": 0,
+            "evicted": 0,
+            "digest": null
           },
           {
             "qid": "q06",
-            "retained": true,
-            "tokens": 1625,
+            "retained": false,
+            "tokens": 1510,
             "over_budget": false,
             "acl_leak": false,
             "stale": true,
             "outdated_doc": true,
-            "truncated": false
+            "truncated": false,
+            "manifest_items": 0,
+            "evicted": 0,
+            "digest": null
           },
           {
             "qid": "q07",
             "retained": true,
-            "tokens": 1040,
+            "tokens": 1183,
             "over_budget": false,
             "acl_leak": false,
             "stale": false,
             "outdated_doc": true,
-            "truncated": false
+            "truncated": false,
+            "manifest_items": 0,
+            "evicted": 0,
+            "digest": null
           },
           {
             "qid": "q08",
             "retained": true,
-            "tokens": 1322,
+            "tokens": 1565,
             "over_budget": false,
             "acl_leak": false,
             "stale": true,
             "outdated_doc": true,
-            "truncated": false
+            "truncated": false,
+            "manifest_items": 0,
+            "evicted": 0,
+            "digest": null
           },
           {
             "qid": "q09",
             "retained": true,
-            "tokens": 1487,
+            "tokens": 1108,
             "over_budget": false,
             "acl_leak": false,
             "stale": true,
             "outdated_doc": true,
-            "truncated": false
+            "truncated": false,
+            "manifest_items": 0,
+            "evicted": 0,
+            "digest": null
           },
           {
             "qid": "q10",
             "retained": true,
-            "tokens": 1527,
+            "tokens": 1292,
             "over_budget": false,
             "acl_leak": false,
-            "stale": true,
+            "stale": false,
             "outdated_doc": true,
-            "truncated": false
+            "truncated": false,
+            "manifest_items": 0,
+            "evicted": 0,
+            "digest": null
           },
           {
             "qid": "q11",
             "retained": true,
-            "tokens": 1008,
+            "tokens": 1106,
             "over_budget": false,
             "acl_leak": false,
-            "stale": true,
+            "stale": false,
             "outdated_doc": true,
-            "truncated": false
+            "truncated": false,
+            "manifest_items": 0,
+            "evicted": 0,
+            "digest": null
           },
           {
             "qid": "q12",
             "retained": true,
-            "tokens": 1662,
+            "tokens": 1508,
             "over_budget": false,
             "acl_leak": false,
             "stale": false,
             "outdated_doc": true,
-            "truncated": false
+            "truncated": false,
+            "manifest_items": 0,
+            "evicted": 0,
+            "digest": null
           },
           {
             "qid": "q13",
             "retained": true,
-            "tokens": 1411,
+            "tokens": 1111,
             "over_budget": false,
             "acl_leak": false,
             "stale": true,
             "outdated_doc": true,
-            "truncated": false
+            "truncated": false,
+            "manifest_items": 0,
+            "evicted": 0,
+            "digest": null
           },
           {
             "qid": "q14",
             "retained": true,
-            "tokens": 1044,
+            "tokens": 1155,
             "over_budget": false,
             "acl_leak": false,
-            "stale": false,
+            "stale": true,
             "outdated_doc": true,
-            "truncated": false
+            "truncated": false,
+            "manifest_items": 0,
+            "evicted": 0,
+            "digest": null
           },
           {
             "qid": "q15",
             "retained": true,
-            "tokens": 1484,
+            "tokens": 1422,
             "over_budget": false,
             "acl_leak": false,
             "stale": true,
             "outdated_doc": true,
-            "truncated": false
+            "truncated": false,
+            "manifest_items": 0,
+            "evicted": 0,
+            "digest": null
           },
           {
             "qid": "q16",
             "retained": true,
-            "tokens": 1586,
+            "tokens": 1429,
             "over_budget": false,
             "acl_leak": false,
             "stale": true,
             "outdated_doc": true,
-            "truncated": false
+            "truncated": false,
+            "manifest_items": 0,
+            "evicted": 0,
+            "digest": null
           },
           {
             "qid": "q17",
             "retained": true,
-            "tokens": 983,
+            "tokens": 1278,
             "over_budget": false,
             "acl_leak": false,
             "stale": false,
             "outdated_doc": true,
-            "truncated": false
+            "truncated": false,
+            "manifest_items": 0,
+            "evicted": 0,
+            "digest": null
           },
           {
             "qid": "q18",
             "retained": true,
-            "tokens": 1057,
+            "tokens": 1050,
             "over_budget": false,
             "acl_leak": false,
             "stale": true,
             "outdated_doc": true,
-            "truncated": false
+            "truncated": false,
+            "manifest_items": 0,
+            "evicted": 0,
+            "digest": null
           },
           {
             "qid": "q19",
             "retained": true,
-            "tokens": 1409,
+            "tokens": 1424,
             "over_budget": false,
             "acl_leak": false,
-            "stale": false,
+            "stale": true,
             "outdated_doc": true,
-            "truncated": false
+            "truncated": false,
+            "manifest_items": 0,
+            "evicted": 0,
+            "digest": null
           },
           {
             "qid": "q20",
             "retained": true,
-            "tokens": 1185,
+            "tokens": 1323,
             "over_budget": false,
             "acl_leak": false,
-            "stale": false,
+            "stale": true,
             "outdated_doc": true,
-            "truncated": false
+            "truncated": false,
+            "manifest_items": 0,
+            "evicted": 0,
+            "digest": null
           },
           {
             "qid": "q21",
             "retained": true,
-            "tokens": 1082,
+            "tokens": 1093,
             "over_budget": false,
             "acl_leak": false,
             "stale": false,
             "outdated_doc": true,
-            "truncated": false
+            "truncated": false,
+            "manifest_items": 0,
+            "evicted": 0,
+            "digest": null
           },
           {
             "qid": "q22",
             "retained": true,
-            "tokens": 1339,
+            "tokens": 1596,
             "over_budget": false,
             "acl_leak": false,
             "stale": true,
             "outdated_doc": false,
-            "truncated": false
+            "truncated": false,
+            "manifest_items": 0,
+            "evicted": 0,
+            "digest": null
           },
           {
             "qid": "q23",
             "retained": true,
-            "tokens": 1563,
+            "tokens": 1597,
             "over_budget": false,
             "acl_leak": false,
             "stale": true,
             "outdated_doc": true,
-            "truncated": false
+            "truncated": false,
+            "manifest_items": 0,
+            "evicted": 0,
+            "digest": null
           }
         ]
       },
@@ -2816,291 +3497,314 @@
         "name": "mnemos_compiled",
         "answer_retention": 1.0,
         "budget_overrun_rate": 0.0,
-        "mean_tokens": 2654.1739130434785,
-        "p95_tokens": 2995,
-        "duplicate_waste": 0.15065347179270625,
+        "mean_tokens": 1310,
+        "p95_tokens": 1664,
+        "duplicate_waste": 0.11102443444153684,
         "acl_leak_rate": 0.0,
         "stale_fact_rate": 0.0,
         "outdated_doc_rate": 0.0,
         "provenance": 1.0,
-        "mean_latency_ms": 13.130184130362897,
-        "p95_latency_ms": 20.53,
+        "mean_latency_ms": 13.253656431081016,
+        "p95_latency_ms": 15.6,
         "detail": [
           {
             "qid": "q01",
             "retained": true,
-            "tokens": 2980,
+            "tokens": 1507,
             "over_budget": false,
             "acl_leak": false,
             "stale": false,
             "outdated_doc": false,
-            "manifest_items": 33,
-            "evicted": 2,
-            "digest": "sha256:4875d43180d3"
+            "truncated": false,
+            "manifest_items": 18,
+            "evicted": 0,
+            "digest": "b8ac802354b23d91fa0c69d0cbe60e2090825792bab59d8b15ee9f1e87072af6"
           },
           {
             "qid": "q02",
             "retained": true,
-            "tokens": 2069,
+            "tokens": 1391,
             "over_budget": false,
             "acl_leak": false,
             "stale": false,
             "outdated_doc": false,
-            "manifest_items": 28,
+            "truncated": false,
+            "manifest_items": 18,
             "evicted": 0,
-            "digest": "sha256:7efad8c924ad"
+            "digest": "56385390c5fb61c87e68a76b9275cf5a2b8911c33ee381641153533af6e626e5"
           },
           {
             "qid": "q03",
             "retained": true,
-            "tokens": 2941,
+            "tokens": 1387,
             "over_budget": false,
             "acl_leak": false,
             "stale": false,
             "outdated_doc": false,
-            "manifest_items": 35,
-            "evicted": 4,
-            "digest": "sha256:2c322e6dcc6c"
+            "truncated": false,
+            "manifest_items": 18,
+            "evicted": 0,
+            "digest": "6eeedfe0ee5934973516fffe0ed12a965e8514c78a21ab3842bcee52c63222d7"
           },
           {
             "qid": "q04",
             "retained": true,
-            "tokens": 2898,
+            "tokens": 1664,
             "over_budget": false,
             "acl_leak": false,
             "stale": false,
             "outdated_doc": false,
-            "manifest_items": 31,
-            "evicted": 0,
-            "digest": "sha256:c7bd6b336c7e"
+            "truncated": false,
+            "manifest_items": 17,
+            "evicted": 1,
+            "digest": "39466ab7a3609659d29355e275dc0c985a735035ddc9be34dc17090bcf3f285b"
           },
           {
             "qid": "q05",
             "retained": true,
-            "tokens": 1723,
+            "tokens": 783,
             "over_budget": false,
             "acl_leak": false,
             "stale": false,
             "outdated_doc": false,
-            "manifest_items": 19,
-            "evicted": 0,
-            "digest": "sha256:fbafb4e2528c"
+            "truncated": false,
+            "manifest_items": 11,
+            "evicted": 7,
+            "digest": "9d278553d8959a7b0713a0b87d597f2ed4e72d0d87b41bee8c1047a7109ce2c3"
           },
           {
             "qid": "q06",
             "retained": true,
-            "tokens": 2452,
+            "tokens": 1493,
             "over_budget": false,
             "acl_leak": false,
             "stale": false,
             "outdated_doc": false,
-            "manifest_items": 26,
-            "evicted": 0,
-            "digest": "sha256:93ff5fb2f5c4"
+            "truncated": false,
+            "manifest_items": 16,
+            "evicted": 2,
+            "digest": "90dfcb088190ced6e878d3ee0bc491eb47f0a3f54367a2f821f82f7410723c3a"
           },
           {
             "qid": "q07",
             "retained": true,
-            "tokens": 2996,
+            "tokens": 1296,
             "over_budget": false,
             "acl_leak": false,
             "stale": false,
             "outdated_doc": false,
-            "manifest_items": 35,
-            "evicted": 2,
-            "digest": "sha256:511cb2b94817"
+            "truncated": false,
+            "manifest_items": 18,
+            "evicted": 0,
+            "digest": "03a51ca5fc9a0618275818da51133af45440c58e95100af3ecfd70ed5d108015"
           },
           {
             "qid": "q08",
             "retained": true,
-            "tokens": 2408,
+            "tokens": 971,
             "over_budget": false,
             "acl_leak": false,
             "stale": false,
             "outdated_doc": false,
-            "manifest_items": 26,
-            "evicted": 0,
-            "digest": "sha256:5562b26daa57"
+            "truncated": false,
+            "manifest_items": 12,
+            "evicted": 6,
+            "digest": "80bdcf360b48793953c5c8142da278e0f9675fd69234aad0d2a7b266c2a663a7"
           },
           {
             "qid": "q09",
             "retained": true,
-            "tokens": 2685,
+            "tokens": 1343,
             "over_budget": false,
             "acl_leak": false,
             "stale": false,
             "outdated_doc": false,
-            "manifest_items": 30,
+            "truncated": false,
+            "manifest_items": 18,
             "evicted": 0,
-            "digest": "sha256:815b94e4d285"
+            "digest": "fc9fc2af0d3df62693bf7d91df66b6ab1d05421734b79ebee260fc1e4ce23acf"
           },
           {
             "qid": "q10",
             "retained": true,
-            "tokens": 2933,
+            "tokens": 1524,
             "over_budget": false,
             "acl_leak": false,
             "stale": false,
             "outdated_doc": false,
-            "manifest_items": 31,
+            "truncated": false,
+            "manifest_items": 18,
             "evicted": 0,
-            "digest": "sha256:a3c8e461c1c3"
+            "digest": "617be9809a57d891c54a0cea2e97db105de13281a7034de1d90f280413b8f031"
           },
           {
             "qid": "q11",
             "retained": true,
-            "tokens": 2956,
+            "tokens": 1354,
             "over_budget": false,
             "acl_leak": false,
             "stale": false,
             "outdated_doc": false,
-            "manifest_items": 34,
+            "truncated": false,
+            "manifest_items": 18,
             "evicted": 0,
-            "digest": "sha256:15a5edea9899"
+            "digest": "10faad24909fd97f8ef48f367d0ae0acaaa911977463ebd908f6fe6801e99b8a"
           },
           {
             "qid": "q12",
             "retained": true,
-            "tokens": 2603,
+            "tokens": 948,
             "over_budget": false,
             "acl_leak": false,
             "stale": false,
             "outdated_doc": false,
-            "manifest_items": 28,
-            "evicted": 0,
-            "digest": "sha256:1ce6b5ed62f1"
+            "truncated": false,
+            "manifest_items": 12,
+            "evicted": 6,
+            "digest": "177cfbdd6aca268340409f63792920485661f82e4f0dcea3bc38175f7c329c0e"
           },
           {
             "qid": "q13",
             "retained": true,
-            "tokens": 2699,
+            "tokens": 1403,
             "over_budget": false,
             "acl_leak": false,
             "stale": false,
             "outdated_doc": false,
-            "manifest_items": 30,
+            "truncated": false,
+            "manifest_items": 18,
             "evicted": 0,
-            "digest": "sha256:30bf7a635c70"
+            "digest": "1a6322df07ec3ffc1bfcc68ece8377b538780aeb8f987dbefcac767af1605652"
           },
           {
             "qid": "q14",
             "retained": true,
-            "tokens": 2880,
+            "tokens": 1477,
             "over_budget": false,
             "acl_leak": false,
             "stale": false,
             "outdated_doc": false,
-            "manifest_items": 33,
+            "truncated": false,
+            "manifest_items": 18,
             "evicted": 0,
-            "digest": "sha256:a454060f841c"
+            "digest": "9f11858bc5175e12fdea952dffb818edded3b93bf1ebfea40fb5e4dd7643fea2"
           },
           {
             "qid": "q15",
             "retained": true,
-            "tokens": 2246,
+            "tokens": 1064,
             "over_budget": false,
             "acl_leak": false,
             "stale": false,
             "outdated_doc": false,
-            "manifest_items": 25,
-            "evicted": 0,
-            "digest": "sha256:3ef7506c07e7"
+            "truncated": false,
+            "manifest_items": 13,
+            "evicted": 5,
+            "digest": "612abd878738f5e1dab58114d38fffe29381af3e64713e7f73e0addce448c777"
           },
           {
             "qid": "q16",
             "retained": true,
-            "tokens": 2482,
+            "tokens": 1313,
             "over_budget": false,
             "acl_leak": false,
             "stale": false,
             "outdated_doc": false,
-            "manifest_items": 27,
-            "evicted": 0,
-            "digest": "sha256:de4efd1a2825"
+            "truncated": false,
+            "manifest_items": 15,
+            "evicted": 3,
+            "digest": "f8f5a8ca2a90447e7e34ede20a1794fc464bc51f1dad18404bb4f818369b7a0c"
           },
           {
             "qid": "q17",
             "retained": true,
-            "tokens": 2995,
+            "tokens": 1029,
             "over_budget": false,
             "acl_leak": false,
             "stale": false,
             "outdated_doc": false,
-            "manifest_items": 36,
-            "evicted": 0,
-            "digest": "sha256:3f0ed8771d4f"
+            "truncated": false,
+            "manifest_items": 14,
+            "evicted": 4,
+            "digest": "a174dd39a0dd73c72825ab32a02ebe5d39c8a71dbf0d751cffa88be6c04b47f7"
           },
           {
             "qid": "q18",
             "retained": true,
-            "tokens": 2859,
+            "tokens": 1361,
             "over_budget": false,
             "acl_leak": false,
             "stale": false,
             "outdated_doc": false,
-            "manifest_items": 33,
+            "truncated": false,
+            "manifest_items": 18,
             "evicted": 0,
-            "digest": "sha256:f90844807f9f"
+            "digest": "4e293163f737b61214eb7fc1fb4457d3c8f29d030755c9dca15d3f4a0b11a358"
           },
           {
             "qid": "q19",
             "retained": true,
-            "tokens": 2590,
+            "tokens": 1611,
             "over_budget": false,
             "acl_leak": false,
             "stale": false,
             "outdated_doc": false,
-            "manifest_items": 30,
-            "evicted": 0,
-            "digest": "sha256:314293e75888"
+            "truncated": false,
+            "manifest_items": 17,
+            "evicted": 1,
+            "digest": "5f550e666f0bfd5c95314c20bbbd98d8b6f17307dfad02105113c1b3b6d0f771"
           },
           {
             "qid": "q20",
             "retained": true,
-            "tokens": 2987,
+            "tokens": 1700,
             "over_budget": false,
             "acl_leak": false,
             "stale": false,
             "outdated_doc": false,
-            "manifest_items": 35,
+            "truncated": false,
+            "manifest_items": 18,
             "evicted": 0,
-            "digest": "sha256:674d7c3b20fe"
+            "digest": "c27f0383be15664a163aa387cdb3277823a16cab5fe455401188139c9918ce9a"
           },
           {
             "qid": "q21",
             "retained": true,
-            "tokens": 2748,
+            "tokens": 1365,
             "over_budget": false,
             "acl_leak": false,
             "stale": false,
             "outdated_doc": false,
-            "manifest_items": 32,
+            "truncated": false,
+            "manifest_items": 18,
             "evicted": 0,
-            "digest": "sha256:37393610b3a1"
+            "digest": "34b191f098e3b084af245d3873d3e5556c4a7f9938182d9c4a6538a68ed46d56"
           },
           {
             "qid": "q22",
             "retained": true,
-            "tokens": 2484,
+            "tokens": 938,
             "over_budget": false,
             "acl_leak": false,
             "stale": false,
             "outdated_doc": false,
-            "manifest_items": 27,
-            "evicted": 0,
-            "digest": "sha256:20103c52cd5c"
+            "truncated": false,
+            "manifest_items": 11,
+            "evicted": 7,
+            "digest": "62336f637ed3182935d1af0ff5c8817119a6b4386bbda53f31aa6e88b55de9c4"
           },
           {
             "qid": "q23",
             "retained": true,
-            "tokens": 2432,
+            "tokens": 1208,
             "over_budget": false,
             "acl_leak": false,
             "stale": false,
             "outdated_doc": false,
-            "manifest_items": 26,
-            "evicted": 0,
-            "digest": "sha256:e79126151af3"
+            "truncated": false,
+            "manifest_items": 13,
+            "evicted": 5,
+            "digest": "b842f6d0b30a1eb55e0b76439b18c7c564cbe7148ca88571ea8163d72afbd5d0"
           }
         ]
       }

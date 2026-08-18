@@ -71,6 +71,7 @@ class ChatMessageResponse(BaseModel):
     content: str
     flow: str | None
     router_rationale: str | None
+    bundle_id: str | None
     prompt_tokens: int
     completion_tokens: int
     latency_ms: int | None
@@ -133,6 +134,7 @@ def _message_response(record: ChatMessageRecord) -> ChatMessageResponse:
         content=record.content,
         flow=record.flow,
         router_rationale=record.router_rationale,
+        bundle_id=str(record.bundle_id) if record.bundle_id is not None else None,
         prompt_tokens=record.prompt_tokens,
         completion_tokens=record.completion_tokens,
         latency_ms=record.latency_ms,
@@ -301,6 +303,7 @@ async def send_message(
             user_id=caller.principal.principal_id,
             session_id=_parse_session_id(session_id),
             content=body.content,
+            caller_tags=tuple(caller.principal.tags.slugs),
             router_rationale=decision.reason,
         )
     elif decision.flow is RouteFlow.RAG:
@@ -318,6 +321,7 @@ async def send_message(
             user_id=caller.principal.principal_id,
             session_id=_parse_session_id(session_id),
             content=body.content,
+            caller_tags=tuple(caller.principal.tags.slugs),
             router_rationale=decision.reason,
         )
     # Priming: the first `__anext__()` runs everything up to (and possibly

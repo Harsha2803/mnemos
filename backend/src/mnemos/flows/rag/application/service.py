@@ -21,7 +21,7 @@ from collections.abc import AsyncGenerator
 
 from mnemos.core.errors import NotFoundError, UpstreamError
 from mnemos.core.logging import get_logger
-from mnemos.core.types import MessageRole
+from mnemos.core.types import MessageRole, OperatorKind, TrustTier
 from mnemos.features.chat.application.ports import ChatRepository
 from mnemos.features.chat.application.titles import title_session_from_first_message
 from mnemos.features.chat.domain import (
@@ -32,6 +32,8 @@ from mnemos.features.chat.domain import (
     ChatStreamEvent,
     CitationInput,
 )
+from mnemos.features.context.application import ContextService
+from mnemos.features.context.domain import ContextCandidate
 from mnemos.features.identity.domain import OrgId, UserId
 from mnemos.features.knowledge.application.service import KnowledgeService
 from mnemos.features.knowledge.domain import HeuristicTokenizer
@@ -57,6 +59,7 @@ class RagFlow:
         model: ChatModel,
         token_budget: int,
         retrieval_k: int,
+        context: ContextService | None = None,
     ) -> None:
         self._chat = chat_repository
         self._knowledge = knowledge
@@ -64,6 +67,7 @@ class RagFlow:
         self._token_budget = token_budget
         self._retrieval_k = retrieval_k
         self._tokenizer = HeuristicTokenizer()
+        self._context = context
 
     async def stream_reply(
         self,
@@ -90,11 +94,59 @@ class RagFlow:
         chunks = truncate_to_budget(
             list(candidates), self._tokenizer, budget_tokens=self._token_budget
         )
-        turns = [
-            ChatTurn(role=MessageRole.SYSTEM, content=RAG_SYSTEM_PROMPT),
-            ChatTurn(role=MessageRole.SYSTEM, content=build_context_block(chunks)),
-            ChatTurn(role=MessageRole.USER, content=content),
-        ]
+        bundle_id = None
+        if self._context is not None:
+            context_candidates = [
+                ContextCandidate(
+                    key=f"chunk:{chunk.chunk_id}",
+                    section="documents",
+                    operator=(
+                        OperatorKind.LEXICAL
+                        if "lexical" in chunk.operator_id
+                        else OperatorKind.VECTOR
+                    ),
+                    operator_id=chunk.operator_id,
+                    text=chunk.text,
+                    tokens=chunk.token_count,
+                    raw_score=chunk.score,
+                    rrf_score=chunk.score,
+                    trust_tier=TrustTier.RETRIEVED,
+                    source_kind="document",
+                    source_ref=str(chunk.chunk_id),
+                    chunk_id=chunk.chunk_id,
+                    document_id=chunk.document_id,
+                    document_title=chunk.document_title,
+                    metadata={"page": chunk.page_number},
+                )
+                for chunk in candidates
+            ]
+            bundle_id, prompt, admitted = await self._context.compile_and_persist(
+                org_id=org_id,
+                user_id=user_id,
+                caller_tags=caller_tags,
+                session_id=session_id,
+                flow=FLOW_NAME,
+                query=content,
+                system_prompt=RAG_SYSTEM_PROMPT,
+                token_budget=self._token_budget,
+                candidates=context_candidates,
+                operator_actuals={
+                    "document_retrieval": {
+                        "returned": len(candidates),
+                        "authorization": "inside vector and lexical scans",
+                        "currency": "inside vector and lexical scans",
+                    }
+                },
+            )
+            admitted_chunk_ids = {item.chunk_id for item in admitted if item.chunk_id is not None}
+            chunks = [chunk for chunk in candidates if chunk.chunk_id in admitted_chunk_ids]
+            turns = [ChatTurn(role=MessageRole.SYSTEM, content=prompt)]
+        else:
+            turns = [
+                ChatTurn(role=MessageRole.SYSTEM, content=RAG_SYSTEM_PROMPT),
+                ChatTurn(role=MessageRole.SYSTEM, content=build_context_block(chunks)),
+                ChatTurn(role=MessageRole.USER, content=content),
+            ]
 
         started = False
         pieces: list[str] = []
@@ -139,6 +191,10 @@ class RagFlow:
                                 )
                                 for t in targets
                             ],
+                        )
+                    if self._context is not None and bundle_id is not None:
+                        await self._context.attach(
+                            org_id=org_id, message_id=message.id, bundle_id=bundle_id
                         )
                     yield AssistantDone(message=message)
                     return

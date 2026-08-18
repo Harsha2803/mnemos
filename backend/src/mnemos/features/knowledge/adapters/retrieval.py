@@ -132,7 +132,7 @@ def _acl_clause(caller_tag_ids: Sequence[UUID]) -> ColumnElement[bool]:
     return or_(
         public_only,
         ChunkEmbedding.acl_tag_ids.overlap(
-            postgresql.array(caller_tag_ids, type_=postgresql.UUID(as_uuid=True))
+            postgresql.array(caller_tag_ids).cast(postgresql.ARRAY(postgresql.UUID(as_uuid=True)))
         ),
     )
 

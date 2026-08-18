@@ -4,17 +4,17 @@
 > self-contained: architecture, the capability inventory, schema, milestones, and current
 > state. [`TRACKER.md`](../TRACKER.md) holds live task status; this holds the design.
 
-**Last updated:** 2026-08-18 — `B3` is complete on PR #23. The remaining committed roadmap
-is `C4` → reduced `D1`; `B4` and `C1`–`C3` remain deliberately deferred to finish a strong,
+**Last updated:** 2026-08-18 — `C4` is complete on PR #24. The remaining committed roadmap
+is reduced `D1`; `B4` and `C1`–`C3` remain deliberately deferred to finish a strong,
 evaluable portfolio rather than an exhaustive product.
 
 ---
 
 ## 1. What Mnemos is
 
-**An enterprise AI assistant.** One conversation surface. Today the router chooses plain
-chat, documents (**RAG**), a database (**NL2SQL**), or one safely approved **MCP** tool call
-and shows why. `C4` makes governed memory and compiled context inspectable.
+**An enterprise AI assistant.** One conversation surface. The router chooses plain chat,
+documents (**RAG**), a database (**NL2SQL**), or one safely approved **MCP** tool call and
+shows why. Governed memory and the exact compiled context behind every answer are inspectable.
 Underneath it is multi-tenant, authenticated, and authorized because those controls are
 what separate an assistant from a demo.
 
@@ -27,9 +27,8 @@ committed capabilities from deliberately deferred extension seams.
 **It carries one deep technical claim, and the claim is measured rather than asserted:**
 every prompt is a **compiled, budgeted artifact you can open** — an inspectable context
 bundle over a **governed memory layer** that distinguishes current facts from superseded
-ones. The numbers are in the root [`README.md`](../README.md). They were measured on the
-v0.1 SQLite kernel and must be re-run when that kernel finishes its port in `C4`; until
-then the README says so.
+ones. The numbers are in the root [`README.md`](../README.md), reproduced against migrated
+Postgres by `make bench` with the frozen corpus, budgets, metrics and fair control.
 
 That is the ordering, and it used to be the other way round. Framing the project as a
 context-compilation result that used a chatbot as its harness put the product last: the
@@ -214,8 +213,8 @@ Every tenant-scoped table: `org_id` + RLS `FORCE` on `app.current_org` GUC.
 
 Re-cut on 2026-08-02 into product milestones, then narrowed on 2026-08-18 to a
 resume-focused finish. The old `M1`–`M14` numbering is superseded and mapped at the end of
-this section for historical translation. The only remaining committed sequence is
-`C4` → reduced `D1`; `B4` and `C1`–`C3` are deliberately deferred. The authoritative
+this section for historical translation. The only remaining committed milestone is
+reduced `D1`; `B4` and `C1`–`C3` are deliberately deferred. The authoritative
 live copy is [TRACKER §3.0](../TRACKER.md#30-the-plan--completed-foundation-and-the-resume-focused-finish).
 
 Two rules govern every row.
@@ -261,7 +260,7 @@ authoritative for sequencing, not these tables' phase grouping.
 | **C1** | API keys · full RBAC permission matrix + tag-scoped document ACLs · keys UI + real 403 states | **issue an API key, call the API with it, and watch a user without the permission be refused** — in the UI and at the wire | ⏸ deferred — existing OIDC/JWT/RLS carries the core security signal |
 | **C2** | Versioned prompt store (diff, activate) · cost + token ledger · prompt manager + cost dashboard | **change the prompt behind a flow, activate the new version, and see what every answer cost** | ⏸ deferred — operations breadth, not a finish-line differentiator |
 | **C3** | Chat history depth: folders, bookmarks, feedback · audit log · search over history | **organise, bookmark, rate and search your conversations, and read the audit trail of who did what** | ⏸ deferred — conventional product depth |
-| **C4** | **The context layer.** Bitemporal memory + supersession · the budgeted context compiler · the context inspector · re-run the benchmark on Postgres | **open any answer and see its compiled context** — what was admitted, what was excluded and why, and the token spend against budget | ⬜ |
+| **C4** | **The context layer.** Bitemporal memory + supersession · the budgeted context compiler · the context inspector · re-run the benchmark on Postgres | **open any answer and see its compiled context** — what was admitted, what was excluded and why, and the token spend against budget | ✅ 2026-08-18 (PR #24) — Postgres, Compose and Chromium verified |
 
 **Phase D — ship it.**
 
@@ -840,22 +839,22 @@ dependency, which are now `A0`'s guard and `C1`'s matrix. The token-algorithm qu
 flags as open was settled by `M3.4` in favour of HS256, with the argument written into
 `ThreatModel.md` §5.1.)*
 
-### Carried over from v0.1 (needs porting from SQLite → Postgres)
+### Carried over from v0.1 (port complete)
 
 `core.py`, `embed.py`, `store.py`, `retrieval.py`, `compiler.py`, `baseline.py`,
 `ingest.py`, `dataset.py`, `bench.py`, `app.py`, `cli.py` — quarantined in
-`backend/src/mnemos/_v1/`. **The kernel logic is sound and tested (23 tests); it needs
-re-homing into the feature layout and re-targeting at asyncpg + pgvector.**
+`backend/src/mnemos/_v1/`. It remains a quarantined reference implementation; the platform
+runtime does not import its SQLite store.
 
 **The port is split in two, and the split is deliberate.** Retrieval — the operators, RRF,
 dedup, conflict resolution and the ACL pushdown — lands in `A2`, where the RAG flow needs
 it, so it is never written twice. Memory governance, the context compiler and the
-inspector land in `C4` as a deep slice of their own. Neither half is dropped and neither is
-demoted in quality; see §7's mapping table for old `M4`.
+inspector landed in `C4` as a deep slice of their own. Both halves now run through the
+typed feature architecture and Postgres; see §7's mapping table for old `M4`.
 
-The v0.1 benchmark (naive prompt vs compiled bundle) is **kept** — it is the evidence for
-the one deep claim in §1. Re-point it at Postgres in `C4`, and update the README's numbers
-in the same commit.
+The benchmark (naive prompt vs compiled bundle) is **kept** as evidence for the deep claim
+in §1. `make bench` starts pgvector Postgres, migrates it, seeds the frozen corpus and writes
+the measured results to `bench_results/hashing.json`.
 
 ### Verified running (2026-07-27)
 
@@ -901,6 +900,34 @@ existed because `./frontend` had no Dockerfile and an unresolvable build context
 the whole `up`. It does now, so plain `docker compose up -d` brings the frontend up with
 everything else and `web` has a healthcheck of its own — a stack whose UI needs a
 remembered extra flag is a stack whose UI does not get looked at.
+
+### C4 — governed context and bitemporal memory ✅ verified 2026-08-18
+
+The existing M2 tables now have typed domain, repository and application behavior:
+immutable facts carry separate validity and belief intervals; supersession closes the old
+belief and writes lineage transactionally; retraction never erases history; as-of reads
+keep explicit org and scan-time tag predicates under forced RLS. The database exclusion
+constraint, supersession-cycle trigger and hard bundle budget CHECK were exercised against
+migrated Postgres.
+
+`features/context/` calibrates utility, fences retrieved trust, removes near duplicates,
+demotes conflicts, enforces section floors/ceilings, and verifies the fully rendered prompt
+against the exact hard budget. Plans, bundles, ordered items, rejections and `EXPLAIN` data
+persist atomically; chat, RAG, NL2SQL and MCP answer flows attach the bundle to their
+assistant message. Replay reads that artifact through an owner-scoped endpoint.
+
+The UI half is the Memory screen and the Bundle inspector. A user can create, supersede,
+retract and query two-clock history, then inspect exact spend, admitted and excluded
+candidates, reasons, provenance, trust, conflicts, lineage, digest and compiled prompt
+beside any completed answer.
+
+Evidence: `pytest` 463 passed; Ruff and `mypy --strict` (216 source files) passed;
+`alembic check` reported no drift; frontend lint/typecheck and 114 Vitest assertions
+passed; rebuilt Compose returned all `/readyz` checks `ok`; and the C4 Chromium journey
+completed. `make bench` reproduced the unchanged 23-question corpus on
+`pgvector/pgvector:pg16`; at 800 tokens the governed arm retained 95.7% versus 91.3% for
+the fair prefilter control, with zero ACL leaks, stale facts, obsolete documents and
+overruns, and 100% provenance.
 
 ### B3 — safe single-call MCP tools ✅ verified 2026-08-18
 
@@ -1317,7 +1344,7 @@ here on signs in as `analyst@mnemos.local` instead.
 
 ### Committed work not started
 
-**Two milestones remain:** `C4` and reduced `D1`. Phase A and `B1`–`B3` are complete.
+**One milestone remains:** reduced `D1`. Phase A, `B1`–`B3`, and `C4` are complete.
 `B4` and `C1`–`C3` are deliberately deferred, so architecture/schema seams for
 them must not be reported as unfinished committed work. Concretely, and stated plainly
 because the gap between what `docs/` describes and what runs is the thing this file exists
@@ -1348,10 +1375,11 @@ to keep honest:
   MCP call now has per-user encrypted credentials, live-role/grant/trust authorization,
   durable approval, invocation history, a single-call chat route, and a Tool console.
   Multi-step agent flow (`B4`) remains deliberately deferred.
-- **The context inspector shows a cited passage, not a context bundle.** `A2` gave it its
-  first real content; what was admitted, what was excluded and why, and the token spend
-  against budget, are `C4`. So is bitemporal memory, and so is re-running the benchmark on
-  Postgres — until then the README's numbers stay labelled as measured on SQLite.
+- ~~**The context inspector shows a cited passage, not a context bundle.**~~ **Closed in
+  `C4`.** Immutable bitemporal memory, transactional supersession/retraction, the exact
+  hard-budget compiler, atomic bundle persistence/attachment, and typed Memory and Bundle
+  screens are live. The frozen benchmark now runs on migrated Postgres and its measured
+  output is committed in `bench_results/hashing.json`.
 - ~~**There is no NL2SQL.**~~ **Built in `A3`.** Introspection, business glossary,
   generation behind an AST read-only guard, execution as `mnemos_ro`, narration, the repair
   loop, and the SQL panel with its denial screen — verified end to end in a real browser.
@@ -1405,9 +1433,9 @@ resume-focused finish line unless the owner explicitly reopens scope after `D1`.
 - **Milestone IDs are `A0`–`D1` now, not `M4`–`M14`.** If you find an old ID in a document,
   a docstring or a commit message, §7's mapping table is the translation — do not guess,
   and do not leave a reader holding a number that no longer names anything.
-- **The complete remaining finish is `C4` → reduced `D1`.** Do not resume the old phase
-  sequence; `B4` and `C1`–`C3` were deliberately deferred on 2026-08-18 to keep the project
-  focused on high-value portfolio evidence.
+- **The complete remaining finish is reduced `D1`.** Do not resume the old phase sequence;
+  `B4` and `C1`–`C3` were deliberately deferred on 2026-08-18 to keep the project focused
+  on high-value portfolio evidence.
 - **Read §7's two rules before scoping any work** (C12 and C14). A milestone that cannot
   end in a sentence a stranger could perform at `http://localhost:3000` is infrastructure,
   and infrastructure folds into the milestone it serves. That rule exists because the plan
@@ -1417,25 +1445,18 @@ resume-focused finish line unless the owner explicitly reopens scope after `D1`.
   into a prefix match. If a handler needs to know who is calling, it asks for
   `require_caller`; if it forgets and needs one anyway, it raises — that is deliberate, and
   making the caller optional to silence it is how a route quietly stops being scoped.
-- **`C4` ports the governed kernel; it does not redesign A2 retrieval.** Reuse the current
-  pgvector/trigram operators and their in-scan ACL/revision predicates. Port memory and the
-  compiler from `_v1` behind current domain/port boundaries, persist bundles in the existing
-  M2 tables, and attach them through `chat_message.bundle_id`.
-- **Bitemporal means two clocks and no overwrite.** Preserve validity time separately from
-  recorded/retracted belief time, supersede transactionally, keep lineage edges, and prove
-  the exclusion/cycle constraints against real Postgres. A convenience update endpoint that
-  mutates history is not an acceptable simplification.
-- **The inspector and benchmark are both `C4` exit evidence.** A bundle must show admissions,
-  exclusions/reasons, provenance/trust, lineage, and exact token spend in the app. Re-run the
-  unchanged fair benchmark on Postgres and replace the SQLite-labelled README numbers; do
-  not tune the baseline or silently change corpus/seeds while porting it.
+- **`C4` is complete; preserve its invariants during D1.** Keep A2 ACL/revision predicates
+  inside the scan, both memory clocks immutable, bundle replay persisted rather than
+  recompiled, and `tokens_consumed <= token_budget` exact after rendering.
+- **D1 is proof and handoff, not product expansion.** Start from a genuinely clean clone,
+  consolidate the existing critical Playwright journeys, add a deterministic walkthrough,
+  and organize the README around exact reproduction commands and honest limitations.
 - **The frontend test suite is offline by construction** (`A0`). `vitest.setup.ts` installs
   a `fetch` that answers 401 before any test runs, which is also what
   `vi.unstubAllGlobals()` restores. A test that reaches the real network will pass on a
   machine with the stack up and fail on CI — that is how it was found.
-- The v0.1 benchmark numbers in the root `README.md` were measured on SQLite. The kernel
-  finishes its port in `C4`; **re-run and update them there**, in the same commit, and do
-  not let published numbers drift in the meantime.
+- The root README numbers come from `bench_results/hashing.json` on Postgres. If retrieval,
+  memory or compilation changes, rerun `make bench` and update both artifacts together.
 - `docs/` (Architecture, SystemDesign, DatabaseDesign, APIContract, ThreatModel, 12 ADRs)
   preserves extension seams beyond the committed portfolio finish. The README must keep
   those optional designs distinct from built or committed capabilities.

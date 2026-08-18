@@ -30,7 +30,7 @@ from typing import Any
 
 from mnemos.core.errors import NotFoundError, UpstreamError
 from mnemos.core.logging import get_logger
-from mnemos.core.types import MessageRole, SqlVerdict
+from mnemos.core.types import MessageRole, OperatorKind, SqlVerdict, TrustTier
 from mnemos.features.chat.application.ports import ChatRepository
 from mnemos.features.chat.application.titles import title_session_from_first_message
 from mnemos.features.chat.domain import (
@@ -40,6 +40,8 @@ from mnemos.features.chat.domain import (
     ChatSessionId,
     ChatStreamEvent,
 )
+from mnemos.features.context.application import ContextService
+from mnemos.features.context.domain import ContextBundleId, ContextCandidate
 from mnemos.features.datasources.application.generation import (
     RepairContext,
     SqlGenerationService,
@@ -51,6 +53,7 @@ from mnemos.features.datasources.application.ports import (
 )
 from mnemos.features.datasources.application.service import DatasourceService
 from mnemos.features.identity.domain import OrgId, UserId
+from mnemos.features.knowledge.domain import HeuristicTokenizer
 from mnemos.features.llm.domain.model import ChatDone, ChatModel, ChatToken, ChatTurn
 from mnemos.flows.nl2sql.domain import (
     NARRATION_SYSTEM_PROMPT,
@@ -91,6 +94,8 @@ class Nl2SqlFlow:
         statement_timeout_ms: int,
         max_rows: int,
         repair_attempts: int,
+        context: ContextService | None = None,
+        token_budget: int = 3000,
     ) -> None:
         self._chat = chat_repository
         self._datasources = datasources
@@ -101,6 +106,9 @@ class Nl2SqlFlow:
         self._statement_timeout_ms = statement_timeout_ms
         self._max_rows = max_rows
         self._repair_attempts = repair_attempts
+        self._context = context
+        self._token_budget = token_budget
+        self._tokenizer = HeuristicTokenizer()
 
     async def stream_reply(
         self,
@@ -109,6 +117,7 @@ class Nl2SqlFlow:
         user_id: UserId,
         session_id: ChatSessionId,
         content: str,
+        caller_tags: tuple[str, ...] = (),
         router_rationale: str | None = None,
     ) -> AsyncGenerator[ChatStreamEvent, None]:
         session = await self._chat.get_session(org_id=org_id, session_id=session_id)
@@ -126,6 +135,15 @@ class Nl2SqlFlow:
             narration = denial_narration(
                 verdict=record.verdict, detail=record.verdict_detail, sql=record.generated_sql
             )
+            bundle_id, _prompt = await self._compile_bundle(
+                org_id=org_id,
+                user_id=user_id,
+                caller_tags=caller_tags,
+                session_id=session_id,
+                query=content,
+                record=record,
+                outcome=None,
+            )
             yield await self._finish(
                 org_id=org_id,
                 session_id=session_id,
@@ -134,6 +152,7 @@ class Nl2SqlFlow:
                 outcome=None,
                 model=_NO_MODEL_CALL,
                 router_rationale=router_rationale,
+                bundle_id=bundle_id,
             )
             return
 
@@ -156,6 +175,15 @@ class Nl2SqlFlow:
         )
 
         if outcome.error_code is not None:
+            bundle_id, _prompt = await self._compile_bundle(
+                org_id=org_id,
+                user_id=user_id,
+                caller_tags=caller_tags,
+                session_id=session_id,
+                query=content,
+                record=record,
+                outcome=outcome,
+            )
             yield await self._finish(
                 org_id=org_id,
                 session_id=session_id,
@@ -164,18 +192,32 @@ class Nl2SqlFlow:
                 outcome=outcome,
                 model=_NO_MODEL_CALL,
                 router_rationale=router_rationale,
+                bundle_id=bundle_id,
             )
             return
 
-        turns = [
-            ChatTurn(role=MessageRole.SYSTEM, content=NARRATION_SYSTEM_PROMPT),
-            ChatTurn(
-                role=MessageRole.SYSTEM,
-                content=f"SQL that was run:\n```sql\n{record.generated_sql}\n```",
-            ),
-            ChatTurn(role=MessageRole.SYSTEM, content=build_result_block(outcome)),
-            ChatTurn(role=MessageRole.USER, content=content),
-        ]
+        bundle_id, compiled_prompt = await self._compile_bundle(
+            org_id=org_id,
+            user_id=user_id,
+            caller_tags=caller_tags,
+            session_id=session_id,
+            query=content,
+            record=record,
+            outcome=outcome,
+        )
+        turns = (
+            [ChatTurn(role=MessageRole.SYSTEM, content=compiled_prompt)]
+            if compiled_prompt is not None
+            else [
+                ChatTurn(role=MessageRole.SYSTEM, content=NARRATION_SYSTEM_PROMPT),
+                ChatTurn(
+                    role=MessageRole.SYSTEM,
+                    content=f"SQL that was run:\n```sql\n{record.generated_sql}\n```",
+                ),
+                ChatTurn(role=MessageRole.SYSTEM, content=build_result_block(outcome)),
+                ChatTurn(role=MessageRole.USER, content=content),
+            ]
+        )
         started = False
         pieces: list[str] = []
         start = time.perf_counter()
@@ -199,6 +241,7 @@ class Nl2SqlFlow:
                         finish_reason=event.finish_reason,
                         latency_ms=int((time.perf_counter() - start) * 1000),
                         router_rationale=router_rationale,
+                        bundle_id=bundle_id,
                     )
                     return
         except UpstreamError:
@@ -247,6 +290,7 @@ class Nl2SqlFlow:
         completion_tokens: int = 0,
         finish_reason: str = "stop",
         latency_ms: int = 0,
+        bundle_id: ContextBundleId | None = None,
     ) -> AssistantDone:
         """Persist the assistant turn, link the `sql_run` row to it, and
         build the `AssistantDone.extra` payload the SSE `done` frame carries
@@ -268,6 +312,8 @@ class Nl2SqlFlow:
         await self._sql_runs.attach_to_message(
             org_id=org_id, sql_run_id=record.id, message_id=message.id
         )
+        if self._context is not None and bundle_id is not None:
+            await self._context.attach(org_id=org_id, message_id=message.id, bundle_id=bundle_id)
         # `Any`: a heterogeneous JSON bag assembled from several already-typed
         # sources (`str`, `int | None`, `bool`, `list[str]`, nested rows) —
         # the same justification `chat_message.msg_metadata`'s own `dict[str,
@@ -293,3 +339,54 @@ class Nl2SqlFlow:
             "rows": [list(row) for row in outcome.rows] if outcome is not None else [],
         }
         return AssistantDone(message=message, extra=extra)
+
+    async def _compile_bundle(
+        self,
+        *,
+        org_id: OrgId,
+        user_id: UserId,
+        caller_tags: tuple[str, ...],
+        session_id: ChatSessionId,
+        query: str,
+        record: SqlRunRecord,
+        outcome: ExecutionOutcome | None,
+    ) -> tuple[ContextBundleId | None, str | None]:
+        if self._context is None:
+            return None, None
+        text = (
+            f"SQL verdict: {record.verdict.value}\n"
+            f"SQL:\n{record.generated_sql}\n"
+            f"{build_result_block(outcome) if outcome is not None else record.verdict_detail}"
+        )
+        candidate = ContextCandidate(
+            key=f"sql:{record.id}",
+            section="data",
+            operator=OperatorKind.SQL,
+            operator_id="guarded_sql_result",
+            text=text,
+            tokens=self._tokenizer.count(text),
+            raw_score=1.0,
+            rrf_score=1.0,
+            trust_tier=TrustTier.RETRIEVED,
+            source_kind="sql",
+            source_ref=str(record.id),
+            metadata={"verdict": record.verdict.value, "attempt": record.attempt},
+        )
+        bundle_id, prompt, _admitted = await self._context.compile_and_persist(
+            org_id=org_id,
+            user_id=user_id,
+            caller_tags=caller_tags,
+            session_id=session_id,
+            flow=FLOW_NAME,
+            query=query,
+            system_prompt=NARRATION_SYSTEM_PROMPT,
+            token_budget=self._token_budget,
+            candidates=[candidate],
+            operator_actuals={
+                "guarded_sql_result": {
+                    "verdict": record.verdict.value,
+                    "executed": record.executed,
+                }
+            },
+        )
+        return bundle_id, prompt
