@@ -42,6 +42,7 @@ from mnemos.flows.nl2sql.application import Nl2SqlFlow
 from mnemos.flows.rag.application import RagFlow
 from mnemos.flows.router.application import RouterService
 from mnemos.flows.router.domain import RouteDecision, RouteFlow
+from mnemos.flows.tools.application import ToolFlow
 
 router = APIRouter(prefix="/chat", tags=["chat"])
 
@@ -188,6 +189,13 @@ def _router(request: Request) -> RouterService:
     return service
 
 
+def _tools(request: Request) -> ToolFlow:
+    flow = getattr(request.app.state, "tool_flow", None)
+    if not isinstance(flow, ToolFlow):  # pragma: no cover - the lifespan sets it
+        raise RuntimeError("the tool flow is not configured")
+    return flow
+
+
 @router.post("/sessions", status_code=status.HTTP_201_CREATED)
 async def create_session(
     body: CreateSessionRequest,
@@ -276,10 +284,18 @@ async def send_message(
     service: Annotated[ChatService, Depends(_service)],
     rag: Annotated[RagFlow, Depends(_rag)],
     nl2sql: Annotated[Nl2SqlFlow, Depends(_nl2sql)],
+    tools: Annotated[ToolFlow, Depends(_tools)],
     message_router: Annotated[RouterService, Depends(_router)],
 ) -> StreamingResponse:
     decision = message_router.classify(body.content)
-    if decision.flow is RouteFlow.NL2SQL:
+    if decision.flow is RouteFlow.TOOL:
+        events = tools.stream_reply(
+            caller=caller,
+            session_id=_parse_session_id(session_id),
+            content=body.content,
+            router_rationale=decision.reason,
+        )
+    elif decision.flow is RouteFlow.NL2SQL:
         events = nl2sql.stream_reply(
             org_id=caller.principal.org_id,
             user_id=caller.principal.principal_id,

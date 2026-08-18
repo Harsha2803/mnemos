@@ -80,6 +80,7 @@ class FlowKind(StrEnum):
     NL2SQL = "nl2sql"
     AGENT = "agent"
     MEMORY = "memory"
+    TOOL = "tool"
 
 
 class OperatorKind(StrEnum):

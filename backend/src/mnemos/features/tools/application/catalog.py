@@ -11,7 +11,13 @@ from mnemos.features.identity.domain import OrgId, UserId
 from mnemos.features.tools.adapters.crypto import ToolCredentialCipher
 from mnemos.features.tools.adapters.mcp_http import StreamableHttpMcpClient
 from mnemos.features.tools.application.ports import ToolRepository
-from mnemos.features.tools.domain import McpServerId, McpServerRecord, McpToolId, McpToolRecord
+from mnemos.features.tools.domain import (
+    McpCredentialState,
+    McpServerId,
+    McpServerRecord,
+    McpToolId,
+    McpToolRecord,
+)
 
 
 class ToolCatalogService:
@@ -114,3 +120,9 @@ class ToolCatalogService:
             expires_at=None,
         )
 
+    async def credential_state(
+        self, *, org_id: OrgId, user_id: UserId, server_id: McpServerId
+    ) -> McpCredentialState | None:
+        return await self._repository.get_credential_state(
+            org_id=org_id, server_id=server_id, user_id=user_id
+        )

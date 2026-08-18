@@ -14,8 +14,10 @@ from typing import cast
 
 from sqlalchemy import delete, func, select, update
 from sqlalchemy.dialects.postgresql import insert
+from sqlalchemy.exc import IntegrityError
 from sqlalchemy.ext.asyncio import AsyncSession
 
+from mnemos.core.errors import ConflictError
 from mnemos.core.ids import IdGenerator
 from mnemos.core.types import InvocationStatus, JsonValue, TrustTier
 from mnemos.features.context.adapters.models import BundleItem
@@ -150,22 +152,25 @@ class SqlToolRepository:
         min_trust_tier: TrustTier,
         requires_approval: bool,
     ) -> McpServerRecord:
-        async with self._db.session(org_id=org_id) as session:
-            row = McpServer(
-                id=self._ids.new(),
-                org_id=org_id,
-                slug=slug,
-                name=name,
-                description=description,
-                transport="http",
-                endpoint=endpoint,
-                min_trust_tier=int(min_trust_tier),
-                requires_approval=requires_approval,
-            )
-            session.add(row)
-            await session.flush()
-            await session.refresh(row)
-            return _server(row)
+        try:
+            async with self._db.session(org_id=org_id) as session:
+                row = McpServer(
+                    id=self._ids.new(),
+                    org_id=org_id,
+                    slug=slug,
+                    name=name,
+                    description=description,
+                    transport="http",
+                    endpoint=endpoint,
+                    min_trust_tier=int(min_trust_tier),
+                    requires_approval=requires_approval,
+                )
+                session.add(row)
+                await session.flush()
+                await session.refresh(row)
+                return _server(row)
+        except IntegrityError as exc:
+            raise ConflictError("a tool server with this slug already exists") from exc
 
     async def list_servers(self, *, org_id: OrgId) -> Sequence[McpServerRecord]:
         async with self._db.session(org_id=org_id) as session:

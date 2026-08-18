@@ -1,8 +1,9 @@
 import { Check, Copy, Search } from "lucide-react";
+import Link from "next/link";
 import { useState } from "react";
 
 import { Button } from "@/components/ui/Button";
-import type { Nl2SqlResult } from "@/lib/chat/stream";
+import type { Nl2SqlResult, ToolResult } from "@/lib/chat/stream";
 import type { Citation } from "@/lib/knowledge/api";
 
 import { SqlPanel } from "./SqlPanel";
@@ -32,6 +33,8 @@ export type DisplayMessage = {
    * a plain assistant bubble with no panel.
    */
   nl2sql?: Nl2SqlResult;
+  /** The one MCP proposal/result attached to a live tool-routed turn. */
+  tool?: ToolResult;
 };
 
 export type MessageBubbleProps = {
@@ -150,6 +153,7 @@ export function MessageBubble({
           (DesignSystem, TRACKER §5 deliverable 5). Visible inline in the
           conversation, not only behind an inspector click. */}
       {message.nl2sql !== undefined && <SqlPanel result={message.nl2sql} />}
+      {message.tool !== undefined && <ToolCallPanel result={message.tool} />}
     </div>
   );
 }
@@ -157,7 +161,23 @@ export function MessageBubble({
 function flowLabel(flow: string): string {
   if (flow === "rag") return "Documents";
   if (flow === "nl2sql") return "Data";
+  if (flow === "tool") return "Tool";
   return "Chat";
+}
+
+function ToolCallPanel({ result }: { result: ToolResult }) {
+  const deniedSource = result.offending_source;
+  return (
+    <section className="measure mt-1 flex flex-col gap-2 rounded-lg border border-separator bg-bg-secondary p-4" aria-label="Tool call state">
+      <p className="text-headline font-semibold capitalize">Tool call · {result.status.replace("_", " ")}</p>
+      {result.status === "pending_approval" && (
+        <p className="text-callout text-label-secondary">This call is persisted and has not run. <Link className="font-semibold text-accent" href="/tools">Review it in Tools.</Link></p>
+      )}
+      {result.status === "succeeded" && <pre className="overflow-x-auto text-footnote">{JSON.stringify(result.result, null, 2)}</pre>}
+      {result.status === "denied" && <p className="text-callout text-danger">{deniedSource !== null ? `Retrieved source “${deniedSource}” did not have enough authority.` : `Denied: ${result.denied_reason ?? "policy"}.`}</p>}
+      {result.status === "failed" && <p className="text-callout text-danger">Failed: {result.error_code ?? "unknown_error"}</p>}
+    </section>
+  );
 }
 
 function renderWithCitations(
