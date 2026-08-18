@@ -55,7 +55,7 @@ test("test_you_can_register_discover_approve_and_run_one_local_tool", async ({ p
   await page.waitForURL(`${WEB}/tools`);
 
   await page.getByLabel("Slug").fill(`b3-demo-${runId}`);
-  await page.getByLabel("Name").fill(name);
+  await page.getByLabel("Name", { exact: true }).fill(name);
   await page.getByLabel("Streamable HTTP endpoint").fill("http://demo-mcp:8100/mcp");
   await page.getByRole("button", { name: "Register server" }).click();
   await expect(page.getByRole("status")).toContainText("Server registered");
@@ -65,7 +65,12 @@ test("test_you_can_register_discover_approve_and_run_one_local_tool", async ({ p
   await server.getByRole("button", { name: "Discover" }).click();
   await expect(page.getByRole("status")).toContainText("Discovered 1 tool");
 
-  const tool = page.getByRole("article").filter({ has: page.getByRole("heading", { name: "echo" }) });
+  // Previous runs intentionally leave audit rows and registered servers behind.
+  // Operate on one visible cached echo card without assuming this is a clean database.
+  const tool = page
+    .getByRole("article")
+    .filter({ has: page.getByRole("heading", { name: "echo" }) })
+    .last();
   await expect(tool).toContainText("Read-only");
   await tool.getByRole("button", { name: "Grant to me" }).click();
   await expect(page.getByRole("status")).toContainText("Granted echo");
