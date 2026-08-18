@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+import json
 import time
 from datetime import datetime
 
@@ -9,6 +10,7 @@ from mnemos.core.clock import Clock
 from mnemos.core.errors import AuthorizationError, ConflictError, NotFoundError, ValidationError
 from mnemos.core.logging import get_logger
 from mnemos.core.types import InvocationStatus, JsonValue, TrustTier
+from mnemos.features.chat.domain import ChatMessageId
 from mnemos.features.identity.application.principals import AuthenticatedCaller
 from mnemos.features.identity.domain import Permission
 from mnemos.features.tools.adapters.crypto import ToolCredentialCipher
@@ -173,6 +175,7 @@ class ToolInvocationService:
             )
             if denied is None:
                 raise ConflictError("the invocation is no longer awaiting approval")
+            await self._sync_message(tool=tool, invocation=denied)
             return denied
         approved_at = self._clock.now()
         approved = await self._repository.transition_invocation(
@@ -191,6 +194,7 @@ class ToolInvocationService:
         self, *, caller: AuthenticatedCaller, invocation_id: McpInvocationId
     ) -> McpInvocationRecord:
         invocation = await self._owned_pending(caller=caller, invocation_id=invocation_id)
+        tool, _ = await self._load_tool_server(caller=caller, tool_id=invocation.tool_id)
         denied = await self._repository.transition_invocation(
             org_id=caller.principal.org_id,
             invocation_id=invocation.id,
@@ -202,7 +206,25 @@ class ToolInvocationService:
         )
         if denied is None:
             raise ConflictError("the invocation is no longer awaiting approval")
+        await self._sync_message(tool=tool, invocation=denied)
         return denied
+
+    async def attach_message(
+        self,
+        *,
+        caller: AuthenticatedCaller,
+        invocation_id: McpInvocationId,
+        message_id: ChatMessageId,
+    ) -> McpInvocationRecord:
+        linked = await self._repository.link_message(
+            org_id=caller.principal.org_id,
+            invocation_id=invocation_id,
+            user_id=caller.principal.principal_id,
+            message_id=message_id,
+        )
+        if linked is None:
+            raise NotFoundError("invocation or assistant message not found")
+        return linked
 
     async def list_history(self, *, caller: AuthenticatedCaller) -> list[McpInvocationRecord]:
         records = await self._repository.list_invocations(
@@ -300,7 +322,7 @@ class ToolInvocationService:
             credential_state.expires_at is not None
             and credential_state.expires_at <= self._clock.now()
         ):
-            return await self._fail(invocation=invocation, code="credential_expired")
+            return await self._fail(invocation=invocation, tool=tool, code="credential_expired")
         stored = await self._repository.get_encrypted_credential(
             org_id=caller.principal.org_id,
             server_id=server.id,
@@ -324,6 +346,7 @@ class ToolInvocationService:
             )
             return await self._fail(
                 invocation=invocation,
+                tool=tool,
                 code="tool_dispatch_failed",
                 detail=type(exc).__name__,
             )
@@ -343,12 +366,14 @@ class ToolInvocationService:
             invocation_id=str(invocation.id),
             duration_ms=duration_ms,
         )
+        await self._sync_message(tool=tool, invocation=succeeded)
         return succeeded
 
     async def _fail(
         self,
         *,
         invocation: McpInvocationRecord,
+        tool: McpToolRecord,
         code: str,
         detail: str | None = None,
     ) -> McpInvocationRecord:
@@ -362,4 +387,32 @@ class ToolInvocationService:
         )
         if failed is None:
             raise ConflictError("the invocation changed while the tool was running")
+        await self._sync_message(tool=tool, invocation=failed)
         return failed
+
+    async def _sync_message(self, *, tool: McpToolRecord, invocation: McpInvocationRecord) -> None:
+        if invocation.message_id is None:
+            return
+        await self._repository.update_linked_message(
+            org_id=invocation.org_id,
+            invocation_id=invocation.id,
+            content=narrate_invocation(tool=tool, invocation=invocation),
+        )
+
+
+def narrate_invocation(*, tool: McpToolRecord, invocation: McpInvocationRecord) -> str:
+    """Stable transcript copy for both the initial proposal and its terminal state."""
+    if invocation.status is InvocationStatus.PENDING_APPROVAL:
+        return f"I proposed `{tool.name}`. Review and approve it in Tools before it runs."
+    if invocation.status is InvocationStatus.SUCCEEDED:
+        structured = invocation.result.get("structuredContent")
+        rendered = json.dumps(structured if structured is not None else invocation.result)
+        return f"`{tool.name}` succeeded: {rendered}"
+    if invocation.status is InvocationStatus.DENIED:
+        source = (
+            f" The motivating source was {invocation.offending_source}."
+            if invocation.offending_source is not None
+            else ""
+        )
+        return f"`{tool.name}` was denied ({invocation.denied_reason}).{source}"
+    return f"`{tool.name}` failed ({invocation.error_code or 'unknown_error'})."

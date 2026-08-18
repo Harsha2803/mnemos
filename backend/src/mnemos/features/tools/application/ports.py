@@ -7,6 +7,7 @@ from datetime import datetime
 from typing import Protocol
 
 from mnemos.core.types import InvocationStatus, JsonValue, TrustTier
+from mnemos.features.chat.domain import ChatMessageId
 from mnemos.features.identity.domain import OrgId, UserId
 from mnemos.features.tools.domain import (
     McpCredentialState,
@@ -106,6 +107,19 @@ class ToolRepository(Protocol):
     async def get_invocation(
         self, *, org_id: OrgId, invocation_id: McpInvocationId
     ) -> McpInvocationRecord | None: ...
+
+    async def link_message(
+        self,
+        *,
+        org_id: OrgId,
+        invocation_id: McpInvocationId,
+        user_id: UserId,
+        message_id: ChatMessageId,
+    ) -> McpInvocationRecord | None: ...
+
+    async def update_linked_message(
+        self, *, org_id: OrgId, invocation_id: McpInvocationId, content: str
+    ) -> bool: ...
 
     async def transition_invocation(
         self,

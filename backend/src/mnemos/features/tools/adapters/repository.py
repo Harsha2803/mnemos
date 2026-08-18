@@ -12,7 +12,7 @@ from collections.abc import Sequence
 from datetime import datetime
 from typing import cast
 
-from sqlalchemy import delete, func, select, update
+from sqlalchemy import delete, func, or_, select, update
 from sqlalchemy.dialects.postgresql import insert
 from sqlalchemy.exc import IntegrityError
 from sqlalchemy.ext.asyncio import AsyncSession
@@ -20,6 +20,8 @@ from sqlalchemy.ext.asyncio import AsyncSession
 from mnemos.core.errors import ConflictError
 from mnemos.core.ids import IdGenerator
 from mnemos.core.types import InvocationStatus, JsonValue, TrustTier
+from mnemos.features.chat.adapters.models import ChatMessage
+from mnemos.features.chat.domain import ChatMessageId
 from mnemos.features.context.adapters.models import BundleItem
 from mnemos.features.identity.domain import OrgId, UserId
 from mnemos.features.knowledge.adapters.models import Document
@@ -434,6 +436,64 @@ class SqlToolRepository:
     ) -> McpInvocationRecord | None:
         async with self._db.session(org_id=org_id) as session:
             return await _load_invocation(session, org_id=org_id, invocation_id=invocation_id)
+
+    async def link_message(
+        self,
+        *,
+        org_id: OrgId,
+        invocation_id: McpInvocationId,
+        user_id: UserId,
+        message_id: ChatMessageId,
+    ) -> McpInvocationRecord | None:
+        async with self._db.session(org_id=org_id) as session:
+            message_exists = await session.scalar(
+                select(ChatMessage.id).where(
+                    ChatMessage.org_id == org_id, ChatMessage.id == message_id
+                )
+            )
+            if message_exists is None:
+                return None
+            linked = await session.execute(
+                update(McpInvocation)
+                .where(
+                    McpInvocation.org_id == org_id,
+                    McpInvocation.id == invocation_id,
+                    McpInvocation.user_id == user_id,
+                    or_(
+                        McpInvocation.message_id.is_(None),
+                        McpInvocation.message_id == message_id,
+                    ),
+                )
+                .values(message_id=message_id)
+                .returning(McpInvocation.id)
+            )
+            if linked.scalar_one_or_none() is None:
+                return None
+            return await _load_invocation(session, org_id=org_id, invocation_id=invocation_id)
+
+    async def update_linked_message(
+        self, *, org_id: OrgId, invocation_id: McpInvocationId, content: str
+    ) -> bool:
+        message_id = (
+            select(McpInvocation.message_id)
+            .where(
+                McpInvocation.org_id == org_id,
+                McpInvocation.id == invocation_id,
+            )
+            .scalar_subquery()
+        )
+        async with self._db.session(org_id=org_id) as session:
+            updated = await session.execute(
+                update(ChatMessage)
+                .where(
+                    ChatMessage.org_id == org_id,
+                    ChatMessage.id == message_id,
+                    ChatMessage.role == "assistant",
+                )
+                .values(content=content)
+                .returning(ChatMessage.id)
+            )
+            return updated.scalar_one_or_none() is not None
 
     async def transition_invocation(
         self,

@@ -13,6 +13,7 @@ from mnemos.core.clock import FrozenClock
 from mnemos.core.config import DEV_TOOL_ENCRYPTION_KEY, Settings
 from mnemos.core.ids import DEFAULT_ID_GENERATOR, uuid7
 from mnemos.core.types import InvocationStatus, JsonValue, TrustTier
+from mnemos.features.chat.domain import ChatMessageId
 from mnemos.features.identity.application.principals import AuthenticatedCaller
 from mnemos.features.identity.domain import (
     OrgId,
@@ -146,6 +147,36 @@ async def _seed_offending_source(postgres: Postgres, org_id: OrgId) -> str:
     return str(item_id)
 
 
+async def _seed_assistant_message(
+    postgres: Postgres, org_id: OrgId, user_id: UserId
+) -> ChatMessageId:
+    session_id, message_id = uuid7(), ChatMessageId(uuid7())
+    conn = await asyncpg.connect(postgres.owner_dsn)
+    try:
+        await conn.execute(
+            """
+            INSERT INTO chat_session (id, org_id, user_id, title)
+            VALUES ($1, $2, $3, 'Tool test')
+            """,
+            session_id,
+            org_id,
+            user_id,
+        )
+        await conn.execute(
+            """
+            INSERT INTO chat_message (
+                id, org_id, session_id, ordinal, role, content, flow
+            ) VALUES ($1, $2, $3, 0, 'assistant', 'Pending tool call', 'tool')
+            """,
+            message_id,
+            org_id,
+            session_id,
+        )
+    finally:
+        await conn.close()
+    return message_id
+
+
 @pytest.mark.asyncio
 async def test_mcp_state_is_tenant_scoped_per_user_durable_and_explainable(
     postgres: Postgres,
@@ -232,6 +263,11 @@ async def test_mcp_state_is_tenant_scoped_per_user_durable_and_explainable(
             motivating_tier=TrustTier.USER,
         )
         assert pending.status is InvocationStatus.PENDING_APPROVAL
+        message_id = await _seed_assistant_message(postgres, org_a, user_a)
+        linked = await first_service.attach_message(
+            caller=caller, invocation_id=pending.id, message_id=message_id
+        )
+        assert linked.message_id == str(message_id)
 
         # Reconstructing the service simulates a process restart: the approval
         # reads and transitions the persisted invocation rather than a callback.
@@ -246,6 +282,14 @@ async def test_mcp_state_is_tenant_scoped_per_user_durable_and_explainable(
         assert succeeded.result == {"echo": "hello"}
         assert succeeded.approved_by == user_a
         assert client.credentials == [("bearer", "alice-token")]
+        conn = await asyncpg.connect(postgres.owner_dsn)
+        try:
+            transcript = await conn.fetchval(
+                "SELECT content FROM chat_message WHERE id = $1", message_id
+            )
+        finally:
+            await conn.close()
+        assert transcript == '`echo` succeeded: {"echo": "hello"}'
 
         offending_item = await _seed_offending_source(postgres, org_a)
         denied = await restarted_service.propose(

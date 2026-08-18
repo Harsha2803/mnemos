@@ -2,17 +2,17 @@
 
 from __future__ import annotations
 
-import json
 from collections.abc import AsyncGenerator, Mapping, Sequence
 
 from mnemos.core.errors import NotFoundError
-from mnemos.core.types import InvocationStatus, JsonValue, TrustTier
+from mnemos.core.types import JsonValue, TrustTier
 from mnemos.features.chat.application.ports import ChatRepository
 from mnemos.features.chat.application.titles import title_session_from_first_message
 from mnemos.features.chat.domain import AssistantDone, ChatSessionId, ChatStreamEvent
 from mnemos.features.identity.application.principals import AuthenticatedCaller
 from mnemos.features.identity.domain import OrgId
 from mnemos.features.tools.application import ToolCatalogService, ToolInvocationService
+from mnemos.features.tools.application.invocations import narrate_invocation
 from mnemos.features.tools.domain import McpInvocationRecord, McpToolRecord
 
 FLOW_NAME = "tool"
@@ -53,6 +53,7 @@ class ToolFlow:
         tool = _select_one(tools, content)
         if tool is None:
             yield await self._finish(
+                caller=caller,
                 org_id=org_id,
                 session_id=session_id,
                 content="No enabled tool matches this request. Discover a tool in Tools first.",
@@ -68,9 +69,10 @@ class ToolFlow:
             motivating_tier=TrustTier.USER,
         )
         yield await self._finish(
+            caller=caller,
             org_id=org_id,
             session_id=session_id,
-            content=_narration(tool=tool, invocation=invocation),
+            content=narrate_invocation(tool=tool, invocation=invocation),
             router_rationale=router_rationale,
             invocation=invocation,
         )
@@ -78,6 +80,7 @@ class ToolFlow:
     async def _finish(
         self,
         *,
+        caller: AuthenticatedCaller,
         org_id: OrgId,
         session_id: ChatSessionId,
         content: str,
@@ -96,6 +99,12 @@ class ToolFlow:
             flow=FLOW_NAME,
             router_rationale=router_rationale,
         )
+        if invocation is not None:
+            invocation = await self._invocations.attach_message(
+                caller=caller,
+                invocation_id=invocation.id,
+                message_id=message.id,
+            )
         return AssistantDone(
             message=message,
             extra={"tool": _invocation_payload(invocation)} if invocation is not None else None,
@@ -125,23 +134,6 @@ def _arguments_for(schema: Mapping[str, JsonValue], content: str) -> dict[str, J
     if isinstance(property_schema, dict) and property_schema.get("type") == "string":
         return {name: content}
     return {}
-
-
-def _narration(*, tool: McpToolRecord, invocation: McpInvocationRecord) -> str:
-    if invocation.status is InvocationStatus.PENDING_APPROVAL:
-        return f"I proposed `{tool.name}`. Review and approve it in Tools before it runs."
-    if invocation.status is InvocationStatus.SUCCEEDED:
-        structured = invocation.result.get("structuredContent")
-        rendered = json.dumps(structured if structured is not None else invocation.result)
-        return f"`{tool.name}` succeeded: {rendered}"
-    if invocation.status is InvocationStatus.DENIED:
-        source = (
-            f" The motivating source was {invocation.offending_source}."
-            if invocation.offending_source is not None
-            else ""
-        )
-        return f"`{tool.name}` was denied ({invocation.denied_reason}).{source}"
-    return f"`{tool.name}` failed ({invocation.error_code or 'unknown_error'})."
 
 
 def _invocation_payload(invocation: McpInvocationRecord | None) -> dict[str, JsonValue]:
