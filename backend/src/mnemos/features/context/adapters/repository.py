@@ -6,7 +6,7 @@ import hashlib
 from collections.abc import Sequence
 from typing import cast
 
-from sqlalchemy import select, update
+from sqlalchemy import delete, select, update
 from sqlalchemy.dialects.postgresql import insert
 
 from mnemos.core.ids import IdGenerator
@@ -101,6 +101,9 @@ class SqlContextRepository:
                 )
                 if existing is None:  # pragma: no cover - conflict guarantees a row
                     raise RuntimeError("context bundle conflict returned no existing row")
+                # The bundle is content-addressed. A losing concurrent writer
+                # must not leave the speculative plan behind as an orphan.
+                await session.execute(delete(ContextPlan).where(ContextPlan.id == plan_id))
                 return ContextBundleId(existing)
 
             for position, item in enumerate(command.compiled.admitted):

@@ -231,7 +231,9 @@ class SqlMemoryRepository:
                 or_(
                     public,
                     Memory.acl_tag_ids.overlap(
-                        postgresql.array(tag_ids, type_=postgresql.UUID(as_uuid=True))
+                        postgresql.array(tag_ids).cast(
+                            postgresql.ARRAY(postgresql.UUID(as_uuid=True))
+                        )
                     ),
                 )
                 if tag_ids

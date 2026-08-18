@@ -115,7 +115,8 @@ def compile_context(
             "candidates": len(candidates),
             "dedup_removed": len(dedup_rejections),
             "dedup_tokens_saved": dedup_saved,
-            "conflicts_demoted": conflicts,
+            "conflicts_demoted": len(conflicts),
+            "conflicts": conflicts,
         },
         "allocator": {
             "strategy": "calibrated_utility_density_with_section_floors",
@@ -196,7 +197,7 @@ def _deduplicate(
 
 def _demote_conflicts(
     candidates: list[ContextCandidate],
-) -> tuple[list[ContextCandidate], int]:
+) -> tuple[list[ContextCandidate], list[JsonValue]]:
     grouped: dict[tuple[str, str], list[ContextCandidate]] = defaultdict(list)
     for item in candidates:
         subject = item.metadata.get("subject_ref")
@@ -227,7 +228,10 @@ def _demote_conflicts(
         else item
         for item in candidates
     ]
-    return resolved, len(losers)
+    conflict_details: list[JsonValue] = [
+        {"candidate": loser, "preferred_source": winner} for loser, winner in sorted(losers.items())
+    ]
+    return resolved, conflict_details
 
 
 def _section_specs(candidates: list[ContextCandidate], budget: int) -> list[SectionSpec]:

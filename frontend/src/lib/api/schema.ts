@@ -517,6 +517,75 @@ export interface paths {
         patch?: never;
         trace?: never;
     };
+    "/api/v1/memories": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /** List Memory History */
+        get: operations["list_memory_history_api_v1_memories_get"];
+        put?: never;
+        /** Create Memory */
+        post: operations["create_memory_api_v1_memories_post"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/v1/memories/{memory_id}/supersede": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /** Supersede Memory */
+        post: operations["supersede_memory_api_v1_memories__memory_id__supersede_post"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/v1/memories/{memory_id}/retract": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /** Retract Memory */
+        post: operations["retract_memory_api_v1_memories__memory_id__retract_post"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/v1/context/messages/{message_id}/bundle": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /** Get Message Bundle */
+        get: operations["get_message_bundle_api_v1_context_messages__message_id__bundle_get"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
 }
 export type webhooks = Record<string, never>;
 export interface components {
@@ -527,6 +596,41 @@ export interface components {
             file: string;
             /** Title */
             title?: string | null;
+        };
+        /** BundleItemResponse */
+        BundleItemResponse: {
+            /** Id */
+            id: string;
+            /** Position */
+            position: number;
+            /** Section */
+            section: string;
+            /** Operator */
+            operator: string;
+            /** Text */
+            text: string;
+            /** Tokens */
+            tokens: number;
+            /** Raw Score */
+            raw_score: number;
+            /** Rrf Score */
+            rrf_score: number;
+            /** Utility */
+            utility: number;
+            /** Density */
+            density: number;
+            /** Trust Tier */
+            trust_tier: number;
+            /** Source Kind */
+            source_kind: string;
+            /** Source Ref */
+            source_ref: string;
+            /** Document Title */
+            document_title: string | null;
+            /** Acl Rule */
+            acl_rule: string;
+            /** Memory Id */
+            memory_id: string | null;
         };
         /** ChatMessageResponse */
         ChatMessageResponse: {
@@ -545,6 +649,8 @@ export interface components {
             flow: string | null;
             /** Router Rationale */
             router_rationale: string | null;
+            /** Bundle Id */
+            bundle_id: string | null;
             /** Prompt Tokens */
             prompt_tokens: number;
             /** Completion Tokens */
@@ -610,6 +716,37 @@ export interface components {
             page_number: number | null;
             /** Score */
             score: number | null;
+        };
+        /** ContextBundleResponse */
+        ContextBundleResponse: {
+            /** Id */
+            id: string;
+            /** Digest */
+            digest: string;
+            /** Flow */
+            flow: string;
+            /** Token Budget */
+            token_budget: number;
+            /** Tokens Consumed */
+            tokens_consumed: number;
+            /** Compiled Prompt */
+            compiled_prompt: string;
+            /** Budget Report */
+            budget_report: {
+                [key: string]: unknown;
+            };
+            /** Explain */
+            explain: {
+                [key: string]: unknown;
+            };
+            /** Admitted */
+            admitted: components["schemas"]["BundleItemResponse"][];
+            /** Rejections */
+            rejections: components["schemas"]["RejectionResponse"][];
+            /** Lineage */
+            lineage: components["schemas"]["LineageResponse"][];
+            /** Created At */
+            created_at: string;
         };
         /** CreateSessionRequest */
         CreateSessionRequest: {
@@ -790,6 +927,17 @@ export interface components {
             /** Modified At */
             modified_at: string | null;
         };
+        /** LineageResponse */
+        LineageResponse: {
+            /** Source Id */
+            source_id: string;
+            /** Target Id */
+            target_id: string;
+            /** Kind */
+            kind: string;
+            /** Rationale */
+            rationale: string | null;
+        };
         /**
          * MeResponse
          * @description Who the bearer of this access token is, resolved against the live database.
@@ -829,6 +977,111 @@ export interface components {
              * @description Tag slugs this principal can reach (constraint C4)
              */
             tags: string[];
+        };
+        /** MemoryEdgeResponse */
+        MemoryEdgeResponse: {
+            /** Id */
+            id: string;
+            /** Source Id */
+            source_id: string;
+            /** Target Id */
+            target_id: string;
+            /** Kind */
+            kind: string;
+            /** Rationale */
+            rationale: string | null;
+            /** Created At */
+            created_at: string;
+        };
+        /** MemoryHistoryResponse */
+        MemoryHistoryResponse: {
+            /** Claims */
+            claims: components["schemas"]["MemoryResponse"][];
+            /** Edges */
+            edges: components["schemas"]["MemoryEdgeResponse"][];
+        };
+        /** MemoryResponse */
+        MemoryResponse: {
+            /** Id */
+            id: string;
+            subject: components["schemas"]["MemorySubjectResponse"];
+            /** Predicate */
+            predicate: string;
+            /** Object Text */
+            object_text: string;
+            /** Kind */
+            kind: string;
+            /** Status */
+            status: string;
+            /** Scope */
+            scope: {
+                [key: string]: string;
+            };
+            /** Valid From */
+            valid_from: string;
+            /** Valid To */
+            valid_to: string;
+            /** Recorded At */
+            recorded_at: string;
+            /** Retracted At */
+            retracted_at: string | null;
+            /** Confidence */
+            confidence: number;
+            /** Trust Tier */
+            trust_tier: number;
+            /** Source Kind */
+            source_kind: string;
+            /** Source Ref */
+            source_ref: string | null;
+        };
+        /** MemorySubjectResponse */
+        MemorySubjectResponse: {
+            /** Id */
+            id: string;
+            /** Kind */
+            kind: string;
+            /** External Ref */
+            external_ref: string;
+            /** Display Name */
+            display_name: string;
+        };
+        /** MemoryWriteRequest */
+        MemoryWriteRequest: {
+            /** Subject Kind */
+            subject_kind: string;
+            /** Subject Ref */
+            subject_ref: string;
+            /** Subject Name */
+            subject_name: string;
+            /** Predicate */
+            predicate: string;
+            /** Object Text */
+            object_text: string;
+            /**
+             * Kind
+             * @default fact
+             * @enum {string}
+             */
+            kind: "fact" | "preference" | "decision" | "observation";
+            /** Scope */
+            scope?: {
+                [key: string]: string;
+            };
+            /** Valid From */
+            valid_from?: string | null;
+            /** Valid To */
+            valid_to?: string | null;
+            /**
+             * Confidence
+             * @default 1
+             */
+            confidence: number;
+        };
+        /** MemoryWriteResponse */
+        MemoryWriteResponse: {
+            claim: components["schemas"]["MemoryResponse"];
+            /** Superseded */
+            superseded: string[];
         };
         /** ProposeInvocationRequest */
         ProposeInvocationRequest: {
@@ -878,6 +1131,25 @@ export interface components {
             root?: string | null;
             /** Urls */
             urls?: string[] | null;
+        };
+        /** RejectionResponse */
+        RejectionResponse: {
+            /** Key */
+            key: string;
+            /** Section */
+            section: string;
+            /** Source Kind */
+            source_kind: string;
+            /** Source Ref */
+            source_ref: string;
+            /** Reason */
+            reason: string;
+            /** Tokens */
+            tokens: number;
+            /** Utility */
+            utility: number;
+            /** Detail */
+            detail: string | null;
         };
         /** RenameSessionRequest */
         RenameSessionRequest: {
@@ -2036,6 +2308,168 @@ export interface operations {
                 };
                 content: {
                     "application/json": components["schemas"]["InvocationResponse"];
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
+    list_memory_history_api_v1_memories_get: {
+        parameters: {
+            query?: {
+                subject_ref?: string | null;
+                as_of?: string | null;
+                believed_at?: string | null;
+                include_retracted?: boolean;
+            };
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["MemoryHistoryResponse"];
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
+    create_memory_api_v1_memories_post: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["MemoryWriteRequest"];
+            };
+        };
+        responses: {
+            /** @description Successful Response */
+            201: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["MemoryWriteResponse"];
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
+    supersede_memory_api_v1_memories__memory_id__supersede_post: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                memory_id: string;
+            };
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["MemoryWriteRequest"];
+            };
+        };
+        responses: {
+            /** @description Successful Response */
+            201: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["MemoryWriteResponse"];
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
+    retract_memory_api_v1_memories__memory_id__retract_post: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                memory_id: string;
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Successful Response */
+            204: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content?: never;
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
+    get_message_bundle_api_v1_context_messages__message_id__bundle_get: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                message_id: string;
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ContextBundleResponse"];
                 };
             };
             /** @description Validation Error */
