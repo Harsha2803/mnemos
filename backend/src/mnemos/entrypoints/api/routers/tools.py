@@ -231,9 +231,7 @@ async def propose_invocation(
     invocations: Annotated[ToolInvocationService, Depends(_invocations)],
 ) -> InvocationResponse:
     motivating_tier = (
-        TrustTier.RETRIEVED
-        if body.offending_bundle_item_id is not None
-        else TrustTier.USER
+        TrustTier.RETRIEVED if body.offending_bundle_item_id is not None else TrustTier.USER
     )
     record = await invocations.propose(
         caller=caller,
@@ -252,8 +250,7 @@ async def list_invocations(
 ) -> list[InvocationResponse]:
     _require_any_tool_access(caller)
     return [
-        _invocation_response(record)
-        for record in await invocations.list_history(caller=caller)
+        _invocation_response(record) for record in await invocations.list_history(caller=caller)
     ]
 
 
@@ -264,9 +261,7 @@ async def approve_invocation(
     invocations: Annotated[ToolInvocationService, Depends(_invocations)],
 ) -> InvocationResponse:
     return _invocation_response(
-        await invocations.approve(
-            caller=caller, invocation_id=_invocation_id(invocation_id)
-        )
+        await invocations.approve(caller=caller, invocation_id=_invocation_id(invocation_id))
     )
 
 
@@ -304,9 +299,7 @@ def _server_response(record: McpServerRecord, *, credential_configured: bool) ->
         min_trust_tier=int(record.min_trust_tier),
         requires_approval=record.requires_approval,
         last_discovered_at=(
-            record.last_discovered_at.isoformat()
-            if record.last_discovered_at is not None
-            else None
+            record.last_discovered_at.isoformat() if record.last_discovered_at is not None else None
         ),
         health_status=record.health_status,
         credential_configured=credential_configured,

@@ -15,8 +15,7 @@ class ToolCredentialCipher:
             self._fernet = Fernet(key.encode("ascii"))
         except (ValueError, TypeError) as exc:
             raise ConfigurationError(
-                "tool_encryption_key is not a valid Fernet key "
-                "(32 url-safe base64-encoded bytes)"
+                "tool_encryption_key is not a valid Fernet key (32 url-safe base64-encoded bytes)"
             ) from exc
 
     def encrypt(self, plaintext: str) -> bytes:
@@ -30,4 +29,3 @@ class ToolCredentialCipher:
                 "an MCP credential could not be decrypted — the encryption key changed "
                 "or the stored value is corrupt"
             ) from exc
-

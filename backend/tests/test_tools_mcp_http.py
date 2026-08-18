@@ -13,9 +13,7 @@ from mnemos.features.tools.adapters import mcp_http
 from mnemos.features.tools.adapters.mcp_http import StreamableHttpMcpClient
 
 
-async def _pinned(
-    url: str, *, allowed_private_hosts: object = ()
-) -> tuple[httpx.URL, str]:
+async def _pinned(url: str, *, allowed_private_hosts: object = ()) -> tuple[httpx.URL, str]:
     del allowed_private_hosts
     return httpx.URL(url).copy_with(host="203.0.113.10"), "tools.example.test"
 

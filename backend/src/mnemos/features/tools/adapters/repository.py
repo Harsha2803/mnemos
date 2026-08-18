@@ -109,9 +109,7 @@ def _invocation(row: McpInvocation, offending_source: str | None) -> McpInvocati
         caller_trust_tier=TrustTier(row.caller_trust_tier),
         denied_reason=row.denied_reason,
         offending_bundle_item_id=(
-            str(row.offending_bundle_item_id)
-            if row.offending_bundle_item_id is not None
-            else None
+            str(row.offending_bundle_item_id) if row.offending_bundle_item_id is not None else None
         ),
         offending_source=offending_source,
         approved_by=UserId(row.approved_by) if row.approved_by is not None else None,
@@ -176,21 +174,15 @@ class SqlToolRepository:
         async with self._db.session(org_id=org_id) as session:
             rows = (
                 await session.scalars(
-                    select(McpServer)
-                    .where(McpServer.org_id == org_id)
-                    .order_by(McpServer.slug)
+                    select(McpServer).where(McpServer.org_id == org_id).order_by(McpServer.slug)
                 )
             ).all()
         return [_server(row) for row in rows]
 
-    async def get_server(
-        self, *, org_id: OrgId, server_id: McpServerId
-    ) -> McpServerRecord | None:
+    async def get_server(self, *, org_id: OrgId, server_id: McpServerId) -> McpServerRecord | None:
         async with self._db.session(org_id=org_id) as session:
             row = await session.scalar(
-                select(McpServer).where(
-                    McpServer.org_id == org_id, McpServer.id == server_id
-                )
+                select(McpServer).where(McpServer.org_id == org_id, McpServer.id == server_id)
             )
         return _server(row) if row is not None else None
 
@@ -214,9 +206,7 @@ class SqlToolRepository:
                 )
             else:
                 await session.execute(
-                    delete(McpTool).where(
-                        McpTool.org_id == org_id, McpTool.server_id == server_id
-                    )
+                    delete(McpTool).where(McpTool.org_id == org_id, McpTool.server_id == server_id)
                 )
             for tool in tools:
                 statement = insert(McpTool).values(
@@ -264,9 +254,7 @@ class SqlToolRepository:
             rows = (await session.scalars(statement.order_by(McpTool.name))).all()
         return [_tool(row) for row in rows]
 
-    async def get_tool(
-        self, *, org_id: OrgId, tool_id: McpToolId
-    ) -> McpToolRecord | None:
+    async def get_tool(self, *, org_id: OrgId, tool_id: McpToolId) -> McpToolRecord | None:
         async with self._db.session(org_id=org_id) as session:
             row = await session.scalar(
                 select(McpTool).where(McpTool.org_id == org_id, McpTool.id == tool_id)
@@ -436,9 +424,7 @@ class SqlToolRepository:
                 )
             )
             await session.flush()
-            row = await _load_invocation(
-                session, org_id=org_id, invocation_id=invocation_id
-            )
+            row = await _load_invocation(session, org_id=org_id, invocation_id=invocation_id)
             if row is None:  # pragma: no cover - the insert above guarantees it
                 raise RuntimeError("invocation insert returned no row")
             return row
@@ -447,9 +433,7 @@ class SqlToolRepository:
         self, *, org_id: OrgId, invocation_id: McpInvocationId
     ) -> McpInvocationRecord | None:
         async with self._db.session(org_id=org_id) as session:
-            return await _load_invocation(
-                session, org_id=org_id, invocation_id=invocation_id
-            )
+            return await _load_invocation(session, org_id=org_id, invocation_id=invocation_id)
 
     async def transition_invocation(
         self,
@@ -494,9 +478,7 @@ class SqlToolRepository:
             )
             if updated.scalar_one_or_none() is None:
                 return None
-            return await _load_invocation(
-                session, org_id=org_id, invocation_id=invocation_id
-            )
+            return await _load_invocation(session, org_id=org_id, invocation_id=invocation_id)
 
     async def list_invocations(
         self, *, org_id: OrgId, user_id: UserId
@@ -515,16 +497,17 @@ class SqlToolRepository:
             rows = result.all()
         return [_invocation(row, source) for row, source in rows]
 
-    async def get_bundle_item_source(
-        self, *, org_id: OrgId, bundle_item_id: str
-    ) -> str | None:
+    async def get_bundle_item_source(self, *, org_id: OrgId, bundle_item_id: str) -> str | None:
         try:
             item_id = uuid.UUID(bundle_item_id)
         except ValueError:
             return None
         async with self._db.session(org_id=org_id) as session:
-            return await session.scalar(
-                select(Document.title)
-                .join(BundleItem, BundleItem.document_id == Document.id)
-                .where(BundleItem.org_id == org_id, BundleItem.id == item_id)
+            return cast(
+                str | None,
+                await session.scalar(
+                    select(Document.title)
+                    .join(BundleItem, BundleItem.document_id == Document.id)
+                    .where(BundleItem.org_id == org_id, BundleItem.id == item_id)
+                ),
             )

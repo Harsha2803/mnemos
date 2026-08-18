@@ -44,9 +44,7 @@ class ToolFlow:
         session = await self._chat.get_session(org_id=org_id, session_id=session_id)
         if session is None or session.user_id != caller.principal.principal_id:
             raise NotFoundError(f"chat session {session_id} not found")
-        await self._chat.append_user_message(
-            org_id=org_id, session_id=session_id, content=content
-        )
+        await self._chat.append_user_message(org_id=org_id, session_id=session_id, content=content)
         await title_session_from_first_message(
             repository=self._chat, org_id=org_id, session=session, content=content
         )
@@ -115,9 +113,7 @@ def _select_one(tools: Sequence[McpToolRecord], content: str) -> McpToolRecord |
     return None
 
 
-def _arguments_for(
-    schema: Mapping[str, JsonValue], content: str
-) -> dict[str, JsonValue]:
+def _arguments_for(schema: Mapping[str, JsonValue], content: str) -> dict[str, JsonValue]:
     properties = schema.get("properties")
     required = schema.get("required")
     if not isinstance(properties, dict) or not isinstance(required, list) or len(required) != 1:

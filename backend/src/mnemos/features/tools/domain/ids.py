@@ -9,4 +9,3 @@ McpServerId = NewType("McpServerId", UUID)
 McpToolId = NewType("McpToolId", UUID)
 McpGrantId = NewType("McpGrantId", UUID)
 McpInvocationId = NewType("McpInvocationId", UUID)
-

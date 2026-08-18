@@ -49,9 +49,7 @@ async def mcp(request: RpcRequest) -> JSONResponse:
                         "description": "Return a deterministic message for the Mnemos demo.",
                         "inputSchema": {
                             "type": "object",
-                            "properties": {
-                                "message": {"type": "string", "maxLength": 500}
-                            },
+                            "properties": {"message": {"type": "string", "maxLength": 500}},
                             "required": ["message"],
                             "additionalProperties": False,
                         },
@@ -83,13 +81,10 @@ def _result(
     request_id: int, result: dict[str, JsonValue], *, session_id: str | None = None
 ) -> JSONResponse:
     headers = {"Mcp-Session-Id": session_id} if session_id is not None else None
-    return JSONResponse(
-        {"jsonrpc": "2.0", "id": request_id, "result": result}, headers=headers
-    )
+    return JSONResponse({"jsonrpc": "2.0", "id": request_id, "result": result}, headers=headers)
 
 
 def _error(request_id: int, code: int, message: str) -> JSONResponse:
     return JSONResponse(
         {"jsonrpc": "2.0", "id": request_id, "error": {"code": code, "message": message}}
     )
-

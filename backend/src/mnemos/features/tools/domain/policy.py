@@ -32,4 +32,3 @@ def authorize_tool_call(
     if motivating_tier < required_tier:
         return ToolAuthorizationDecision(allowed=False, reason=TRUST_DENIED)
     return ToolAuthorizationDecision(allowed=True, reason=None)
-

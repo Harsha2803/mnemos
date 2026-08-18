@@ -85,4 +85,3 @@ class McpInvocationRecord:
     duration_ms: int | None
     error_code: str | None
     created_at: datetime
-

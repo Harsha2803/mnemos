@@ -3,8 +3,13 @@
 from __future__ import annotations
 
 import pytest
+from cryptography.fernet import Fernet
+from pydantic import ValidationError
 
+from mnemos.core.config import Settings
+from mnemos.core.errors import ConfigurationError
 from mnemos.core.types import TrustTier
+from mnemos.features.tools.adapters.crypto import ToolCredentialCipher
 from mnemos.features.tools.domain.policy import (
     GRANT_DENIED,
     LIVE_ROLE_DENIED,
@@ -38,3 +43,17 @@ def test_authorization_requires_live_role_grant_and_trust(
     assert decision.allowed is (expected is None)
     assert decision.reason == expected
 
+
+def test_production_rejects_the_published_tool_encryption_key() -> None:
+    with pytest.raises(ValidationError, match="MNEMOS_TOOL_ENCRYPTION_KEY"):
+        Settings(
+            env="production",
+            jwt_secret="production-jwt-secret-at-least-32-bytes",
+            dsn_encryption_key=Fernet.generate_key().decode("ascii"),
+            source_encryption_key=Fernet.generate_key().decode("ascii"),
+        )
+
+
+def test_tool_cipher_rejects_a_malformed_key() -> None:
+    with pytest.raises(ConfigurationError, match="valid Fernet key"):
+        ToolCredentialCipher("not-a-fernet-key")

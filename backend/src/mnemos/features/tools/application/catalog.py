@@ -67,12 +67,8 @@ class ToolCatalogService:
         stored = await self._repository.get_encrypted_credential(
             org_id=org_id, server_id=server_id, user_id=user_id
         )
-        credential = (
-            (stored[0], self._cipher.decrypt(stored[1])) if stored is not None else None
-        )
-        discovered = await self._client.list_tools(
-            endpoint=server.endpoint, credential=credential
-        )
+        credential = (stored[0], self._cipher.decrypt(stored[1])) if stored is not None else None
+        discovered = await self._client.list_tools(endpoint=server.endpoint, credential=credential)
         records = [
             McpToolRecord(
                 id=McpToolId(self._ids.new()),

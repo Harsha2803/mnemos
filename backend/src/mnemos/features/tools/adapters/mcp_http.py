@@ -92,7 +92,7 @@ class StreamableHttpMcpClient:
                 DiscoveredMcpTool(
                     name=name,
                     description=description if isinstance(description, str) else None,
-                    input_schema=cast(dict[str, JsonValue], schema),
+                    input_schema=schema,
                     is_mutating=not read_only,
                 )
             )
@@ -119,9 +119,7 @@ class StreamableHttpMcpClient:
         )
         return result
 
-    async def _initialize(
-        self, *, endpoint: str, credential: tuple[str, str] | None
-    ) -> str | None:
+    async def _initialize(self, *, endpoint: str, credential: tuple[str, str] | None) -> str | None:
         _, headers = await self._rpc(
             endpoint=endpoint,
             credential=credential,
@@ -134,7 +132,7 @@ class StreamableHttpMcpClient:
                 "clientInfo": {"name": "mnemos", "version": "0.2.0"},
             },
         )
-        return headers.get("mcp-session-id")
+        return cast(str | None, headers.get("mcp-session-id"))
 
     async def _rpc(
         self,
@@ -194,23 +192,19 @@ class StreamableHttpMcpClient:
                         )
                 response_headers = response.headers
         except httpx.HTTPError as exc:
-            raise UpstreamError(
-                "the MCP server is unavailable", reason=type(exc).__name__
-            ) from exc
+            raise UpstreamError("the MCP server is unavailable", reason=type(exc).__name__) from exc
 
         decoded = _decode_rpc_body(bytes(body))
         error = decoded.get("error")
         if isinstance(error, dict):
             code = error.get("code")
-            raise UpstreamError(
-                "the MCP tool call failed", reason=f"JSON-RPC error {code!r}"
-            )
+            raise UpstreamError("the MCP tool call failed", reason=f"JSON-RPC error {code!r}")
         result = decoded.get("result")
         if not isinstance(result, dict):
             raise UpstreamError(
                 "the MCP server returned an invalid response", reason="result was not an object"
             )
-        return cast(dict[str, JsonValue], result), response_headers
+        return result, response_headers
 
 
 def validate_arguments(
@@ -271,4 +265,3 @@ def _decode_rpc_body(body: bytes) -> dict[str, JsonValue]:
             "the MCP server returned an invalid response", reason="invalid JSON-RPC envelope"
         )
     return cast(dict[str, JsonValue], decoded)
-

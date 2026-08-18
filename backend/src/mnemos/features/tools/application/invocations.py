@@ -57,9 +57,7 @@ class ToolInvocationService:
     ) -> McpGrantRecord:
         if not caller.principal.has_permission(TOOL_MANAGE):
             raise AuthorizationError("you are not allowed to manage tool grants")
-        tool = await self._repository.get_tool(
-            org_id=caller.principal.org_id, tool_id=tool_id
-        )
+        tool = await self._repository.get_tool(org_id=caller.principal.org_id, tool_id=tool_id)
         if tool is None:
             raise NotFoundError("tool not found")
         return await self._repository.put_grant(
@@ -206,9 +204,7 @@ class ToolInvocationService:
             raise ConflictError("the invocation is no longer awaiting approval")
         return denied
 
-    async def list_history(
-        self, *, caller: AuthenticatedCaller
-    ) -> list[McpInvocationRecord]:
+    async def list_history(self, *, caller: AuthenticatedCaller) -> list[McpInvocationRecord]:
         records = await self._repository.list_invocations(
             org_id=caller.principal.org_id,
             user_id=caller.principal.principal_id,
@@ -277,9 +273,7 @@ class ToolInvocationService:
     async def _load_tool_server(
         self, *, caller: AuthenticatedCaller, tool_id: McpToolId
     ) -> tuple[McpToolRecord, McpServerRecord]:
-        tool = await self._repository.get_tool(
-            org_id=caller.principal.org_id, tool_id=tool_id
-        )
+        tool = await self._repository.get_tool(org_id=caller.principal.org_id, tool_id=tool_id)
         if tool is None or not tool.is_enabled:
             raise NotFoundError("tool not found")
         server = await self._repository.get_server(
@@ -312,9 +306,7 @@ class ToolInvocationService:
             server_id=server.id,
             user_id=caller.principal.principal_id,
         )
-        credential = (
-            (stored[0], self._cipher.decrypt(stored[1])) if stored is not None else None
-        )
+        credential = (stored[0], self._cipher.decrypt(stored[1])) if stored is not None else None
         started = time.perf_counter()
         try:
             result = await self._client.call_tool(
@@ -371,4 +363,3 @@ class ToolInvocationService:
         if failed is None:
             raise ConflictError("the invocation changed while the tool was running")
         return failed
-
