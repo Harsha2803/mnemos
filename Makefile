@@ -33,7 +33,7 @@ install-neural: install ## Also install sentence-transformers (~2.5GB, optional)
 
 # ------------------------------------------------------------------ the stack
 
-up: ## Bring the whole stack up (nine services, web included)
+up: ## Bring the whole stack up (ten services, web and demo MCP included)
 	docker compose up -d
 
 down: ## Stop everything; volumes are preserved
@@ -46,7 +46,7 @@ ps: ## Show service health
 	docker compose ps
 
 rebuild: ## Rebuild the images that build from source and restart them
-	docker compose up -d --build api worker realtime web
+	docker compose up -d --build api worker realtime web demo-mcp
 
 bootstrap: ## First org + admin + system roles + provider rows. Idempotent.
 	@echo "Password comes from MNEMOS_BOOTSTRAP_ADMIN_PASSWORD or an interactive"

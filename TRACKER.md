@@ -6,15 +6,48 @@
 > **and [`docs/ADAPTATION.md`](docs/ADAPTATION.md)** *in the same commit* — a stale
 > tracker is worse than none.
 
-**Last updated:** 2026-08-18 — `A4` merged in PR #20 and the remaining roadmap was narrowed
-to the three capabilities with the strongest portfolio value: `B3`, `C4`, and reduced `D1`.
-`B4` and `C1`–`C3` are deliberately deferred, not unfinished commitments. See the first
-dated note below.
-**Phase:** **Portfolio finish.** Three committed milestones remain: `B3` → `C4` → `D1`.
-**Next task:** `B3` — build the single-call MCP tool runtime: registry, per-user credentials,
-trust-tier authorization, durable approvals, invocation records, and the tool console.
-**Branch right now:** `agent/resume-focused-roadmap`, draft PR #21; documentation-only
-scope reset after `A4` merged to `main`. Merge this plan PR before starting `B3`.
+**Last updated:** 2026-08-18 — `B3` is complete on PR #23: the self-hosted MCP runtime,
+per-user credentials, live-role/trust authorization, durable approval, invocation history,
+single-call chat route, and Tool console are implemented and live-verified.
+**Phase:** **Portfolio finish.** Two committed milestones remain: `C4` → reduced `D1`.
+**Next task:** `C4` — port bitemporal memory and the budgeted context compiler to Postgres,
+make every bundle inspectable, and replace the SQLite benchmark with Postgres measurements.
+**Branch right now:** `agent/b3-safe-mcp-tools`, draft PR #23; `B3` implementation and
+evidence complete. Close its repository lifecycle before starting `C4`.
+
+> ### 2026-08-18 — `B3` done: one MCP call is gated, durable, and inspectable
+>
+> **You can now register the included self-hosted MCP server, discover its cached `echo`
+> tool, grant it to your live identity, propose one call, approve the persisted invocation,
+> and inspect the result in the Tool console.** A4's router also recognizes explicit
+> single-tool requests and shows the pending/result state in the existing transcript;
+> approval, denial, and failure update the linked persisted assistant message, so a reload
+> does not rewrite terminal history back to pending.
+>
+> The implementation reuses M2's five MCP tables. Frozen records and ports sit above an
+> org-predicated repository running under forced RLS. Credentials are Fernet-encrypted under
+> a dedicated production-required key, keyed by `(server, user)`, and read models expose only
+> display-safe state. The streamable-HTTP client pins resolved destinations, refuses
+> redirects, bounds time and bytes, validates discovery schemas and arguments, and talks to
+> the deterministic `demo-mcp` Compose service without an account or API key.
+>
+> Every invocation rechecks the caller's current `tool:invoke` authority, active personal
+> grant, and persisted motivating trust tier. Approval is a database transition, not an
+> in-memory callback, and dispatch reads only the approving user's credential. A retrieved
+> source cannot motivate a user-tier tool; the denial persists the bundle item and resolves
+> its document title so the UI can say which source lacked authority. B4 planning, loops,
+> checkpoints, and replay remain deliberately absent.
+>
+> **Evidence:** final `make test` passed 455 tests; the focused B3 suite passed 13 tests
+> against real Postgres, the MCP wire, production-key validation, and fixture import.
+> `make lint` and `make types` were clean across 204 typed source files. Frontend lint,
+> typecheck, 114 Vitest tests, and the production Next build passed. The full Compose stack
+> rebuilt; a Pydantic 2.13-only recursive-alias startup failure in the new fixture was found
+> live, fixed, and regression-tested. `/readyz` returned Postgres, Redis, Ollama, and object
+> storage `ok`, all ten long-running services were up, `alembic check` reported no drift,
+> and `frontend/e2e/tools.spec.ts` passed the Chromium register → discover → grant → propose
+> → approve → result journey in 2.8 seconds. The benchmark was not rerun because the
+> retrieval/compiler path did not move; that measurement belongs to `C4`.
 
 > ### 2026-08-18 — the portfolio finish is `B3` → `C4` → reduced `D1`
 >
@@ -1219,7 +1252,7 @@ order" list is the authoritative next-up sequence; the note above it explains wh
 |---|---|---|---|
 | **B1** | Object storage · source connectors (MinIO/S3, local FS, HTTP) · Redis Streams event bus · sources UI | **connect a source, browse it, and watch ingestion events arrive live** | ✅ 2026-08-17 — all 5/5 deliverables done, browser-verified against the rebuilt stack |
 | **B2** | Ingestion jobs at scale: heartbeat, retries, status history, stuck-job reaper · per-job progress UI | **ingest a folder and watch every job's progress — including one that dies, surfaced as stuck rather than silently lost** | ✅ 2026-08-17 — verified against the rebuilt stack |
-| **B3** | MCP tool runtime: registry, per-user credentials, trust tiers, approval gates · tool console | **register a tool, have the assistant call it, and approve a gated call** — with a denial that names the offending source on screen | ⬜ |
+| **B3** | MCP tool runtime: registry, per-user credentials, trust tiers, approval gates · tool console | **register a tool, have the assistant call it, and approve a gated call** — with a denial that names the offending source on screen | ✅ 2026-08-18 — PR #23, rebuilt-stack Chromium verification |
 | **B4** | Agent flow: bounded state machine over tools, checkpoints, step trace | **give it a multi-step task and watch it plan, call tools and finish — with every step inspectable** | ⏸ deferred — not required for the portfolio finish |
 
 **Phase C — make it enterprise, and land the deep claim.**
@@ -2387,8 +2420,8 @@ memory/compiler/benchmark move in committed `C4`.
 
 ### ⬜ Designed extension seams, not all committed
 
-Committed and not built: `B3` single-call MCP runtime · `C4` governed context · reduced
-`D1` portfolio release.
+Built: `B3` single-call MCP runtime. Committed and not built: `C4` governed context ·
+reduced `D1` portfolio release.
 
 Deliberately deferred: `B4` multi-step agent runtime · `C1` API keys/full RBAC/tag ACL UI ·
 `C2` prompt/cost management · `C3` conversation-product depth. Neo4j, SAML, Celery, and
@@ -2402,20 +2435,20 @@ they do not expand the committed finish line.
 | Repo | `/home/shreeharsha/Personal/Projects/Resume_001/mnemos` |
 | Python | 3.12.3, venv at `.venv` |
 | Install | `.venv/bin/pip install -e "./backend[dev]"` |
-| Stack up | `docker compose up -d` — nine services including `web`; no profile flag since F0 |
+| Stack up | `docker compose up -d` — ten long-running services including `web` and `demo-mcp`; no profile flag |
 | Schema report | `docker compose exec api mnemosctl db doctor` |
 | Migrations | `cd backend && MNEMOS_DATABASE_URL=postgresql+asyncpg://mnemos:mnemos@localhost:15432/mnemos ../.venv/bin/alembic upgrade head \| downgrade base \| check`. The DSN is explicit because the default in `core/config.py` names `mnemos_app` on `:5432`, which from the host is the machine's own Postgres and not the compose one |
-| Tests | `make test` (or `cd backend && ../.venv/bin/python -m pytest`) → **250 passed** (needs Docker + Keycloak; see §4.8) |
+| Tests | `make test` (or `cd backend && ../.venv/bin/python -m pytest`) → **455 passed** (needs Docker + Keycloak; see §4.8) |
 | Fast tests | `make test-fast` — **226 passed**, ~29s. Its ignore list predates `test_principal_repository.py`, which also uses testcontainers and is not on it, so this still needs Docker despite the name; the 2 live-Keycloak tests still skip cleanly when the stack is down. Fixing the ignore list is a Makefile one-liner for whoever next needs a genuinely hermetic fast loop — `pytest -q tests/test_invariants.py` remains the actually-hermetic one (§4 item 8) |
 | First-run setup | `mnemosctl bootstrap --org-slug <slug> --org-name <name> --admin-email <addr>`, password from `MNEMOS_BOOTSTRAP_ADMIN_PASSWORD` or the prompt. Idempotent; re-running is safe |
 | Bootstrapped locally | org `mnemos` / admin `admin@mnemos.local` / password `mnemos-dev-admin-password` — a **dev-stack credential**, in the same class as Keycloak's `admin`/`admin` and MinIO's `mnemos-dev-secret`, and never to be reused anywhere real |
 | Signing in through the browser | org slug `mnemos`, then Keycloak wants a **realm** credential — `analyst@mnemos.local` / `analyst` or `user@mnemos.local` / `user`, **not** `admin@mnemos.local`, whose realm and internal-provider identities collide on email and are denied by design (§4 items 37 and **40**) |
-| Type check | `../.venv/bin/mypy --strict src/mnemos/core src/mnemos/features src/mnemos/entrypoints` — clean on everything M3 has touched; what still fails project-wide is listed in §4 item 19 |
+| Type check | `make types` — `mypy --strict` clean across 204 source files |
 | DB roles | `migrate` connects as `mnemos` (owner). api/worker/realtime connect as `mnemos_app` |
-| Host ports | postgres `15432`, redis `6380`, api `8000`, realtime `8001`, keycloak `8080`, minio `9000/9001`, ollama `11434` |
+| Host ports | postgres `15432`, redis `6380`, api `8000`, realtime `8001`, demo MCP `8100`, keycloak `8080`, minio `9000/9001`, ollama `11434` |
 | UI | **The app shell at `http://localhost:3000`** (F0). Also Swagger `http://localhost:8000/docs` · Keycloak `:8080` (`admin`/`admin`) · MinIO `:9001` (`mnemos`/`mnemos-dev-secret`) |
-| Frontend gate | `cd frontend && npm ci && npm run lint && npx tsc --noEmit && npm run test && npm run build` → **76 tests pass**, all four clean |
-| Browser end-to-end | `cd frontend && npm run test:e2e` — Playwright over the live stack, **7 passed**. Needs `npx playwright install chromium` once. Skips loudly, naming the unreachable service, when the stack is down. Not in CI (§4 item 39) |
+| Frontend gate | `cd frontend && npm ci && npm run lint && npx tsc --noEmit && npm run test && npm run build` → **114 tests pass**, all four clean |
+| Browser end-to-end | `cd frontend && npx playwright test e2e/tools.spec.ts --project=chromium` — the B3 register → discover → grant → propose → approve → result journey passed against rebuilt Compose. Needs `npx playwright install chromium` once. Browser tests are not in CI (§4 item 39) |
 | Regenerate API types | `cd frontend && npm run generate:api` against a running api. `src/lib/api/schema.ts` is committed and never hand-edited |
 | Git identity | `Cheella Sree Harsha <cheellasreeharsha2803@gmail.com>` (repo-local) |
 | GitHub | `Harsha2803/mnemos`, private. **Two accounts in `gh`; keep `Harsha2803` active** |
@@ -2829,77 +2862,75 @@ Recorded so they are not rediscovered as surprises:
 
 ## 5. NEXT TASK
 
-`A4` is done and verified. Phase A is complete; resume the interrupted Phase-B sequence.
+`B3` is done and verified. Do not continue into deferred `B4`; the deep context claim is next.
 
-### `B3` — register and safely call one MCP tool
+### `C4` — make context compiled, governed, and inspectable
 
-**The sentence (C14):** register a self-hosted MCP server, let the assistant propose one
-tool call, approve a gated invocation, and see its result and audit state in the app — while
-an untrusted-document-motivated call is denied with the offending source named on screen.
+**The sentence (C14):** open any answer and inspect the exact context bundle that produced
+it — every admitted item, every exclusion and reason, memory lineage, trust tier, and token
+spend against a hard budget — with the published benchmark reproduced on Postgres.
 
 **What already exists and must be reused, not rebuilt:**
-- `features/tools/adapters/models.py` and the M2 schema already contain `mcp_server`,
-  `mcp_tool`, `mcp_credential`, `mcp_grant`, and `mcp_invocation`. Reconcile code to those
-  real columns before proposing a migration; do not create a parallel tool schema.
-- A4's single chat surface and router remain the entry point. Extend routing narrowly for a
-  single tool request; do not add a second ask box or turn B3 into B4's multi-step agent.
-- `AuthenticatedCaller` supplies the live principal and database-derived roles. Credentials
-  are per user; there is no shared-server credential fallback, and no role may come from a
-  request header.
-- `TrustTier` already distinguishes user-authored (`USER`) from retrieved (`RETRIEVED`)
-  content. The invocation boundary must persist the motivating tier and deny insufficiently
-  trusted calls even if the model asks confidently.
-- Reuse the connector SSRF work where its endpoint policy fits: registered destinations,
-  DNS-rebinding-safe resolution, explicit timeouts, and no redirect-following shortcut.
-  MCP output is untrusted (`RETRIEVED` today) and never becomes instruction authority.
+- The quarantined `backend/src/mnemos/_v1/` kernel is the independent reference implementation
+  for bitemporal memory, retrieval fusion/conflict handling, the six-phase compiler, inspector
+  data, and benchmark. Port behavior behind the current typed architecture; do not import the
+  SQLite store into runtime code or rewrite proven algorithms without evidence.
+- M2 already created `subject`, `memory`, `memory_edge`, `context_plan`, `context_bundle`, and
+  `bundle_item`, including the bitemporal exclusion constraint, cycle trigger, budget CHECK,
+  foreign keys, indexes, and forced RLS. Reconcile repositories to those real columns before
+  proposing migrations; keep explicit `org_id` predicates as well as RLS.
+- A2 already owns Postgres vector/lexical retrieval, in-scan ACL and revision exclusion,
+  fusion, deduplication, and citations. The compiler must consume those ports and persisted
+  candidates, not reintroduce `_v1`'s brute-force scan or a second retrieval implementation.
+- A1/A2/A3/B3 already persist sessions, messages, citations, SQL/tool outcomes, and the
+  selected flow. Compile the context used by those answers and attach its existing
+  `chat_message.bundle_id`; do not add a second conversation surface.
+- `Clock`, `IdGenerator`, `TrustTier`, tokenizer/embedder ports, and the empty Bundle inspector
+  state already exist. Preserve the zero-download hashing default and keep benchmark arms fair.
 
 **Deliverables, in build order — one commit (or a small adjacent group) per numbered item:**
 
-1. **Tool domain, repositories, and credential boundary.** Define frozen domain records and
-   ports for servers, discovered tools, grants, per-user credentials, and invocations. Build
-   org-scoped repositories over the existing tables, explicit `org_id` predicates plus RLS,
-   and encrypted credential storage with production rejecting the dev key. Secrets must never
-   be returned by read models, logged, or shared between users.
-2. **MCP client + discovery.** Implement the first free, self-hosted transport end to end
-   (streamable HTTP is sufficient for the slice) with initialize/list-tools/call-tool JSON-RPC,
-   registered-endpoint/SSRF enforcement, timeouts, response-size caps, and JSON-Schema argument
-   validation before dispatch. Ship a deterministic local demo MCP server/fixture so the
-   milestone needs no third-party account. Cache discovery in `mcp_tool`; no round trip is
-   required merely to render the catalog.
-3. **Trust policy, grants, and durable approval.** Resolve grants against the current user and
-   live role bindings, compare the motivating trust tier with the server/tool requirement,
-   and always create an `mcp_invocation` record. Mutating or configured-gated calls enter
-   `pending_approval`; approve/deny endpoints transition that persisted state and only an
-   approved call can dispatch. A trust-tier denial records a stable public reason and the
-   offending source/bundle item; internal errors and decrypted credentials stay server-side.
-4. **Single-call chat flow + tool console.** Extend A4 routing/model prompting only far enough
-   to select one available tool with validated arguments, run or pause that one invocation,
-   then narrate its result in the existing transcript. Add authenticated server registration,
-   discovery, credential/grant, approval, and invocation-history APIs plus a typed frontend
-   Tool console. The transcript/console must visibly distinguish proposed, awaiting approval,
-   denied, succeeded, and failed; the trust denial names the source that lowered authority.
-5. **Tests and live verification.** Unit-test policy/argument validation; integration-test RLS,
-   per-user credential isolation, discovery, approval persistence across service restart, and
-   invocation audit rows against real Postgres and the local MCP fixture. Prove a
-   `TrustTier.RETRIEVED` source cannot trigger a user-tier tool and that the denial names it. Rebuild
-   Compose, check `/readyz`, then use Chromium to register/discover the demo server, ask for a
-   tool call, approve it, and see the result/history.
+1. **Bitemporal memory domain and Postgres lifecycle.** Port frozen memory/subject records,
+   ports, and create/supersede/retract/as-of semantics from `_v1`. Implement org-scoped
+   repositories over the existing tables, preserving belief time (`recorded_at` /
+   `retracted_at`), validity time (`valid_from` / `valid_to`), lineage edges, one-live-fact
+   enforcement, cycle prevention, and transactional supersession. Add focused domain and
+   real-Postgres invariant/RLS tests; no overwrite API may exist.
+2. **Budgeted compiler over current operators.** Port planning, calibrated utility, trust
+   fences, rank fusion inputs, near-duplicate removal, conflict demotion, section floors and
+   ceilings, and final exact-token verification behind `features/context/` ports. Reuse A2
+   retrieval plus memory/history/SQL/tool inputs where available, enforce deadlines and
+   deterministic degradation, and keep `tokens_consumed <= token_budget` true after all
+   headers, provenance labels, and fences are rendered.
+3. **Persist and attach the explainable artifact.** Write `context_plan`, `context_bundle`,
+   and ordered `bundle_item` rows atomically, including digest, operator/provenance, trust,
+   score/utility/density, ACL decision, per-section spend, and explicit rejection reasons.
+   Attach the bundle to the assistant message for each supported flow and ensure replay reads
+   the persisted artifact rather than silently recompiling different context.
+4. **Memory/context API and inspector UI.** Add the smallest authenticated memory lifecycle
+   slice needed to demonstrate create, supersede, retract, and as-of history. Replace the
+   Bundle tab's empty state with a typed inspector for admissions, exclusions, conflicts,
+   provenance, trust, lineage, and budget bars; keep citations/SQL/tool panels intact. A
+   stranger must be able to see both why an item entered and why another did not.
+5. **Benchmark and end-to-end evidence.** Port the benchmark store/path to Postgres without
+   changing the corpus, seeds, budgets, metrics, or fair naive arm. Run invariant/property,
+   bitemporal, compiler, RLS, and persistence tests; rebuild Compose; verify `/readyz`; and
+   use Chromium to create/supersede memory, ask a routed question, and inspect its persisted
+   bundle. Commit machine-readable Postgres results and replace every SQLite-labelled README
+   number with the exact reproduction command and honest limitations.
 
-**Explicitly NOT `B3`, so nobody drifts:** multi-step planning, checkpoints, replay, loops,
-or recovery across several calls (`B4`); the full context compiler/bitemporal memory (`C4`);
-generated MCP servers from arbitrary OpenAPI, every transport, or paid SaaS integrations.
-Keep Ollama and the free self-hosted path as the default.
+**Explicitly NOT `C4`, so nobody drifts:** API keys/full RBAC UI (`C1`), prompt/cost
+management (`C2`), folders/bookmarks/expanded audit (`C3`), multi-step tools (`B4`), a new
+vector database, graph database, or paid model. `C4` ports and exposes the governed kernel;
+it does not reopen the deferred enterprise roadmap.
 
 ### Then, in order — the complete committed finish
 
-Each item is one session and one repository lifecycle. There are exactly three committed
-milestones after the documentation-only scope reset:
+Each item is one session and one repository lifecycle. Exactly two committed milestones remain:
 
-1. **`B3` — register and safely call one MCP tool.** ⬅ **next.** Registry, per-user
-   credentials, trust-tier enforcement, durable approval, invocation audit, and Tool console.
-2. **`C4` — make context compiled and inspectable.** Port bitemporal memory and the budgeted
+1. **`C4` — make context compiled and inspectable.** ⬅ **next.** Port bitemporal memory and the budgeted
    compiler to Postgres, expose bundle `EXPLAIN` in the app, and re-run the benchmark.
-3. **Reduced `D1` — ship the portfolio release.** Prove clean-clone Compose, cover the
+2. **Reduced `D1` — ship the portfolio release.** Prove clean-clone Compose, cover the
    critical journeys in Chromium, add a deterministic walkthrough, and rewrite the README
    around reproducible measurements and honest limitations.
 

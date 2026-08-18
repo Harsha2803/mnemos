@@ -37,6 +37,13 @@ def test_a_write_like_data_request_still_routes_to_the_guarded_nl2sql_flow() -> 
     assert decision.reason == "Mentions database or SQL concepts."
 
 
+def test_an_explicit_single_tool_request_routes_to_tools() -> None:
+    decision = classify_message("Use the echo tool with hello from chat")
+
+    assert decision.flow is RouteFlow.TOOL
+    assert decision.reason == "Requests one registered tool call."
+
+
 def test_document_vocabulary_wins_over_ambiguous_business_vocabulary() -> None:
     decision = classify_message("Summarise the quarterly sales report")
 

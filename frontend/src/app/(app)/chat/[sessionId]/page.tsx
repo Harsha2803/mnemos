@@ -97,7 +97,7 @@ export default function ChatSessionPage() {
             ),
           );
         },
-        onDone: (message, nl2sql) => {
+        onDone: (message, nl2sql, tool) => {
           setMessages((prev) =>
             prev.map((m) =>
               m.id === assistantMessageId
@@ -108,6 +108,7 @@ export default function ChatSessionPage() {
                     flow: message.flow,
                     routeReason: message.router_rationale,
                     nl2sql,
+                    tool,
                   }
                 : m,
             ),

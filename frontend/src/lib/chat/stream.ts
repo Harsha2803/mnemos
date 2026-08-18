@@ -25,7 +25,7 @@ import type { components } from "@/lib/api/schema";
 
 export type ChatMessage = components["schemas"]["ChatMessageResponse"];
 
-export type AnswerFlow = "chat" | "rag" | "nl2sql";
+export type AnswerFlow = "chat" | "rag" | "nl2sql" | "tool";
 
 export type RouteDecision = {
   flow: AnswerFlow;
@@ -71,11 +71,21 @@ export type Nl2SqlResult = {
   rows: SqlCellValue[][];
 };
 
+export type ToolResult = {
+  id: string;
+  tool_id: string;
+  status: "pending_approval" | "approved" | "denied" | "succeeded" | "failed";
+  denied_reason: string | null;
+  offending_source: string | null;
+  result: Record<string, unknown>;
+  error_code: string | null;
+};
+
 export type ChatStreamHandlers = {
   onRoute: (decision: RouteDecision) => void;
   onToken: (text: string) => void;
   /** `nl2sql` is present only when the answer came from the NL2SQL flow. */
-  onDone: (message: ChatMessage, nl2sql?: Nl2SqlResult) => void;
+  onDone: (message: ChatMessage, nl2sql?: Nl2SqlResult, tool?: ToolResult) => void;
   onError: (message: string) => void;
 };
 
@@ -159,7 +169,11 @@ function dispatch(frame: string, handlers: ChatStreamHandlers): void {
   } else if (name === "token" && typeof record.text === "string") {
     handlers.onToken(record.text);
   } else if (name === "done" && isChatMessage(record.message)) {
-    handlers.onDone(record.message, isNl2SqlResult(record.nl2sql) ? record.nl2sql : undefined);
+    handlers.onDone(
+      record.message,
+      isNl2SqlResult(record.nl2sql) ? record.nl2sql : undefined,
+      isToolResult(record.tool) ? record.tool : undefined,
+    );
   } else if (name === "error" && typeof record.message === "string") {
     handlers.onError(record.message);
   }
@@ -171,11 +185,15 @@ function isChatMessage(value: unknown): value is ChatMessage {
 
 function isRouteDecision(value: Record<string, unknown>): value is RouteDecision {
   return (
-    (value.flow === "chat" || value.flow === "rag" || value.flow === "nl2sql") &&
+    (value.flow === "chat" || value.flow === "rag" || value.flow === "nl2sql" || value.flow === "tool") &&
     typeof value.reason === "string"
   );
 }
 
 function isNl2SqlResult(value: unknown): value is Nl2SqlResult {
   return typeof value === "object" && value !== null && "sql" in value && "verdict" in value;
+}
+
+function isToolResult(value: unknown): value is ToolResult {
+  return typeof value === "object" && value !== null && "id" in value && "status" in value;
 }

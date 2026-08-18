@@ -14,8 +14,8 @@ next executable brief live in [`TRACKER.md`](../TRACKER.md).
 
 | Stage | Milestone | Outcome | Why it matters |
 |---|---|---|---|
-| **Now** | `B3` — safe single-call MCP tools | Register, discover, approve, invoke, and audit one self-hosted tool with trust-tier denial | Shows current AI-tooling experience and security judgment. |
-| **Next** | `C4` — governed context | Port bitemporal memory and the budgeted compiler to Postgres; expose `EXPLAIN` in the app | Lands the project's strongest and most differentiated technical claim. |
+| **Built** | `B3` — safe single-call MCP tools | Register, discover, approve, invoke, and audit one self-hosted tool with trust-tier denial | Shows current AI-tooling experience and security judgment. |
+| **Now** | `C4` — governed context | Port bitemporal memory and the budgeted compiler to Postgres; expose `EXPLAIN` in the app | Lands the project's strongest and most differentiated technical claim. |
 | **Finish** | reduced `D1` — portfolio release | Reproducible Compose startup, critical-path E2E, scripted demo, measured README | Makes the work easy to evaluate and every claim reproducible. |
 
 After `D1`, the committed roadmap is complete. New scope should be added only in response to

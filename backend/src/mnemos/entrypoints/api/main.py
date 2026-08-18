@@ -39,6 +39,7 @@ from mnemos.entrypoints.api.routers import auth as auth_router
 from mnemos.entrypoints.api.routers import chat as chat_router
 from mnemos.entrypoints.api.routers import connectors as connectors_router
 from mnemos.entrypoints.api.routers import knowledge as knowledge_router
+from mnemos.entrypoints.api.routers import tools as tools_router
 from mnemos.entrypoints.api.security import (
     bind_caller_context,
     enforce_authentication,
@@ -82,9 +83,14 @@ from mnemos.features.knowledge.adapters.retrieval import SqlRetriever
 from mnemos.features.knowledge.application.service import KnowledgeService
 from mnemos.features.knowledge.domain import HashingEmbedder, HeuristicTokenizer
 from mnemos.features.llm.adapters.ollama import OllamaChatModel
+from mnemos.features.tools.adapters.crypto import ToolCredentialCipher
+from mnemos.features.tools.adapters.mcp_http import StreamableHttpMcpClient
+from mnemos.features.tools.adapters.repository import SqlToolRepository
+from mnemos.features.tools.application import ToolCatalogService, ToolInvocationService
 from mnemos.flows.nl2sql.application import Nl2SqlFlow
 from mnemos.flows.rag.application import RagFlow
 from mnemos.flows.router.application import RouterService
+from mnemos.flows.tools.application import ToolFlow
 from mnemos.platform.cache import Cache
 from mnemos.platform.db import Database
 from mnemos.platform.objectstore.s3 import S3ObjectStore
@@ -249,6 +255,37 @@ async def lifespan(app: FastAPI) -> AsyncIterator[None]:
     )
     app.state.ingest_jobs = IngestJobRepository(app.state.db, DEFAULT_ID_GENERATOR)
 
+    # --- tools: one registered, authorized, durable MCP call ---------------
+    # Separate no-redirect client: following an MCP redirect could bypass the
+    # endpoint that was resolved, checked, and pinned by the SSRF boundary.
+    app.state.tool_http = httpx.AsyncClient(follow_redirects=False)
+    tool_repository = SqlToolRepository(app.state.db, DEFAULT_ID_GENERATOR)
+    tool_cipher = ToolCredentialCipher(settings.tool_encryption_key.get_secret_value())
+    tool_client = StreamableHttpMcpClient(
+        client=app.state.tool_http,
+        timeout_s=float(settings.mcp_timeout_s),
+        response_max_bytes=settings.mcp_response_max_bytes,
+        allowed_private_hosts=settings.mcp_allowed_private_hosts,
+    )
+    app.state.tool_catalog = ToolCatalogService(
+        repository=tool_repository,
+        client=tool_client,
+        cipher=tool_cipher,
+        clock=SYSTEM_CLOCK,
+        ids=DEFAULT_ID_GENERATOR,
+    )
+    app.state.tool_invocations = ToolInvocationService(
+        repository=tool_repository,
+        client=tool_client,
+        cipher=tool_cipher,
+        clock=SYSTEM_CLOCK,
+    )
+    app.state.tool_flow = ToolFlow(
+        chat_repository=SqlChatRepository(app.state.db, DEFAULT_ID_GENERATOR),
+        catalog=app.state.tool_catalog,
+        invocations=app.state.tool_invocations,
+    )
+
     log.info("api.startup", env=str(settings.env), api_prefix=settings.api_prefix)
     try:
         yield
@@ -256,6 +293,7 @@ async def lifespan(app: FastAPI) -> AsyncIterator[None]:
         await app.state.http.aclose()
         await app.state.ollama_http.aclose()
         await app.state.connector_http.aclose()
+        await app.state.tool_http.aclose()
         await app.state.cache.close()
         await app.state.db.dispose()
         log.info("api.shutdown")
@@ -404,6 +442,7 @@ def create_app() -> FastAPI:
     app.include_router(chat_router.router, prefix=settings.api_prefix)
     app.include_router(knowledge_router.router, prefix=settings.api_prefix)
     app.include_router(connectors_router.router, prefix=settings.api_prefix)
+    app.include_router(tools_router.router, prefix=settings.api_prefix)
 
     return app
 

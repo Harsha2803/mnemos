@@ -91,6 +91,8 @@ _ANALYSIS_TERMS = frozenset(
     }
 )
 _WRITE_TERMS = frozenset({"alter", "create", "delete", "drop", "insert", "truncate", "update"})
+_TOOL_NOUNS = frozenset({"mcp", "tool"})
+_TOOL_VERBS = frozenset({"call", "invoke", "run", "use"})
 
 
 class RouteFlow(StrEnum):
@@ -99,6 +101,7 @@ class RouteFlow(StrEnum):
     CHAT = "chat"
     RAG = "rag"
     NL2SQL = "nl2sql"
+    TOOL = "tool"
 
 
 @dataclass(frozen=True, slots=True)
@@ -121,6 +124,12 @@ def classify_message(content: str) -> RouteDecision:
 
     normalized = " ".join(content.casefold().split())
     tokens = frozenset(_TOKEN.findall(normalized))
+
+    if tokens & _TOOL_NOUNS and tokens & _TOOL_VERBS:
+        return RouteDecision(
+            flow=RouteFlow.TOOL,
+            reason="Requests one registered tool call.",
+        )
 
     if tokens & _DATABASE_TERMS:
         return RouteDecision(

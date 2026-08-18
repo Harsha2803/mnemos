@@ -1,4 +1,4 @@
-import { FileText, LayoutGrid, MessageCircle, Plug, type LucideIcon } from "lucide-react";
+import { FileText, LayoutGrid, MessageCircle, Plug, Wrench, type LucideIcon } from "lucide-react";
 
 export type Destination = {
   href: string;
@@ -21,6 +21,7 @@ export const DESTINATIONS: readonly Destination[] = [
   { href: "/chat", label: "Chat", Icon: MessageCircle },
   { href: "/knowledge", label: "Knowledge", Icon: FileText },
   { href: "/sources", label: "Sources", Icon: Plug },
+  { href: "/tools", label: "Tools", Icon: Wrench },
 ];
 
 /**

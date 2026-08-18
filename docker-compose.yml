@@ -55,6 +55,9 @@ x-backend-env: &backend-env
   # sources UI's local-fs flow to work at all — in dev and in the deliverable
   # 5 Playwright spec alike.
   MNEMOS_LOCAL_FS_ALLOWED_ROOTS: '["/fixtures/sources"]'
+  # The MCP SSRF policy denies private address space by default. This one exact
+  # compose hostname is the deployment-operator exception for the local fixture.
+  MNEMOS_MCP_ALLOWED_PRIVATE_HOSTS: '["demo-mcp"]'
   PYTHONUNBUFFERED: "1"
 
 # The browser-facing configuration, in one place because it is needed twice: as
@@ -196,6 +199,22 @@ services:
     entrypoint: ["/bin/sh", "-c", "ollama pull qwen2.5:3b-instruct && echo 'model ready'"]
     volumes: [ollamadata:/root/.ollama]
     restart: "no"
+
+  # --------------------------------------------------------------- tool tier
+  demo-mcp:
+    build:
+      context: ./backend
+      dockerfile: Dockerfile
+    command: ["uvicorn", "mnemos.entrypoints.demo_mcp.main:app",
+              "--host", "0.0.0.0", "--port", "8100"]
+    ports: ["8100:8100"]
+    healthcheck:
+      test: ["CMD-SHELL", "python -c \"import urllib.request;urllib.request.urlopen('http://127.0.0.1:8100/healthz')\""]
+      interval: 10s
+      timeout: 5s
+      retries: 10
+      start_period: 10s
+    restart: unless-stopped
 
   # ---------------------------------------------------------- application tier
   migrate:
