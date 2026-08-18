@@ -3,11 +3,11 @@
 **An enterprise AI assistant — chat over your documents (RAG), your database (NL2SQL) and
 your tools (MCP). Multi-tenant, authenticated, and inspectable.**
 
-One conversation surface. Today, ask it something and a router selects plain chat, your
-documents, your database, or one safely approved MCP tool call, then shows which flow
-answered and why. The committed finish adds governed/inspectable context and a reproducible
-portfolio release. Underneath it is per-tenant row-level security and real OIDC; broader
-agent and SaaS product features are deliberately deferred rather than implied to be next.
+One conversation surface. Ask it something and a router selects plain chat, your documents,
+your database, or one safely approved MCP tool call, then shows which flow answered and why.
+Every answer carries a persisted, governed context bundle that can be inspected without
+recompiling it. Underneath it is per-tenant row-level security and real OIDC; broader agent
+and SaaS product features are deliberately deferred rather than implied to be next.
 
 Everything is free and self-hosted: Postgres + pgvector, Redis, MinIO, Keycloak and Ollama
 in containers. No API key is required for any capability.
@@ -39,22 +39,15 @@ for you to discover. This is the honest status.
 | **Automatic routing** | A deterministic, local-first classifier selects chat, RAG, NL2SQL, or one MCP tool call for every message. The stream and persisted assistant turn carry a compact reason shown beside the answer; there is no manual mode selector |
 | **Source ingestion** | MinIO/S3, local-filesystem, and curated-HTTP connectors feed durable Redis Streams jobs. Workers heartbeat, retry with backoff, surface stuck leases, and publish per-job progress/history to the Sources screen |
 | **MCP tools** | Register and discover one self-hosted streamable-HTTP server, keep credentials encrypted per user, re-authorize against live roles/grants and the motivating trust tier, persist approval before dispatch, and inspect every result or denial in the Tool console. Retrieved content cannot trigger a user-tier tool; its denial names the source |
-
-**Committed but not built yet.** Stated plainly, because a README that lets you assume
-otherwise is lying by omission:
-
-- **The context inspector shows a cited passage, not a compiled context bundle.** The
-  compiler, the budget allocator and the bitemporal memory layer that produced the numbers
-  below are still quarantined in `backend/src/mnemos/_v1/` on SQLite. Retrieval has been
-  ported onto Postgres; memory and the compiler have not, which is why the benchmark below
-  is still labelled as measured on SQLite.
+| **Governed context** | Immutable bitemporal memory with supersession/retraction and two-clock history; a deterministic compiler with trust fences, section floors/ceilings and exact hard-budget verification; atomic Postgres bundle persistence attached to every answer flow; and a Bundle inspector showing admissions, exclusions, conflicts, lineage, provenance and token spend |
 
 **Deliberately deferred:** multi-step agent loops (`B4`), API keys/full RBAC/tag ACL UI
 (`C1`), prompt and cost management (`C2`), and conversation-product depth (`C3`). Their
 schema or architectural seams may remain, but they are not promises in the portfolio plan.
 
-**Phase A and the safe-tool slice are complete** — sign-in, chat, documents, database,
-router, sources, and MCP approval. The remaining finish is **`C4` → reduced `D1`**. The
+**Phase A, the safe-tool slice, and governed context are complete** — sign-in, chat,
+documents, database, router, sources, MCP approval, bitemporal memory and inspectable
+bundles. The remaining finish is **reduced `D1`**. The
 milestone plan is [`TRACKER.md`](TRACKER.md) §3.0 and the
 architecture is [`docs/ADAPTATION.md`](docs/ADAPTATION.md); `TRACKER.md` §3 is the
 authoritative list of what is built, with the evidence for each claim.
@@ -106,34 +99,33 @@ authorization rule that admitted it.
 It ships with a benchmark measuring the difference against a naive concatenated prompt on
 the same corpus, same budget, same embedder.
 
-> ### These numbers were measured on the v0.1 SQLite kernel
+> ### These numbers were reproduced on Postgres
 >
-> They come from `backend/src/mnemos/_v1/`, which runs on SQLite and numpy and is
-> quarantined from the new stack. **The kernel finishes its port to Postgres + pgvector in
-> milestone `C4`, and the benchmark must be re-run and these numbers replaced at that
-> point** — see [TRACKER §1](TRACKER.md#1-what-this-is-30-seconds). Until then they are
-> honest about what they measured and silent about the system as it now stands.
+> The benchmark starts `pgvector/pgvector:pg16`, applies the real Alembic migrations, seeds
+> the unchanged synthetic corpus, and exercises the current Postgres retrieval, memory and
+> compiler paths. The fair control applies authorization inside its SQL scan; the
+> `naive_postfilter` arm remains explicitly unfair so the recall failure is visible.
 >
-> Reproduce the zero-download arm in seconds:
+> Reproduce the zero-download hashing arm:
 >
 > ```bash
 > python3 -m venv .venv && .venv/bin/pip install -e "./backend[dev]"
-> .venv/bin/python -m mnemos._v1.cli bench --budgets 800,1500,3000
+> make bench
 > ```
 
 Same corpus (8 documents, 56 chunks, 8 memory claims), same 23 questions, same embedder,
-same token budget. `bench --embedder neural`, budget 800:
+same token budgets. Postgres + hashing-384, budget 800:
 
 | | naive concat | **compiled bundle** |
 |---|---|---|
-| Answer-bearing text retained | 100% | **100%** |
-| Quoted a **superseded** policy revision | **100%** | **0%** |
-| Carried a **superseded memory** fact | **61%** | **0%** |
-| Leaked **restricted** content | 13% | **0%** |
-| Duplicate token waste | 6.9% | **1.1%** |
+| Answer-bearing text retained | 91.3% | **95.7%** |
+| Quoted a **superseded** policy revision | **91.3%** | **0%** |
+| Carried a **superseded memory** fact | **65.2%** | **0%** |
+| Leaked **restricted** content | 8.7% | **0%** |
+| Duplicate token waste | 11.4% | **2.2%** |
 | Has a provenance manifest | 0% | **100%** |
 | Exceeded the token budget | 0% | 0% |
-| Mean latency | 69 ms | 81 ms |
+| Mean latency | 12.1 ms | 15.7 ms |
 
 **The headline is the second row.** Every single naive prompt handed the model an
 obsolete policy figure alongside the current one. Here is an actual naive prompt for
@@ -155,62 +147,42 @@ this is not a relevance problem.
 ### Full results
 
 <details open>
-<summary><b>neural embedder</b> (<code>bge-small-en-v1.5</code>)</summary>
+<summary><b>hashing-384</b> (zero-download default, Postgres)</summary>
 
 ```
-corpus: 8 docs / 56 chunks / 5387 tokens | 23 questions | 8 memory claims
-
 === token budget: 800 ===
 arm                   answer   over     tok     dup    acl   stale  olddoc   prov       ms
-naive                 100.0%     0%     800    6.9%    13%     61%    100%     0%     68.7
-naive_postfilter      100.0%     0%     800    6.7%     0%     61%    100%     0%     68.1
-naive_prefilter       100.0%     0%     800    6.7%     0%     61%    100%     0%     68.2
-mnemos_compiled       100.0%     0%     770    1.1%     0%      0%      0%   100%     81.0
+naive                  91.3%     0%     800   11.4%     9%     65%     91%     0%     12.1
+naive_postfilter       91.3%     0%     800   11.7%     0%     65%     91%     0%     16.7
+naive_prefilter        91.3%     0%     800   11.7%     0%     65%     91%     0%     10.8
+mnemos_compiled        95.7%     0%     763    2.2%     0%      0%      0%   100%     15.7
 
 === token budget: 1500 ===
-naive                 100.0%     0%    1251   11.7%    22%     61%    100%     0%     57.9
-mnemos_compiled       100.0%     0%    1456    5.9%     0%      0%      0%   100%     83.7
+naive_prefilter        95.7%     0%    1303   22.8%     0%     65%     96%     0%      9.5
+mnemos_compiled       100.0%     0%    1260    9.8%     0%      0%      0%   100%     15.0
 
 === token budget: 3000 ===
-naive                 100.0%     0%    1251   11.7%    22%     61%    100%     0%     56.7
-mnemos_compiled       100.0%     0%    2887   14.0%     0%      0%      0%   100%     75.1
-```
-</details>
-
-<details>
-<summary><b>hashing embedder</b> (zero-download default — reproduces in seconds)</summary>
-
-```
-=== token budget: 800 ===
-arm                   answer   over     tok     dup    acl   stale  olddoc   prov       ms
-naive                  82.6%     0%     800   11.8%    43%     57%     74%     0%      8.5
-naive_prefilter        82.6%     0%     800   11.2%     0%     57%     74%     0%      8.2
-mnemos_compiled       100.0%     0%     771    1.8%     0%      0%      0%   100%     11.6
-
-=== token budget: 1500 ===
-naive_prefilter       100.0%     0%    1271   20.9%     0%     57%     96%     0%      5.3
-mnemos_compiled       100.0%     0%    1455    7.2%     0%      0%      0%   100%     12.6
+naive_prefilter        95.7%     0%    1322   23.0%     0%     65%     96%     0%      8.1
+mnemos_compiled       100.0%     0%    1310   11.1%     0%      0%      0%   100%     13.3
 ```
 
-Under a weaker embedder the compiler also wins on **answer retention at a tight budget
-(82.6% → 100%)**, because deduplicating overlapping chunks frees room for distinct
-content.
+At the tightest budget the compiler improves answer retention from 91.3% to 95.7%;
+at 1500 and 3000 tokens it reaches 100% while the fair naive control remains at 95.7%.
 </details>
 
 ### What this does *not* show
 
 Stated plainly, because a benchmark that only reports its wins is marketing:
 
-- **With a good embedder on this corpus, answer retention is a tie (100% vs 100%).**
-  The corpus is 5.4k tokens; top-k almost always contains the answer, and the naive arm
-  concatenates in score order so truncation only ever cuts distractor tails. The
-  compiler's wins here are governance wins, not retrieval-quality wins.
-- **The compiler is slower** — roughly 1.2–1.4×. It does strictly more work. The table
+- **The answer-retention delta is small.** On 23 synthetic questions it is one additional
+  retained answer at each budget; the strongest result is governance, not a claim of
+  general retrieval superiority.
+- **The compiler is slower** — roughly 1.3–1.6× in this run. It does strictly more work. The table
   is an argument about what that cost buys, not a claim of free lunch.
 - **The corpus is synthetic.** It is built to have the properties real corpora have
   (repeated boilerplate, chunk overlap, superseded revisions, a restricted document),
   but it is not a public benchmark and these numbers are not comparable to one.
-- **Duplicate waste rises at budget 3000** (14%) because more near-threshold content is
+- **Duplicate waste rises at budget 3000** (11.1%) because more near-threshold content is
   admitted. Dedup is a similarity threshold, not a guarantee.
 - **There is no LLM in the loop.** The benchmark measures *what reaches the model*, not
   answer correctness. That arm becomes possible once the gateway lands in `A1`, and it
@@ -264,11 +236,11 @@ and the new schema backs it with a CHECK constraint on `context_bundle`.
 
 Every compilation is introspectable:
 
-```bash
-.venv/bin/python -m mnemos._v1.cli ask "How many days of unused leave can I carry over?" --explain
-```
+Open any completed answer, choose **Inspect answer → Bundle**, and expand **Compiled
+prompt**. The panel reads the attached Postgres artifact; it does not reconstruct context
+from the answer.
 
-Actual output, abridged:
+Persisted `EXPLAIN`, abridged:
 
 ```json
 {
@@ -303,23 +275,9 @@ out of tokens.
 `binding_constraint` names the resource that actually ran out. That single field turns
 "the answer was bad" into "you were token-bound — raise the budget."
 
-**This is what becomes the context inspector in `C4`**, as a panel in the app rather than
-a JSON dump: open any answer and see what was admitted, what was excluded and why, and
-the token spend against budget.
-
-### The v0.1 inspector
-
-Until `C4` lands, the compiler has its own standalone UI, served from the quarantined
-kernel and unconnected to the container stack:
-
-```bash
-.venv/bin/python -m mnemos._v1.cli serve      # → http://127.0.0.1:8000
-```
-
-Side-by-side naive vs compiled for any question, with obsolete / restricted / superseded
-content highlighted in red in both prompts, the full provenance manifest, and the
-`EXPLAIN` tree. Note that it binds port 8000, which the containerised `api` also uses —
-run one or the other.
+The Bundle tab renders those decisions beside the answer: exact spend, admitted and
+excluded candidates, trust tier, authorization decision, conflicts, lineage, provenance,
+and the compiled prompt.
 
 ---
 
@@ -349,8 +307,7 @@ backend/src/mnemos/
   flows/          chat · rag · nl2sql · tools · router
   entrypoints/    api (FastAPI) · worker · realtime (WS) · cli.py (mnemosctl)
   migrations/     alembic, one logical change per revision, reversible
-  _v1/            ▲ the v0.1 kernel — compiler, memory, benchmark, on SQLite ▲
-                    retrieval ported out in A2; memory + compiler remain, ported in C4
+  _v1/            quarantined v0.1 reference kernel; no platform runtime imports its store
 backend/tests/    the suite — identity, tenant isolation, tokens, invariants
 frontend/src/     Next.js app router · components · generated API client
 deploy/           postgres init (extensions + analytics warehouse) · keycloak realm
@@ -361,7 +318,7 @@ bench_results/    the JSON behind the tables above
 Run the gates the way CI does:
 
 ```bash
-cd backend  && ../.venv/bin/python -m pytest      # 455 passed (needs Docker + Keycloak)
+cd backend  && ../.venv/bin/python -m pytest      # 463 passed (needs Docker + Keycloak)
 cd frontend && npm ci && npm run lint && npx tsc --noEmit && npm run test && npm run build
 ```
 
@@ -371,7 +328,7 @@ cd frontend && npm ci && npm run lint && npx tsc --noEmit && npm run test && npm
 
 `docs/` (Architecture, SystemDesign, DatabaseDesign, APIContract, ThreatModel, DesignSystem
 and 12 ADRs) preserves both the committed design and optional extension seams. The
-resume-focused finish is narrower: completed `B3`, then `C4` and reduced `D1`.
+resume-focused finish is narrower: completed `B3` and `C4`, then reduced `D1`.
 
 The distinction is deliberate and stated rather than hidden: deferred product features and
 scaling stages beyond single-node are design options, not unfulfilled claims. See

@@ -6,31 +6,31 @@ Current date of this handoff: 2026-08-18.
 
 Repository state at this handoff:
 
-  - `A4` is merged to `main` in PR #20; the resume-focused scope reset is merged in
-    PR #21. Phase A and `B1`/`B2` are complete.
-  - `B3` is complete on `agent/b3-safe-mcp-tools`, PR #23. If that PR is still open,
+  - Phase A, `B1`/`B2`, and `B3` are merged. The resume-focused scope reset is PR #21;
+    safe single-call MCP tools are PR #23.
+  - `C4` is complete on `agent/c4-governed-context`, PR #24. If that PR is still open,
     finish its repository lifecycle before starting implementation. If live GitHub state
     says it is merged, trust it and start from clean `main`.
-  - Only `C4` and reduced `D1` remain committed. `B4` and `C1`–`C3` are deferred unless
-    the owner explicitly reopens them after `D1`.
+  - Only reduced `D1` remains committed. `B4` and `C1`–`C3` are deferred unless the owner
+    explicitly reopens them after `D1`.
 
 Read first, in order:
 
   1. TRACKER.md — it is the live source of truth. Read the header, §0's agent
-     operating instructions, the 2026-08-18 `B3` completion/scope notes, §3.0's milestone
-     ledger, §5's complete `C4` brief, and §7's update protocol.
-  2. docs/ADAPTATION.md — read §1, §3, §7, the `B3` evidence and committed/deferred
+     operating instructions, the 2026-08-18 `C4` completion note, §3.0's milestone ledger,
+     §5's reduced `D1` brief, and §7's update protocol.
+  2. docs/ADAPTATION.md — read §1, §3, §7, the `C4` evidence and committed/deferred
      section in §8, and §10's notes for the next session.
   3. docs/Roadmap.md and docs/ImplementationPlan.md — these define why the finish line
      is narrow and what `C4` → reduced `D1` means.
-  4. README.md, then the existing memory/context models, A2 retrieval ports, chat bundle
-     wiring, and quarantined `_v1` kernel named by TRACKER §5.
+  4. README.md, then Compose, the existing Playwright journeys, demo fixtures, `make bench`,
+     and the release/documentation surfaces named by TRACKER §5.
   5. docs/CodingStandards.md before backend work and docs/DesignSystem.md before
      frontend work.
 
 Current product state:
 
-  - `A0` through `A4`, `B1`, `B2`, and `B3` are done.
+  - `A0` through `A4`, `B1`, `B2`, `B3`, and `C4` are done.
   - Users can authenticate, stream routed chat, upload/query documents with citations,
     query the demo warehouse through guarded NL2SQL, and ingest connector content with
     durable progress/retry history.
@@ -40,6 +40,12 @@ Current product state:
   - Tool dispatch rechecks live role, active personal grant, and motivating trust tier.
     Retrieved content cannot trigger a user-tier tool, and the denial names the offending
     document. Multi-step planning/loops/checkpoints/replay were not added.
+  - Users can create, supersede, retract, and query immutable bitemporal memory. Every
+    supported answer flow attaches a persisted hard-budget context bundle; the inspector
+    shows admissions, exclusions, trust, conflicts, lineage, provenance and exact spend.
+  - `make bench` reproduces the unchanged 23-question corpus on migrated Postgres. At an
+    800-token budget the governed arm retained 95.7% versus 91.3% for the fair prefilter
+    control, with zero ACL leaks, stale facts, obsolete documents or overruns.
   - Postgres RLS is forced for tenant data; retrieval authorization remains inside the
     scan; NL2SQL retains both the AST read-only guard and `mnemos_ro` execution.
   - The default stack remains free and self-hosted: Ollama, Postgres/pgvector, Redis,
@@ -47,10 +53,7 @@ Current product state:
 
 Portfolio-focused remaining plan:
 
-  1. `C4` — port bitemporal memory and the budgeted context compiler to Postgres,
-     persist/attach explainable bundles, expose admissions/exclusions/lineage/token spend
-     in the inspector, and re-run the unchanged benchmark on Postgres.
-  2. Reduced `D1` — prove clean-clone Compose, cover critical journeys in Playwright,
+  1. Reduced `D1` — prove clean-clone Compose, cover critical journeys in Playwright,
      add a deterministic demo walkthrough, and rewrite the README around reproducible
      measurements and honest limitations.
 
@@ -77,12 +80,12 @@ Important rules:
     personal-account push, green PR, ready/merge for completed milestone work, then
     sync and verify clean `main`.
 
-What is next after PR #23 is closed:
+What is next after PR #24 is closed:
 
-  - Complete `C4` and stop before reduced `D1`.
-  - Follow TRACKER §5's five deliverables in order. Reuse M2's memory/context tables,
-    A2's Postgres retrieval, and `chat_message.bundle_id`; port memory/compiler behavior
-    from `_v1` without importing its SQLite runtime into the platform.
-  - Preserve both bitemporal clocks, no-overwrite supersession, trust fences, exact hard
-    budgets, explicit rejection reasons, the fair benchmark arm, and scan-time ACLs.
-  - Do not start deferred `B4` or `C1`–`C3` work.
+  - Complete reduced `D1` and stop.
+  - Follow TRACKER §5's five deliverables in order: clean-clone Compose proof, critical
+    Playwright journeys, deterministic walkthrough, measured release docs, and lifecycle.
+  - Preserve C4's two clocks, no-overwrite supersession, persisted replay, trust fences,
+    exact hard budgets, explicit rejection reasons, fair benchmark arm, and scan-time ACLs.
+  - Do not start deferred `B4` or `C1`–`C3` work or add deployment breadth without a
+    measured release blocker.

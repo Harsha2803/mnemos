@@ -9,7 +9,7 @@ portfolio project. Live status and the complete brief for the next milestone rem
 
 The plan intentionally optimizes for evidence of engineering depth, not feature count.
 Completed capabilities stay supported and tested. Only two milestones remain committed:
-`C4` and a reduced `D1`; `B3` is complete on PR #23.
+a reduced `D1`; `B3` is complete on PR #23 and `C4` on PR #24.
 
 ## 1. Current baseline
 
@@ -71,7 +71,8 @@ and historically correct rather than concatenated ad hoc.
    SQLite-labelled headline number in the README with reproducible measurements.
 
 **Exit:** a user can open an answer and inspect exactly what context entered it, what was
-excluded and why, and how the token budget was spent.
+excluded and why, and how the token budget was spent. Verified 2026-08-18 against migrated
+Postgres, rebuilt Compose, Chromium, and the unchanged benchmark; PR #24.
 
 ### D1 — ship the portfolio release
 
@@ -110,7 +111,7 @@ owner explicitly reopens scope after `D1`.
 
 ## 4. Delivery rules
 
-- Finish in order: `C4` → `D1`; one milestone per session and PR.
+- Finish reduced `D1`; `C4` is complete and its security/budget invariants remain mandatory.
 - Keep the default path free and self-hosted; Ollama remains the model path.
 - Preserve existing security invariants and do not weaken tests to shorten delivery.
 - Every backend capability ships with its usable frontend slice.
