@@ -19,7 +19,10 @@ class RpcRequest(BaseModel):
     jsonrpc: Literal["2.0"]
     id: int
     method: str
-    params: dict[str, JsonValue] = Field(default_factory=dict)
+    # Pydantic 2.13 recursively expands the recursive ``JsonValue`` alias when
+    # it is used on a model field and can exhaust Python's recursion limit at
+    # import time. The MCP handler narrows every value it consumes below.
+    params: dict[str, object] = Field(default_factory=dict)
 
 
 @app.get("/healthz")

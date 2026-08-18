@@ -9,6 +9,7 @@ import pytest
 
 from mnemos.core.errors import UpstreamError, ValidationError
 from mnemos.core.types import JsonValue
+from mnemos.entrypoints.demo_mcp.main import RpcRequest
 from mnemos.features.tools.adapters import mcp_http
 from mnemos.features.tools.adapters.mcp_http import StreamableHttpMcpClient
 
@@ -16,6 +17,13 @@ from mnemos.features.tools.adapters.mcp_http import StreamableHttpMcpClient
 async def _pinned(url: str, *, allowed_private_hosts: object = ()) -> tuple[httpx.URL, str]:
     del allowed_private_hosts
     return httpx.URL(url).copy_with(host="203.0.113.10"), "tools.example.test"
+
+
+def test_demo_server_request_model_imports_and_validates() -> None:
+    request = RpcRequest.model_validate(
+        {"jsonrpc": "2.0", "id": 1, "method": "tools/list", "params": {}}
+    )
+    assert request.method == "tools/list"
 
 
 def _client(handler: httpx.AsyncBaseTransport, *, cap: int = 10_000) -> StreamableHttpMcpClient:
