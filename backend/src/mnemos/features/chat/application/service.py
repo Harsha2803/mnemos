@@ -38,6 +38,7 @@ from mnemos.features.chat.domain import (
     ChatSessionSummary,
     ChatStreamEvent,
 )
+from mnemos.features.context.application import ContextService
 from mnemos.features.identity.domain import OrgId, UserId
 from mnemos.features.llm.domain.model import ChatDone, ChatModel, ChatToken, ChatTurn
 
@@ -63,10 +64,14 @@ class ChatService:
         repository: ChatRepository,
         model: ChatModel,
         history_turns: int,
+        context: ContextService | None = None,
+        token_budget: int = 3000,
     ) -> None:
         self._repository = repository
         self._model = model
         self._history_turns = history_turns
+        self._context = context
+        self._token_budget = token_budget
 
     async def create_session(
         self, *, org_id: OrgId, user_id: UserId, title: str | None
@@ -128,6 +133,7 @@ class ChatService:
         user_id: UserId,
         session_id: ChatSessionId,
         content: str,
+        caller_tags: tuple[str, ...] = (),
         router_rationale: str | None = None,
     ) -> AsyncGenerator[ChatStreamEvent, None]:
         """Persist the question, stream the answer, persist it only if it
@@ -144,6 +150,19 @@ class ChatService:
         )
         history = await self._repository.list_messages(org_id=org_id, session_id=session_id)
         turns = _build_turns(history, history_turns=self._history_turns)
+        bundle_id = None
+        if self._context is not None:
+            bundle_id, prompt, _admitted = await self._context.compile_and_persist(
+                org_id=org_id,
+                user_id=user_id,
+                caller_tags=caller_tags,
+                session_id=session_id,
+                flow="chat",
+                query=content,
+                system_prompt=SYSTEM_PROMPT,
+                token_budget=self._token_budget,
+            )
+            turns = [ChatTurn(role=MessageRole.SYSTEM, content=prompt)]
 
         started = False
         chunks: list[str] = []
@@ -169,6 +188,10 @@ class ChatService:
                         flow="chat",
                         router_rationale=router_rationale,
                     )
+                    if self._context is not None and bundle_id is not None:
+                        await self._context.attach(
+                            org_id=org_id, message_id=message.id, bundle_id=bundle_id
+                        )
                     yield AssistantDone(message=message)
                     return
         except UpstreamError:

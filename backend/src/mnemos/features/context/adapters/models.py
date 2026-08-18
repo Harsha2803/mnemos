@@ -98,7 +98,7 @@ class ContextBundle(Base):
     )
     # Rejections with reasons: superseded, unauthorized, near-duplicate,
     # conflict-loser, over-budget. Recorded, never silently dropped.
-    rejections: Mapped[dict[str, Any]] = mapped_column(
+    rejections: Mapped[list[dict[str, Any]]] = mapped_column(
         JSONB, nullable=False, server_default=text("'[]'::jsonb")
     )
 

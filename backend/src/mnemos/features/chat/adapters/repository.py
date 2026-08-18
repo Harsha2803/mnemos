@@ -272,6 +272,7 @@ def _message_record(row: ChatMessage) -> ChatMessageRecord:
         content=row.content,
         flow=row.flow,
         router_rationale=row.router_rationale,
+        bundle_id=row.bundle_id,
         prompt_tokens=row.prompt_tokens,
         completion_tokens=row.completion_tokens,
         latency_ms=row.latency_ms,

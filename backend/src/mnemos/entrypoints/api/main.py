@@ -38,7 +38,9 @@ from mnemos.core.security import PasswordHasher
 from mnemos.entrypoints.api.routers import auth as auth_router
 from mnemos.entrypoints.api.routers import chat as chat_router
 from mnemos.entrypoints.api.routers import connectors as connectors_router
+from mnemos.entrypoints.api.routers import context as context_router
 from mnemos.entrypoints.api.routers import knowledge as knowledge_router
+from mnemos.entrypoints.api.routers import memory as memory_router
 from mnemos.entrypoints.api.routers import tools as tools_router
 from mnemos.entrypoints.api.security import (
     bind_caller_context,
@@ -52,6 +54,8 @@ from mnemos.features.connectors.adapters.crypto import SourceConfigCipher
 from mnemos.features.connectors.adapters.repository import ContentSourceRepository
 from mnemos.features.connectors.application.factory import ConnectorFactory
 from mnemos.features.connectors.application.service import ConnectorService
+from mnemos.features.context.adapters.repository import SqlContextRepository
+from mnemos.features.context.application import ContextService
 from mnemos.features.datasources.adapters.executor import PostgresExecutor
 from mnemos.features.datasources.adapters.introspection import PostgresIntrospector
 from mnemos.features.datasources.adapters.repository import (
@@ -83,6 +87,8 @@ from mnemos.features.knowledge.adapters.retrieval import SqlRetriever
 from mnemos.features.knowledge.application.service import KnowledgeService
 from mnemos.features.knowledge.domain import HashingEmbedder, HeuristicTokenizer
 from mnemos.features.llm.adapters.ollama import OllamaChatModel
+from mnemos.features.memory.adapters.repository import SqlMemoryRepository
+from mnemos.features.memory.application import MemoryService
 from mnemos.features.tools.adapters.crypto import ToolCredentialCipher
 from mnemos.features.tools.adapters.mcp_http import StreamableHttpMcpClient
 from mnemos.features.tools.adapters.repository import SqlToolRepository
@@ -176,10 +182,28 @@ async def lifespan(app: FastAPI) -> AsyncIterator[None]:
         model=settings.ollama_model,
         timeout_s=float(settings.ollama_timeout_s),
     )
+    chat_repository = SqlChatRepository(app.state.db, DEFAULT_ID_GENERATOR)
+    app.state.memory_service = MemoryService(
+        repository=SqlMemoryRepository(app.state.db, DEFAULT_ID_GENERATOR),
+        clock=SYSTEM_CLOCK,
+    )
+    app.state.context_service = ContextService(
+        repository=SqlContextRepository(app.state.db, DEFAULT_ID_GENERATOR),
+        chat=chat_repository,
+        memory=app.state.memory_service,
+        tokenizer=HeuristicTokenizer(),
+        clock=SYSTEM_CLOCK,
+        utility_decay_tau=settings.utility_decay_tau,
+        history_turns=settings.chat_history_turns,
+        embedder_name=settings.embedder,
+        operator_deadline_ms=settings.default_operator_deadline_ms,
+    )
     app.state.chat_service = ChatService(
-        repository=SqlChatRepository(app.state.db, DEFAULT_ID_GENERATOR),
+        repository=chat_repository,
         model=app.state.chat_model,
         history_turns=settings.chat_history_turns,
+        context=app.state.context_service,
+        token_budget=settings.default_token_budget,
     )
     app.state.router_service = RouterService()
 
@@ -201,11 +225,12 @@ async def lifespan(app: FastAPI) -> AsyncIterator[None]:
         near_duplicate_threshold=settings.near_duplicate_threshold,
     )
     app.state.rag_flow = RagFlow(
-        chat_repository=SqlChatRepository(app.state.db, DEFAULT_ID_GENERATOR),
+        chat_repository=chat_repository,
         knowledge=app.state.knowledge_service,
         model=app.state.chat_model,
         token_budget=settings.default_token_budget,
         retrieval_k=settings.retrieval_k,
+        context=app.state.context_service,
     )
 
     # --- datasources + nl2sql: generation behind the AST guard, execution as
@@ -227,7 +252,7 @@ async def lifespan(app: FastAPI) -> AsyncIterator[None]:
         sql_runs=SqlRunRepository(app.state.db, DEFAULT_ID_GENERATOR),
     )
     app.state.nl2sql_flow = Nl2SqlFlow(
-        chat_repository=SqlChatRepository(app.state.db, DEFAULT_ID_GENERATOR),
+        chat_repository=chat_repository,
         datasources=app.state.datasource_service,
         generation=app.state.sql_generation_service,
         sql_runs=SqlRunRepository(app.state.db, DEFAULT_ID_GENERATOR),
@@ -236,6 +261,8 @@ async def lifespan(app: FastAPI) -> AsyncIterator[None]:
         statement_timeout_ms=settings.sql_statement_timeout_ms,
         max_rows=settings.sql_max_rows,
         repair_attempts=settings.sql_repair_attempts,
+        context=app.state.context_service,
+        token_budget=settings.default_token_budget,
     )
 
     # --- connectors: browse a registered source, enqueue an ingest ---------
@@ -281,9 +308,11 @@ async def lifespan(app: FastAPI) -> AsyncIterator[None]:
         clock=SYSTEM_CLOCK,
     )
     app.state.tool_flow = ToolFlow(
-        chat_repository=SqlChatRepository(app.state.db, DEFAULT_ID_GENERATOR),
+        chat_repository=chat_repository,
         catalog=app.state.tool_catalog,
         invocations=app.state.tool_invocations,
+        context=app.state.context_service,
+        token_budget=settings.default_token_budget,
     )
 
     log.info("api.startup", env=str(settings.env), api_prefix=settings.api_prefix)
@@ -443,6 +472,8 @@ def create_app() -> FastAPI:
     app.include_router(knowledge_router.router, prefix=settings.api_prefix)
     app.include_router(connectors_router.router, prefix=settings.api_prefix)
     app.include_router(tools_router.router, prefix=settings.api_prefix)
+    app.include_router(memory_router.router, prefix=settings.api_prefix)
+    app.include_router(context_router.router, prefix=settings.api_prefix)
 
     return app
 
