@@ -1,13 +1,13 @@
 # Mnemos
 
 **An enterprise AI assistant — chat over your documents (RAG), your database (NL2SQL) and
-your tools (MCP). Multi-tenant, authenticated, audited.**
+your tools (MCP). Multi-tenant, authenticated, and inspectable.**
 
 One conversation surface. Today, ask it something and a router selects plain chat, your
-documents, or your database, then shows which flow answered and why. Tools, memory, and
-combined multi-step work are the next platform layers. Underneath it is per-tenant row-level
-security and real OIDC; the planned RBAC depth, audit trail, and cost ledger are stated below
-rather than implied to exist already.
+documents, or your database, then shows which flow answered and why. The committed finish
+adds one safely approved MCP call, governed/inspectable context, and a reproducible portfolio
+release. Underneath it is per-tenant row-level security and real OIDC; broader agent and SaaS
+product features are deliberately deferred rather than implied to be coming next.
 
 Everything is free and self-hosted: Postgres + pgvector, Redis, MinIO, Keycloak and Ollama
 in containers. No API key is required for any capability.
@@ -20,8 +20,8 @@ concatenated string. [The numbers are below.](#the-deep-technical-claim-context-
 
 ## What is actually built today
 
-The gap between what `docs/` describes and what runs is stated here rather than left for
-you to discover. `docs/` is the full target architecture; this is the honest status.
+The gap between optional architecture seams and what runs is stated here rather than left
+for you to discover. This is the honest status.
 
 **Built and running:**
 
@@ -39,18 +39,23 @@ you to discover. `docs/` is the full target architecture; this is the honest sta
 | **Automatic routing** | A deterministic, local-first classifier selects chat, RAG, or NL2SQL for every message. The stream and persisted assistant turn carry a compact reason shown beside the answer; there is no manual mode selector |
 | **Source ingestion** | MinIO/S3, local-filesystem, and curated-HTTP connectors feed durable Redis Streams jobs. Workers heartbeat, retry with backoff, surface stuck leases, and publish per-job progress/history to the Sources screen |
 
-**Not built yet.** Stated plainly, because a README that lets you assume otherwise is
-lying by omission:
+**Committed but not built yet.** Stated plainly, because a README that lets you assume
+otherwise is lying by omission:
 
-- **There is no tool runtime, no agent flow, no prompt store and no cost dashboard.**
+- **There is no tool runtime yet.** `B3` adds one self-hosted MCP call with per-user
+  credentials, trust-tier authorization, durable approval, and invocation history.
 - **The context inspector shows a cited passage, not a compiled context bundle.** The
   compiler, the budget allocator and the bitemporal memory layer that produced the numbers
   below are still quarantined in `backend/src/mnemos/_v1/` on SQLite. Retrieval has been
   ported onto Postgres; memory and the compiler have not, which is why the benchmark below
   is still labelled as measured on SQLite.
 
+**Deliberately deferred:** multi-step agent loops (`B4`), API keys/full RBAC/tag ACL UI
+(`C1`), prompt and cost management (`C2`), and conversation-product depth (`C3`). Their
+schema or architectural seams may remain, but they are not promises in the portfolio plan.
+
 **Phase A's product surface is complete** — sign-in, chat, documents, database, and router.
-`B3` is next: the single-call MCP tool runtime and console. The milestone plan is
+The complete remaining finish is **`B3` → `C4` → reduced `D1`**. The milestone plan is
 [`TRACKER.md`](TRACKER.md) §3.0 and the
 architecture is [`docs/ADAPTATION.md`](docs/ADAPTATION.md); `TRACKER.md` §3 is the
 authoritative list of what is built, with the evidence for each claim.
@@ -366,15 +371,13 @@ cd frontend && npm ci && npm run lint && npx tsc --noEmit && npm run test && npm
 ## Relationship to `docs/`
 
 `docs/` (Architecture, SystemDesign, DatabaseDesign, APIContract, ThreatModel, DesignSystem
-and 12 ADRs) describes the **full target architecture**. This repository implements the
-foundation of it — the stack, the schema with tenant isolation in force, identity, CI and
-the app shell — plus the v0.1 kernel that produced the benchmark above.
+and 12 ADRs) preserves both the committed design and optional extension seams. The
+resume-focused finish is narrower: `B3`, `C4`, and reduced `D1`.
 
-The gap is deliberate and is stated rather than hidden: scaling stages beyond single-node
-are labelled as design intent rather than as anything measured, and the "Not built yet"
-list near the top of this file is the current, specific version of the same admission. See
+The distinction is deliberate and stated rather than hidden: deferred product features and
+scaling stages beyond single-node are design options, not unfulfilled claims. See
 [`TRACKER.md`](TRACKER.md) §3 for exactly what is built, with evidence, and §3.0 for the
-order the rest arrives in.
+three-milestone finish.
 
 ## License
 
