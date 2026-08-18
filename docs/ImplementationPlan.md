@@ -8,8 +8,8 @@ portfolio project. Live status and the complete brief for the next milestone rem
 [`ADAPTATION.md`](ADAPTATION.md).
 
 The plan intentionally optimizes for evidence of engineering depth, not feature count.
-Completed capabilities stay supported and tested. Only three milestones remain committed:
-`B3`, `C4`, and a reduced `D1`.
+Completed capabilities stay supported and tested. Only two milestones remain committed:
+`C4` and a reduced `D1`; `B3` is complete on PR #23.
 
 ## 1. Current baseline
 
@@ -18,23 +18,23 @@ The repository already demonstrates:
 - multi-tenant OIDC authentication, platform JWT rotation, forced Postgres RLS, and CI;
 - streamed local-model chat with automatic chat/RAG/NL2SQL routing;
 - document ingestion, pgvector retrieval with authorization inside the scan, and citations;
-- guarded NL2SQL with both an AST allowlist and a separate read-only database role; and
+- guarded NL2SQL with both an AST allowlist and a separate read-only database role;
 - connector ingestion with Redis Streams, leases, heartbeats, retry/backoff, progress, and
-  stuck-job surfacing.
+  stuck-job surfacing; and
+- one self-hosted MCP call with per-user encrypted credentials, live-role/trust checks,
+  durable approval, invocation history, and a Tool console.
 
 These are finished product capabilities, not prerequisites to rebuild.
 
 ## 2. Committed finish line
 
 ```text
-B3 — safe single-call MCP tools
-  ↓
 C4 — governed context and bitemporal memory
   ↓
 D1 — portfolio release and measured proof
 ```
 
-### B3 — register and safely call one MCP tool
+### B3 — register and safely call one MCP tool ✅
 
 **Portfolio signal:** modern tool use implemented with explicit security boundaries rather
 than an unconstrained agent loop.
@@ -52,7 +52,7 @@ than an unconstrained agent loop.
 
 **Exit:** a user can register the local server, discover a tool, request one call, approve
 it, and inspect the result; a retrieved-source-motivated call is denied with that source
-named on screen.
+named on screen. Verified 2026-08-18 against rebuilt Compose and Chromium; PR #23.
 
 ### C4 — build the governed context layer
 
@@ -110,7 +110,7 @@ owner explicitly reopens scope after `D1`.
 
 ## 4. Delivery rules
 
-- Finish in order: `B3` → `C4` → `D1`; one milestone per session and PR.
+- Finish in order: `C4` → `D1`; one milestone per session and PR.
 - Keep the default path free and self-hosted; Ollama remains the model path.
 - Preserve existing security invariants and do not weaken tests to shorten delivery.
 - Every backend capability ships with its usable frontend slice.

@@ -4,10 +4,10 @@
 your tools (MCP). Multi-tenant, authenticated, and inspectable.**
 
 One conversation surface. Today, ask it something and a router selects plain chat, your
-documents, or your database, then shows which flow answered and why. The committed finish
-adds one safely approved MCP call, governed/inspectable context, and a reproducible portfolio
-release. Underneath it is per-tenant row-level security and real OIDC; broader agent and SaaS
-product features are deliberately deferred rather than implied to be coming next.
+documents, your database, or one safely approved MCP tool call, then shows which flow
+answered and why. The committed finish adds governed/inspectable context and a reproducible
+portfolio release. Underneath it is per-tenant row-level security and real OIDC; broader
+agent and SaaS product features are deliberately deferred rather than implied to be next.
 
 Everything is free and self-hosted: Postgres + pgvector, Redis, MinIO, Keycloak and Ollama
 in containers. No API key is required for any capability.
@@ -27,7 +27,7 @@ for you to discover. This is the honest status.
 
 | | |
 |---|---|
-| **The stack** | Nine containers — postgres (pgvector), redis, minio, keycloak, ollama, api, worker, realtime, web — plus a one-shot `migrate` that runs `alembic upgrade head` and must exit successfully before the API starts. Healthchecks on the seven that serve a port |
+| **The stack** | Ten containers — postgres (pgvector), redis, minio, keycloak, ollama, api, worker, realtime, web, and a deterministic demo MCP server — plus a one-shot `migrate` that runs `alembic upgrade head` and must exit successfully before the API starts. Healthchecks on eight serving dependencies |
 | **The schema** | 41 tables across identity, memory, knowledge, chat, context, datasources, tools, prompts and observability. **40 with `FORCE` row-level security**, enforced against an unprivileged app role and proven by a test against a real Postgres — not merely declared in the catalogue |
 | **Identity** | Full OIDC round trip against Keycloak (PKCE S256, split-horizon issuers), internal password auth behind the same provider seam, platform JWT with refresh-token rotation and family revocation, and `mnemosctl bootstrap` to create the first org and admin |
 | **CI** | Every PR runs pytest against a real Postgres and a real Keycloak, ruff, `mypy --strict`, `alembic check`, and a frontend gate of lint + `tsc` + tests + a real `next build` |
@@ -36,14 +36,13 @@ for you to discover. This is the honest status.
 | **Chat** | An Ollama-backed gateway behind a `ChatModel` port, persisted sessions and messages, and SSE streaming that renders token by token |
 | **RAG** | Upload → extract → chunk → embed onto pgvector HNSW → hybrid retrieval (vector + trigram, RRF-fused, deduplicated) → an answer with citations you click into. **Authorization is a predicate inside the scan and superseded revisions are excluded there too**, both pinned by tests rather than asserted |
 | **NL2SQL** | Schema introspection + business glossary → Ollama SQL generation → AST read-only allowlist → execution as `mnemos_ro` → narration and a visible SQL/result/denial panel. The parser guard and database role are independent defences |
-| **Automatic routing** | A deterministic, local-first classifier selects chat, RAG, or NL2SQL for every message. The stream and persisted assistant turn carry a compact reason shown beside the answer; there is no manual mode selector |
+| **Automatic routing** | A deterministic, local-first classifier selects chat, RAG, NL2SQL, or one MCP tool call for every message. The stream and persisted assistant turn carry a compact reason shown beside the answer; there is no manual mode selector |
 | **Source ingestion** | MinIO/S3, local-filesystem, and curated-HTTP connectors feed durable Redis Streams jobs. Workers heartbeat, retry with backoff, surface stuck leases, and publish per-job progress/history to the Sources screen |
+| **MCP tools** | Register and discover one self-hosted streamable-HTTP server, keep credentials encrypted per user, re-authorize against live roles/grants and the motivating trust tier, persist approval before dispatch, and inspect every result or denial in the Tool console. Retrieved content cannot trigger a user-tier tool; its denial names the source |
 
 **Committed but not built yet.** Stated plainly, because a README that lets you assume
 otherwise is lying by omission:
 
-- **There is no tool runtime yet.** `B3` adds one self-hosted MCP call with per-user
-  credentials, trust-tier authorization, durable approval, and invocation history.
 - **The context inspector shows a cited passage, not a compiled context bundle.** The
   compiler, the budget allocator and the bitemporal memory layer that produced the numbers
   below are still quarantined in `backend/src/mnemos/_v1/` on SQLite. Retrieval has been
@@ -54,9 +53,9 @@ otherwise is lying by omission:
 (`C1`), prompt and cost management (`C2`), and conversation-product depth (`C3`). Their
 schema or architectural seams may remain, but they are not promises in the portfolio plan.
 
-**Phase A's product surface is complete** — sign-in, chat, documents, database, and router.
-The complete remaining finish is **`B3` → `C4` → reduced `D1`**. The milestone plan is
-[`TRACKER.md`](TRACKER.md) §3.0 and the
+**Phase A and the safe-tool slice are complete** — sign-in, chat, documents, database,
+router, sources, and MCP approval. The remaining finish is **`C4` → reduced `D1`**. The
+milestone plan is [`TRACKER.md`](TRACKER.md) §3.0 and the
 architecture is [`docs/ADAPTATION.md`](docs/ADAPTATION.md); `TRACKER.md` §3 is the
 authoritative list of what is built, with the evidence for each claim.
 
@@ -66,7 +65,7 @@ authoritative list of what is built, with the evidence for each claim.
 
 ```bash
 git clone https://github.com/Harsha2803/mnemos && cd mnemos
-docker compose up -d                    # nine services, web included
+docker compose up -d                    # ten services, web + demo MCP included
 docker compose exec api mnemosctl bootstrap \
     --org-slug mnemos --org-name Mnemos --admin-email admin@mnemos.local
 ```
@@ -347,7 +346,7 @@ backend/src/mnemos/
   platform/       async engine + tenant-scoped session · redis · models registry
   features/       identity · memory · retrieval · context · knowledge · connectors
                   datasources · chat · tools · prompts · observability
-  flows/          rag · nl2sql · agent · router
+  flows/          chat · rag · nl2sql · tools · router
   entrypoints/    api (FastAPI) · worker · realtime (WS) · cli.py (mnemosctl)
   migrations/     alembic, one logical change per revision, reversible
   _v1/            ▲ the v0.1 kernel — compiler, memory, benchmark, on SQLite ▲
@@ -362,7 +361,7 @@ bench_results/    the JSON behind the tables above
 Run the gates the way CI does:
 
 ```bash
-cd backend  && ../.venv/bin/python -m pytest      # 278 passed (needs Docker + Keycloak)
+cd backend  && ../.venv/bin/python -m pytest      # 455 passed (needs Docker + Keycloak)
 cd frontend && npm ci && npm run lint && npx tsc --noEmit && npm run test && npm run build
 ```
 
@@ -372,12 +371,12 @@ cd frontend && npm ci && npm run lint && npx tsc --noEmit && npm run test && npm
 
 `docs/` (Architecture, SystemDesign, DatabaseDesign, APIContract, ThreatModel, DesignSystem
 and 12 ADRs) preserves both the committed design and optional extension seams. The
-resume-focused finish is narrower: `B3`, `C4`, and reduced `D1`.
+resume-focused finish is narrower: completed `B3`, then `C4` and reduced `D1`.
 
 The distinction is deliberate and stated rather than hidden: deferred product features and
 scaling stages beyond single-node are design options, not unfulfilled claims. See
 [`TRACKER.md`](TRACKER.md) §3 for exactly what is built, with evidence, and §3.0 for the
-three-milestone finish.
+focused finish.
 
 ## License
 

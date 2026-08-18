@@ -6,48 +6,51 @@ Current date of this handoff: 2026-08-18.
 
 Repository state at this handoff:
 
-  - `A4` is merged to `main` in PR #20. Phase A, `B1`, and `B2` are complete.
-  - The roadmap has been deliberately narrowed for a resume-focused portfolio finish.
-    Only `B3`, `C4`, and reduced `D1` remain committed; `B4` and `C1`–`C3` are
-    deferred unless the owner explicitly reopens them after `D1`.
-  - The documentation-only scope reset is on `agent/resume-focused-roadmap`, PR #21. If
-    that PR is still open, finish its repository lifecycle before starting implementation.
-    If live GitHub state says it is merged, trust it and start from clean `main`.
+  - `A4` is merged to `main` in PR #20; the resume-focused scope reset is merged in
+    PR #21. Phase A and `B1`/`B2` are complete.
+  - `B3` is complete on `agent/b3-safe-mcp-tools`, PR #23. If that PR is still open,
+    finish its repository lifecycle before starting implementation. If live GitHub state
+    says it is merged, trust it and start from clean `main`.
+  - Only `C4` and reduced `D1` remain committed. `B4` and `C1`–`C3` are deferred unless
+    the owner explicitly reopens them after `D1`.
 
 Read first, in order:
 
   1. TRACKER.md — it is the live source of truth. Read the header, §0's agent
-     operating instructions, the 2026-08-18 scope-reset note, §3.0's milestone ledger,
-     §5's complete `B3` brief, and §7's update protocol.
-  2. docs/ADAPTATION.md — read §1, §3, §7, the committed-work/deferred section in
-     §8, and §10's notes for the next session.
+     operating instructions, the 2026-08-18 `B3` completion/scope notes, §3.0's milestone
+     ledger, §5's complete `C4` brief, and §7's update protocol.
+  2. docs/ADAPTATION.md — read §1, §3, §7, the `B3` evidence and committed/deferred
+     section in §8, and §10's notes for the next session.
   3. docs/Roadmap.md and docs/ImplementationPlan.md — these define why the finish line
-     is narrow and what `B3` → `C4` → reduced `D1` means.
-  4. README.md, then the existing tool models and auth/router/chat code named by
-     TRACKER §5.
+     is narrow and what `C4` → reduced `D1` means.
+  4. README.md, then the existing memory/context models, A2 retrieval ports, chat bundle
+     wiring, and quarantined `_v1` kernel named by TRACKER §5.
   5. docs/CodingStandards.md before backend work and docs/DesignSystem.md before
      frontend work.
 
 Current product state:
 
-  - `A0` through `A4`, `B1`, and `B2` are done and merged.
-  - Users can authenticate, stream chat, upload and query documents with citations,
-    query the demo warehouse through guarded NL2SQL, and ask without choosing a mode.
-  - Source connectors feed Redis Streams jobs with heartbeats, retry/backoff, status
-    history, stuck-job surfacing, replay hydration, and per-job progress.
-  - Postgres RLS is forced for tenant data; retrieval authorization is applied inside
-    the scan; NL2SQL retains both the AST read-only guard and `mnemos_ro` execution.
+  - `A0` through `A4`, `B1`, `B2`, and `B3` are done.
+  - Users can authenticate, stream routed chat, upload/query documents with citations,
+    query the demo warehouse through guarded NL2SQL, and ingest connector content with
+    durable progress/retry history.
+  - Users can register/discover the included streamable-HTTP MCP server, keep credentials
+    encrypted per user, grant a tool to their live identity, approve one persisted call,
+    and inspect invocation history in the Tool console and transcript.
+  - Tool dispatch rechecks live role, active personal grant, and motivating trust tier.
+    Retrieved content cannot trigger a user-tier tool, and the denial names the offending
+    document. Multi-step planning/loops/checkpoints/replay were not added.
+  - Postgres RLS is forced for tenant data; retrieval authorization remains inside the
+    scan; NL2SQL retains both the AST read-only guard and `mnemos_ro` execution.
   - The default stack remains free and self-hosted: Ollama, Postgres/pgvector, Redis,
-    MinIO, and Keycloak. No paid account is required.
+    MinIO, Keycloak, and the deterministic demo MCP fixture. No paid account is required.
 
 Portfolio-focused remaining plan:
 
-  1. `B3` — register and safely call one self-hosted MCP tool with per-user
-     credentials, live-role/trust-tier authorization, durable approval, invocation
-     history, a Tool console, and a denial naming the offending retrieved source.
-  2. `C4` — port bitemporal memory and the budgeted context compiler to Postgres,
-     expose admissions/exclusions/token spend in the inspector, and re-run the benchmark.
-  3. Reduced `D1` — prove clean-clone Compose, cover critical journeys in Playwright,
+  1. `C4` — port bitemporal memory and the budgeted context compiler to Postgres,
+     persist/attach explainable bundles, expose admissions/exclusions/lineage/token spend
+     in the inspector, and re-run the unchanged benchmark on Postgres.
+  2. Reduced `D1` — prove clean-clone Compose, cover critical journeys in Playwright,
      add a deterministic demo walkthrough, and rewrite the README around reproducible
      measurements and honest limitations.
 
@@ -74,10 +77,12 @@ Important rules:
     personal-account push, green PR, ready/merge for completed milestone work, then
     sync and verify clean `main`.
 
-What is next after the documentation PR is closed:
+What is next after PR #23 is closed:
 
-  - Complete `B3` and stop before `C4`.
-  - Follow TRACKER §5's five deliverables in order. Reuse the existing MCP tables,
-    keep credentials per user, authorize again at the invocation boundary using the
-    motivating trust tier, and name an offending retrieved source in a denial.
-  - `B3` is single-call only. Do not start deferred `B4` work.
+  - Complete `C4` and stop before reduced `D1`.
+  - Follow TRACKER §5's five deliverables in order. Reuse M2's memory/context tables,
+    A2's Postgres retrieval, and `chat_message.bundle_id`; port memory/compiler behavior
+    from `_v1` without importing its SQLite runtime into the platform.
+  - Preserve both bitemporal clocks, no-overwrite supersession, trust fences, exact hard
+    budgets, explicit rejection reasons, the fair benchmark arm, and scan-time ACLs.
+  - Do not start deferred `B4` or `C1`–`C3` work.

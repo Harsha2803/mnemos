@@ -4,17 +4,17 @@
 > self-contained: architecture, the capability inventory, schema, milestones, and current
 > state. [`TRACKER.md`](../TRACKER.md) holds live task status; this holds the design.
 
-**Last updated:** 2026-08-18 — `A4` is merged in PR #20. The remaining committed roadmap
-is narrowed to `B3` → `C4` → reduced `D1`; `B4` and `C1`–`C3` are deliberately deferred
-to finish a strong, evaluable portfolio rather than an exhaustive product.
+**Last updated:** 2026-08-18 — `B3` is complete on PR #23. The remaining committed roadmap
+is `C4` → reduced `D1`; `B4` and `C1`–`C3` remain deliberately deferred to finish a strong,
+evaluable portfolio rather than an exhaustive product.
 
 ---
 
 ## 1. What Mnemos is
 
 **An enterprise AI assistant.** One conversation surface. Today the router chooses plain
-chat, documents (**RAG**), or a database (**NL2SQL**) and shows why. `B3` adds one safely
-approved **MCP** tool call; `C4` makes governed memory and compiled context inspectable.
+chat, documents (**RAG**), a database (**NL2SQL**), or one safely approved **MCP** tool call
+and shows why. `C4` makes governed memory and compiled context inspectable.
 Underneath it is multi-tenant, authenticated, and authorized because those controls are
 what separate an assistant from a demo.
 
@@ -103,8 +103,8 @@ rows are marked and are not promises in the portfolio plan.
 | **Natural language over a warehouse** | `flows/nl2sql/`: introspection → glossary → generate → **AST read-only guard** → execute as a read-only DB role → narrate. Two independent defences, because a guard that is the only defence is one parser bug from a write | `A3` |
 | **A SQL surface that is a config exercise to widen** | `features/datasources/`: datasource registry, schema introspection, and a `SqlDialect` port. **Postgres only** — the second warehouse is a paid account, and the port is what makes it a config exercise rather than a rewrite | `A3` |
 | **Business vocabulary** — "revenue" means something specific here | `features/datasources/glossary`: glossary terms feeding the NL2SQL schema context | `A3` |
-| **Routing**, so the user does not have to pick a mode | `flows/router/`: classify a message to chat / RAG / NL2SQL and show *why*; `B3` adds the narrow single-tool outcome | `A4` ✅ · `B3` |
-| **A tool runtime with a trust boundary** | `features/tools/`: MCP registry, per-user credentials, trust tiers, approval gates, invocation records. A denial names the offending source on screen | `B3` |
+| **Routing**, so the user does not have to pick a mode | `flows/router/`: classify a message to chat / RAG / NL2SQL / one MCP tool call and show *why* | `A4` ✅ · `B3` ✅ |
+| **A tool runtime with a trust boundary** | `features/tools/`: MCP registry, per-user encrypted credentials, live-role grants, trust tiers, durable approval, invocation records, and a Tool console. A denial names the offending source on screen | `B3` ✅ |
 | **Multi-step work that can be inspected mid-flight** | Optional future `flows/agent/`: a bounded state machine over tools with checkpoints and a step trace | `B4` deferred |
 | **Conversation persistence** — sessions, messages, streaming | `features/chat/`: `chat_session` + `chat_message`, SSE token streaming | `A1` |
 | **Conversation *management*** — the part that makes it usable past the first week | Optional folders, bookmarks, feedback, and history search | `C3` deferred |
@@ -129,6 +129,7 @@ rows are marked and are not promises in the portfolio plan.
 | `minio` | `minio/minio` | 9000/9001 | S3-compatible object storage |
 | `keycloak` | `quay.io/keycloak/keycloak:26.0` | 8080 | Real OIDC. Realm auto-imported |
 | `ollama` | `ollama/ollama` | 11434 | Qwen2.5 3B instruct |
+| `demo-mcp` | backend fixture | 8100 | Deterministic streamable-HTTP MCP server; no account or API key |
 | `migrate` | backend | — | One-shot `alembic upgrade head` before API |
 | `api` | backend | 8000 | FastAPI |
 | `worker` | backend | — | Ingestion jobs |
@@ -214,7 +215,7 @@ Every tenant-scoped table: `org_id` + RLS `FORCE` on `app.current_org` GUC.
 Re-cut on 2026-08-02 into product milestones, then narrowed on 2026-08-18 to a
 resume-focused finish. The old `M1`–`M14` numbering is superseded and mapped at the end of
 this section for historical translation. The only remaining committed sequence is
-`B3` → `C4` → reduced `D1`; `B4` and `C1`–`C3` are deliberately deferred. The authoritative
+`C4` → reduced `D1`; `B4` and `C1`–`C3` are deliberately deferred. The authoritative
 live copy is [TRACKER §3.0](../TRACKER.md#30-the-plan--completed-foundation-and-the-resume-focused-finish).
 
 Two rules govern every row.
@@ -250,7 +251,7 @@ authoritative for sequencing, not these tables' phase grouping.
 |---|---|---|---|
 | **B1** | Object storage · source connectors (MinIO/S3, local FS, HTTP) · Redis Streams event bus · sources UI | **connect a source, browse it, and watch ingestion events arrive live** | ✅ 2026-08-17 — all 5/5 deliverables done, browser-verified against the rebuilt stack |
 | **B2** | Ingestion jobs at scale: heartbeat, retries, status history, stuck-job reaper · per-job progress UI | **ingest a folder and watch every job's progress — including one that dies, surfaced as stuck rather than silently lost** | ✅ 2026-08-17 — verified against the rebuilt stack |
-| **B3** | MCP tool runtime: registry, per-user credentials, trust tiers, approval gates · tool console | **register a tool, have the assistant call it, and approve a gated call** — with a denial that names the offending source on screen | ⬜ |
+| **B3** | MCP tool runtime: registry, per-user credentials, trust tiers, approval gates · tool console | **register a tool, have the assistant call it, and approve a gated call** — with a denial that names the offending source on screen | ✅ 2026-08-18 (PR #23) — browser-verified against rebuilt Compose |
 | **B4** | Agent flow: bounded state machine over tools, checkpoints, step trace | **give it a multi-step task and watch it plan, call tools and finish — with every step inspectable** | ⏸ deferred — not required for the portfolio finish |
 
 **Phase C — make it enterprise, and land the deep claim.**
@@ -310,9 +311,8 @@ Apple assets are off-limits (SF Pro as a webfont, SF Symbols) and what is used i
 **Current position.** `main` has `A0` (PR #11), `A1` (PR #13), `A2` (PR #14), `A3`
 (PR #15), `B1` (PR #16), the per-session log files (PR #17), the out-of-band frontend
 polish work (PR #18), `B2` plus its final UI/correctness review (PR #19), and `A4`
-(PR #20). The documentation-only `agent/resume-focused-roadmap` branch records the
-2026-08-18 scope reset. After it merges, `B3` is next, followed only by `C4` and reduced
-`D1`.
+(PR #20). The documentation-only scope reset merged in PR #21, and `B3` is complete on
+PR #23. Close that PR's repository lifecycle, then continue only with `C4` and reduced `D1`.
 
 `M3`'s exit criterion "RLS blocks cross-org" turned out to be unmet by `M2` rather than
 merely untested; that is written up in §8 and in
@@ -902,6 +902,45 @@ the whole `up`. It does now, so plain `docker compose up -d` brings the frontend
 everything else and `web` has a healthcheck of its own — a stack whose UI needs a
 remembered extra flag is a stack whose UI does not get looked at.
 
+### B3 — safe single-call MCP tools ✅ verified 2026-08-18
+
+`features/tools/` now implements typed server/tool/grant/credential/invocation boundaries
+over the five tables M2 already created. Repository queries carry explicit org predicates
+inside forced RLS sessions. Credentials are encrypted with a dedicated Fernet key, rejected
+when the published development key is used in production, stored per `(server, user)`, and
+never returned in read models. The streamable-HTTP client performs MCP initialize,
+`tools/list`, and `tools/call` against a DNS-pinned registered endpoint with redirects off,
+timeouts, a response cap, discovery-schema checks, and local argument validation.
+
+Authorization is repeated at the invocation boundary against the caller's live role, active
+personal grant, and motivating `TrustTier`. A configured or mutating call persists
+`pending_approval`; approve/deny transitions that same row, and dispatch occurs only after
+the approved transition. Reconstructing the service between proposal and approval still
+succeeds, proving the approval is durable rather than an in-process callback. Retrieved
+content cannot trigger the user-tier demo tool: the denied row retains its bundle item and
+the repository resolves the associated document title for the denial screen.
+
+The C12 UI slice is `/tools`: register the bundled `demo-mcp` server, configure a credential
+for the current user, discover/cache tools, grant one to yourself, propose a call, approve or
+deny it, and inspect status/result history. The existing chat router gained only an explicit
+single-tool outcome, and the transcript shows its pending/result state. Terminal approval,
+denial, and failure narration is written back to the linked persisted assistant message, so
+replay and reload show the durable result. There is no planner, loop, checkpoint, or
+multi-call replay; those remain deferred `B4` scope. No new design token or shared component
+was added.
+
+Evidence: the final focused policy/wire/Postgres suite passed 13 tests, including RLS
+cross-tenant invisibility, two same-org users with distinct ciphertext, approval across a
+service reconstruction, persisted success history, and a denial naming `Employee Handbook
+2024`. The final full backend suite passed 455 tests; `make lint` and `make types` were
+clean across 204 source files. Frontend
+lint/typecheck, 114 Vitest tests, and the production build passed. Rebuilt Compose exposed
+ten healthy/running services and `/readyz` returned all dependencies `ok`; `alembic check`
+reported no drift. Live verification found that Pydantic 2.13 recursively expanded the
+fixture request's `JsonValue` annotation; changing that boundary to an opaque object map
+fixed the real container and added a regression test. Chromium then completed register →
+discover → grant → propose → approve → result in `e2e/tools.spec.ts` (1 passed, 2.8s).
+
 ### A4 — automatic chat routing ✅ verified 2026-08-17
 
 `flows/router/` now owns a deterministic, local-first classifier and its application seam.
@@ -1278,8 +1317,8 @@ here on signs in as `analyst@mnemos.local` instead.
 
 ### Committed work not started
 
-**Three milestones remain:** `B3`, `C4`, and reduced `D1`. Phase A and `B1`/`B2` are
-complete. `B4` and `C1`–`C3` are deliberately deferred, so architecture/schema seams for
+**Two milestones remain:** `C4` and reduced `D1`. Phase A and `B1`–`B3` are complete.
+`B4` and `C1`–`C3` are deliberately deferred, so architecture/schema seams for
 them must not be reported as unfinished committed work. Concretely, and stated plainly
 because the gap between what `docs/` describes and what runs is the thing this file exists
 to keep honest:
@@ -1305,9 +1344,10 @@ to keep honest:
 - ~~**There is no router.**~~ **Built in `A4`.** Every message now selects chat, RAG, or
   NL2SQL automatically; the persisted compact reason is visible beside the answer and the
   provisional selectors/request flags are gone.
-- **There is no tool runtime yet.** `B3` supplies the committed single-call MCP slice.
-  Multi-step agent flow (`B4`) and prompt/cost management (`C2`) are deferred rather than
-  silently promised.
+- ~~**There is no tool runtime yet.**~~ **Built in `B3`.** One self-hosted streamable-HTTP
+  MCP call now has per-user encrypted credentials, live-role/grant/trust authorization,
+  durable approval, invocation history, a single-call chat route, and a Tool console.
+  Multi-step agent flow (`B4`) remains deliberately deferred.
 - **The context inspector shows a cited passage, not a context bundle.** `A2` gave it its
   first real content; what was admitted, what was excluded and why, and the token spend
   against budget, are `C4`. So is bitemporal memory, and so is re-running the benchmark on
@@ -1323,7 +1363,8 @@ What *is* built is the product surface and foundation those stand on: the contai
 the 41-table schema with row-level security that is in force rather than merely declared,
 identity through a full OIDC round trip and platform JWT with refresh rotation,
 `mnemosctl bootstrap`, CI, the app shell, a routed conversation surface, retrieval over
-uploaded documents with click-through citations, and guarded NL2SQL over the demo warehouse.
+uploaded documents with click-through citations, guarded NL2SQL over the demo warehouse,
+and one safely approved self-hosted MCP tool call.
 Evidence for each is above.
 
 **Explicitly deferred after the 2026-08-18 scope reset:** `B4` multi-step agent planning,
@@ -1364,9 +1405,9 @@ resume-focused finish line unless the owner explicitly reopens scope after `D1`.
 - **Milestone IDs are `A0`–`D1` now, not `M4`–`M14`.** If you find an old ID in a document,
   a docstring or a commit message, §7's mapping table is the translation — do not guess,
   and do not leave a reader holding a number that no longer names anything.
-- **The complete committed finish is `B3` → `C4` → reduced `D1`.** Do not resume the old
-  phase sequence after `B3`; `B4` and `C1`–`C3` were deliberately deferred on 2026-08-18
-  to keep the project focused on high-value portfolio evidence.
+- **The complete remaining finish is `C4` → reduced `D1`.** Do not resume the old phase
+  sequence; `B4` and `C1`–`C3` were deliberately deferred on 2026-08-18 to keep the project
+  focused on high-value portfolio evidence.
 - **Read §7's two rules before scoping any work** (C12 and C14). A milestone that cannot
   end in a sentence a stranger could perform at `http://localhost:3000` is infrastructure,
   and infrastructure folds into the milestone it serves. That rule exists because the plan
@@ -1376,13 +1417,18 @@ resume-focused finish line unless the owner explicitly reopens scope after `D1`.
   into a prefix match. If a handler needs to know who is calling, it asks for
   `require_caller`; if it forgets and needs one anyway, it raises — that is deliberate, and
   making the caller optional to silence it is how a route quietly stops being scoped.
-- **`B3` is a single-call tool runtime, not an agent loop.** Reuse the existing MCP tables,
-  keep credentials per user, authorize again at the invocation boundary with the motivating
-  trust tier, and persist approval before dispatch. Multi-step planning/checkpoints are
-  deferred `B4` scope and are not the next task after `B3`.
-- **The local MCP fixture is part of `B3`'s exit evidence.** The default path may not depend
-  on a SaaS account or paid API, and a malicious/remote endpoint still needs the connector
-  path's SSRF/rebinding discipline, timeouts, schema validation, and response cap.
+- **`C4` ports the governed kernel; it does not redesign A2 retrieval.** Reuse the current
+  pgvector/trigram operators and their in-scan ACL/revision predicates. Port memory and the
+  compiler from `_v1` behind current domain/port boundaries, persist bundles in the existing
+  M2 tables, and attach them through `chat_message.bundle_id`.
+- **Bitemporal means two clocks and no overwrite.** Preserve validity time separately from
+  recorded/retracted belief time, supersede transactionally, keep lineage edges, and prove
+  the exclusion/cycle constraints against real Postgres. A convenience update endpoint that
+  mutates history is not an acceptable simplification.
+- **The inspector and benchmark are both `C4` exit evidence.** A bundle must show admissions,
+  exclusions/reasons, provenance/trust, lineage, and exact token spend in the app. Re-run the
+  unchanged fair benchmark on Postgres and replace the SQLite-labelled README numbers; do
+  not tune the baseline or silently change corpus/seeds while porting it.
 - **The frontend test suite is offline by construction** (`A0`). `vitest.setup.ts` installs
   a `fetch` that answers 401 before any test runs, which is also what
   `vi.unstubAllGlobals()` restores. A test that reaches the real network will pass on a
