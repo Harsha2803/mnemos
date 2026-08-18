@@ -6,15 +6,30 @@
 > **and [`docs/ADAPTATION.md`](docs/ADAPTATION.md)** *in the same commit* — a stale
 > tracker is worse than none.
 
-**Last updated:** 2026-08-17 — `A4` is complete and verified locally: every message is
-classified to chat, RAG, or NL2SQL; the chosen flow and compact rationale are persisted and
-shown in the transcript; the manual mode selectors are gone. See the first dated note below.
-**Phase:** **B — make it a platform.** Phase A is complete; resume Phase B at `B3`.
+**Last updated:** 2026-08-18 — `A4` merged in PR #20 and the remaining roadmap was narrowed
+to the three capabilities with the strongest portfolio value: `B3`, `C4`, and reduced `D1`.
+`B4` and `C1`–`C3` are deliberately deferred, not unfinished commitments. See the first
+dated note below.
+**Phase:** **Portfolio finish.** Three committed milestones remain: `B3` → `C4` → `D1`.
 **Next task:** `B3` — build the single-call MCP tool runtime: registry, per-user credentials,
 trust-tier authorization, durable approvals, invocation records, and the tool console.
-**Branch right now:** `agent/a4-message-router`; all five `A4` deliverables are committed and
-verified. Repository publication is the remaining lifecycle step; local `gh` authentication
-for `Harsha2803` must be renewed before the first push or PR mutation.
+**Branch right now:** `agent/resume-focused-roadmap`, draft PR #21; documentation-only
+scope reset after `A4` merged to `main`. Merge this plan PR before starting `B3`.
+
+> ### 2026-08-18 — the portfolio finish is `B3` → `C4` → reduced `D1`
+>
+> The original roadmap optimized for enterprise-product breadth and still carried seven
+> unbuilt milestones. That is no longer the committed plan. Mnemos exists to demonstrate the
+> author's production experience during a job search, so the remaining work now optimizes
+> for evidence a reviewer can run and discuss: safe single-call MCP tools (`B3`), the
+> governed context compiler and bitemporal memory that form the project's deep claim (`C4`),
+> and a reproducible, measured portfolio release (`D1`).
+>
+> `B4`'s multi-step agent runtime, `C1`'s API-key/full-RBAC product surface, `C2`'s prompt and
+> cost dashboards, and `C3`'s conversation organization are deliberately deferred. Existing
+> schema and architecture seams remain, but no agent should implement those milestones unless
+> the owner explicitly reopens scope after `D1`. Scope was cut; rigor, security invariants,
+> typed boundaries, end-to-end UI slices, and verification were not.
 
 > ### 2026-08-17 — `A4` done: every question routes itself and explains the choice
 >
@@ -864,6 +879,9 @@ for `Harsha2803` must be renewed before the first push or PR mutation.
 > `B1` → `B2` → `A4` → `B3` → `B4` → `C1`-`C4` → `D1`. No code changed this note — it is a
 > planning-only update, and `A3` deliverable 3 (the AST guard) is still the very next task,
 > unchanged and un-rushed.
+>
+> **Historical note:** the 2026-08-18 portfolio scope reset supersedes that future sequence.
+> Its ingestion-before-router decision remains part of the record; its post-`B3` order does not.
 
 > ### 2026-08-15 — `A3` deliverable 2 (business glossary) done, PR #15 still draft
 >
@@ -1096,20 +1114,24 @@ fresh. See **C11**: the author's employer's codebase is not a reference, not a s
 not to be read. The capability *list* below is what a platform of this kind needs — which
 is public knowledge about the shape of the problem, not anybody's intellectual property.
 
-**The feature surface, in full.** All of it is in the plan; none of it is aspirational
-decoration:
+**The committed portfolio feature surface.** Completed capabilities plus `B3`, `C4`, and
+reduced `D1` are the plan; larger architecture seams are optional extensions, not promises:
 
 | Area | What ships |
 |---|---|
-| **Conversation** | Sessions, messages, token-by-token streaming, folders, bookmarks, feedback |
+| **Conversation** | Sessions, messages, token-by-token streaming, and automatic flow routing |
 | **RAG** | Upload → extract → chunk → embed → hybrid retrieval → answer with click-through citations |
 | **NL2SQL** | Schema introspection, business glossary, generated SQL, AST read-only guard, read-only DB role, result grid, narration |
-| **Tools** | MCP registry, per-user credentials, approval gates, trust tiers, and a bounded agent state machine over them |
+| **Tools** | MCP registry, per-user credentials, approval gates, trust tiers, and one auditable tool call |
 | **Routing** | Classify a message to chat / RAG / NL2SQL / tools, and show *why* it was routed there |
 | **Ingestion** | Object storage, source connectors, an event bus, jobs with heartbeat, retry and stuck-job detection |
-| **Identity** | OIDC + internal auth, platform JWT with refresh rotation, API keys, RBAC, tag-scoped ACLs, per-tenant row-level security |
+| **Identity** | OIDC + internal auth, platform JWT with refresh rotation, live role bindings, and per-tenant row-level security |
 | **Governed context** | Bitemporal memory with supersession, a budgeted context compiler, and an inspector that shows what was admitted, what was excluded and why |
-| **Operations** | Versioned prompt store, cost and token ledger, audit log, realtime WebSocket, migrations, CI, end-to-end tests |
+| **Operations** | Reproducible Compose, migrations, CI, critical-path end-to-end tests, and measured documentation |
+
+Multi-step agent orchestration, API keys/full RBAC/tag ACLs, prompt/cost management, and
+conversation-product depth remain valid future extensions but are deliberately deferred from
+the resume-focused finish line. See §3.0 and [`docs/Roadmap.md`](docs/Roadmap.md).
 
 The milestone plan is §3.0 here; the architecture, schema and design rationale are in
 **[`docs/ADAPTATION.md`](docs/ADAPTATION.md)**. Read that next.
@@ -1166,7 +1188,7 @@ port in `C4`. Until then the README must say so.
 Milestone ledger and exit criteria live in [ADAPTATION §7](docs/ADAPTATION.md#7-milestones).
 Detailed evidence for each ✅ is in [ADAPTATION §8](docs/ADAPTATION.md#8-current-state).
 
-### 3.0 The plan — four phases, and the sentence each one earns
+### 3.0 The plan — completed foundation and the resume-focused finish
 
 Every milestone ships its backend *and* its UI (C12), and every milestone ends with a
 sentence of the form **"you can now ___"** performable at `http://localhost:3000` (C14).
@@ -1182,7 +1204,9 @@ That right-hand column is not a summary — it is the exit criterion.
 | **A3** | NL2SQL: introspection · glossary · generate · AST read-only guard · `mnemos_ro` execution · narration · SQL panel | **ask a question about your data in English** and see the SQL, the rows and the narration — and see the guard visibly refuse a write | ✅ verified 2026-08-15, PR #15 |
 | **A4** | Router: classify a message → chat / RAG / NL2SQL · flow indicator | **ask anything without choosing a mode**, and see which flow answered and why | ✅ 2026-08-17 — verified against the rebuilt stack |
 
-**At the end of Phase A the thing this project is for exists.** Everything after deepens it.
+**At the end of Phase A the thing this project is for exists.** The remaining committed
+work adds one current market-facing capability, lands the deep technical claim, and makes
+the result effortless to evaluate.
 
 **Build order stops following phase order once, starting 2026-08-15: `B1`/`B2` (ingestion),
 below, are built immediately after `A3` — before `A4`.** These tables still group work by
@@ -1196,22 +1220,22 @@ order" list is the authoritative next-up sequence; the note above it explains wh
 | **B1** | Object storage · source connectors (MinIO/S3, local FS, HTTP) · Redis Streams event bus · sources UI | **connect a source, browse it, and watch ingestion events arrive live** | ✅ 2026-08-17 — all 5/5 deliverables done, browser-verified against the rebuilt stack |
 | **B2** | Ingestion jobs at scale: heartbeat, retries, status history, stuck-job reaper · per-job progress UI | **ingest a folder and watch every job's progress — including one that dies, surfaced as stuck rather than silently lost** | ✅ 2026-08-17 — verified against the rebuilt stack |
 | **B3** | MCP tool runtime: registry, per-user credentials, trust tiers, approval gates · tool console | **register a tool, have the assistant call it, and approve a gated call** — with a denial that names the offending source on screen | ⬜ |
-| **B4** | Agent flow: bounded state machine over tools, checkpoints, step trace | **give it a multi-step task and watch it plan, call tools and finish — with every step inspectable** | ⬜ |
+| **B4** | Agent flow: bounded state machine over tools, checkpoints, step trace | **give it a multi-step task and watch it plan, call tools and finish — with every step inspectable** | ⏸ deferred — not required for the portfolio finish |
 
 **Phase C — make it enterprise, and land the deep claim.**
 
 | ID | What it builds | You can now… | Status |
 |---|---|---|---|
-| **C1** | API keys (old `M3.5`) · full RBAC permission matrix + tag-scoped document ACLs (old `M3.6`) · keys UI + real 403 states | **issue an API key, call the API with it, and watch a user without the permission be refused** — in the UI and at the wire | ⬜ |
-| **C2** | Versioned prompt store (diff, activate) · cost + token ledger · prompt manager + cost dashboard | **change the prompt behind a flow, activate the new version, and see what every answer cost** | ⬜ |
-| **C3** | Chat history depth: folders, bookmarks, feedback · audit log · search over history | **organise, bookmark, rate and search your conversations, and read the audit trail of who did what** | ⬜ |
+| **C1** | API keys (old `M3.5`) · full RBAC permission matrix + tag-scoped document ACLs (old `M3.6`) · keys UI + real 403 states | **issue an API key, call the API with it, and watch a user without the permission be refused** — in the UI and at the wire | ⏸ deferred — existing OIDC/JWT/RLS already carries the core security signal |
+| **C2** | Versioned prompt store (diff, activate) · cost + token ledger · prompt manager + cost dashboard | **change the prompt behind a flow, activate the new version, and see what every answer cost** | ⏸ deferred — operations breadth, not a finish-line differentiator |
+| **C3** | Chat history depth: folders, bookmarks, feedback · audit log · search over history | **organise, bookmark, rate and search your conversations, and read the audit trail of who did what** | ⏸ deferred — conventional product depth |
 | **C4** | **The context layer.** Bitemporal memory + supersession · the budgeted context compiler · the context inspector · re-run the benchmark on Postgres | **open any answer and see its compiled context** — what was admitted, what was excluded and why, and the token spend against budget | ⬜ |
 
 **Phase D — ship it.**
 
 | ID | What it builds | You can now… | Status |
 |---|---|---|---|
-| **D1** | Realtime WebSocket presence + streaming polish · nginx · Playwright e2e over the whole stack · README rewritten on measured numbers | **run one command, get the whole system, and read a README whose every number was produced by a command in the repo** | ⬜ |
+| **D1** | Portfolio release: clean-clone Compose proof · critical-path Playwright · deterministic demo · README rewritten on measured numbers | **clone it, run one command, follow one walkthrough, and reproduce every material claim in the README** | ⬜ committed — final milestone |
 
 **Already built — the foundation the above stands on.**
 
@@ -1226,24 +1250,26 @@ order" list is the authoritative next-up sequence; the note above it explains wh
 | **F0** | The app shell: Next.js, design tokens, three-column layout, theming, primitives, generated API client | ✅ |
 | **F0a** | CI — pytest, ruff, mypy `--strict`, `alembic check`, and the frontend gate on every PR | ✅ |
 
-**Old milestone numbers, mapped.** Nothing was dropped; `M4`–`M14` were re-cut, not
-discarded. If you find a reference to an old ID anywhere, this is the translation:
+**Old milestone numbers, mapped.** This translation is historical. The 2026-08-18 scope
+reset deliberately deferred `B4` and `C1`–`C3`; an old design reference does not reopen
+them. If you find an old ID anywhere, use this table to understand it rather than treating
+it as committed work:
 
 | Old | New | Note |
 |---|---|---|
-| `M3.5` API keys | `C1` | Deferred: an API key is a second credential type, and nothing consumes the first one yet |
-| `M3.6` RBAC | split — guard to `A0`, matrix to `C1` | The **fail-closed guard** moves early because every route added in Phase A must be covered by it; the permission *matrix* can wait for something to permission |
+| `M3.5` API keys | `C1` | Deliberately deferred from the portfolio finish |
+| `M3.6` RBAC | split — guard to `A0`, matrix to `C1` | The **fail-closed guard** shipped in `A0`; the exhaustive permission matrix is deliberately deferred |
 | `M4` kernel port | split — retrieval to `A2`, memory + compiler + inspector to `C4` | Retrieval lands where RAG needs it so it is never built twice; the governance layer is a deep slice of its own |
 | `M5` objectstore/connectors/events | `B1` | Minimal upload lands in `A2`; the connector *abstraction* is `B1` |
 | `M6` knowledge + jobs | split — extract/chunk/embed to `A2`, job machinery to `B2` | |
-| `M7` LLM gateway + prompts + cost | split — gateway to `A1`, prompts + cost to `C2` | The gateway is a prerequisite for talking at all; prompt versioning is not |
-| `M8` chat | split — sessions/messages/streaming to `A1`, folders/bookmarks/feedback to `C3` | |
+| `M7` LLM gateway + prompts + cost | split — gateway to `A1`, prompts + cost to `C2` | The gateway shipped; prompt/cost management is deliberately deferred |
+| `M8` chat | split — sessions/messages/streaming to `A1`, folders/bookmarks/feedback to `C3` | Core chat shipped; conversation-product depth is deliberately deferred |
 | `M9` RAG | `A2` | |
 | `M10` NL2SQL | `A3` | |
 | `M11` MCP tools | `B3` | |
 | `M12` router | `A4` | Moved **earlier**: without it the user has to pick a mode, which is not what a chatbot is |
 | `M13` frontend | dissolved into `F0` + a UI slice per milestone | Unchanged by this re-plan |
-| `M14` realtime + e2e + docs | `D1` | |
+| `M14` realtime + e2e + docs | reduced `D1` | Critical-path e2e, reproducible startup, demo, and measured docs remain; presence/nginx are requirement-driven only |
 
 ### ✅ A4 — stop choosing a mode, verified 2026-08-17
 
@@ -1673,7 +1699,7 @@ properly, here.
 
 | Layer | What landed |
 |---|---|
-| `features/llm/domain/model.py` | `ChatModel` — a `Protocol` with `stream`, `complete`, `health`, narrow on purpose so `A4`'s router and `C2`'s cost ledger can swap models without touching a call site |
+| `features/llm/domain/model.py` | `ChatModel` — a `Protocol` with `stream`, `complete`, `health`, narrow on purpose so `A4`'s router and any future provider/accounting extension can swap models without touching a call site |
 | `features/llm/adapters/ollama.py` | `OllamaChatModel` over `/api/chat`. Every failure becomes `UpstreamError` (502) or `DependencyUnavailableError` (503, from `health()`); nothing above this layer ever sees Ollama's own wire shape |
 | `features/chat/domain/` | `ChatSessionSummary`, `ChatMessageRecord`, `ChatSessionDetail`, `ChatSessionPage`, and the three streaming events `AssistantToken`/`AssistantDone`/`AssistantError` — all pure, no I/O |
 | `features/chat/application/service.py` | `ChatService` — session CRUD plus `stream_reply`, the async generator the router primes and drains |
@@ -2356,15 +2382,18 @@ the boundary, not at the raise site.
 ### ✅ v0.1 kernel, quarantined in `_v1/` (23 tests passing)
 
 `core` · `embed` · `store` · `retrieval` · `compiler` · `baseline` · `ingest` ·
-`dataset` · `bench` · `app` · `cli`. Ported, not rewritten, in M4.
+`dataset` · `bench` · `app` · `cli`. Retrieval was ported, not rewritten, in `A2`;
+memory/compiler/benchmark move in committed `C4`.
 
-### ⬜ Designed in `docs/` but NOT built
+### ⬜ Designed extension seams, not all committed
 
-Neo4j knowledge graph (dropped) · agent runtime · MCP tool service · NL2SQL flow ·
-OIDC/SAML auth · Celery workers · Next.js dashboard.
+Committed and not built: `B3` single-call MCP runtime · `C4` governed context · reduced
+`D1` portfolio release.
 
-`docs/` describes the full target architecture. The gap is stated in the README and is
-not a defect.
+Deliberately deferred: `B4` multi-step agent runtime · `C1` API keys/full RBAC/tag ACL UI ·
+`C2` prompt/cost management · `C3` conversation-product depth. Neo4j, SAML, Celery, and
+multi-node deployment remain dropped. Architecture documents may preserve extension seams;
+they do not expand the committed finish line.
 
 ### Environment
 
@@ -2778,7 +2807,8 @@ Recorded so they are not rediscovered as surprises:
     exists today; `InternalProvider` from `M3.2` has no router) — and each is a decision
     about the golden path or the realm seed that deserves its own review rather than a fix
     folded into an unrelated milestone's diff. Recorded here so it is a decision the next
-    milestone that touches identity (`C1`) makes on purpose rather than rediscovers.
+    future identity work makes on purpose rather than rediscovers; deferred `C1` no longer
+    sits on the committed finish line.
 
 41. **Nothing in the API process had ever imported the full model registry
     (`mnemos.platform.models`).** `platform/db.py`'s own docstring says every model module
@@ -2860,29 +2890,21 @@ or recovery across several calls (`B4`); the full context compiler/bitemporal me
 generated MCP servers from arbitrary OpenAPI, every transport, or paid SaaS integrations.
 Keep Ollama and the free self-hosted path as the default.
 
-### Then, in order — this list is the plan, and it no longer matches phase order exactly
+### Then, in order — the complete committed finish
 
-Each item below is one session (or a small coherent group), and each carries its own "you
-can now ___" (C14). **As of 2026-08-17, `A4` is complete and Phase B resumes at `B3`.**
+Each item is one session and one repository lifecycle. There are exactly three committed
+milestones after the documentation-only scope reset:
 
-- **`A3` — ask about your data.** ✅ Done, all 5/5 deliverables, verified 2026-08-15.
-- **`B1` — connect a source and watch it ingest.** ✅ Done, all 5/5 deliverables, verified
-  2026-08-17.
-  Object storage port + `S3ObjectStore` already existed from `A2` (MinIO); `B1` added the
-  `SourceConnector` abstraction (MinIO/S3, local filesystem, HTTP URL), a Redis Streams
-  event bus, an authenticated realtime channel, and the worker's first real job-processing
-  path, so a source is *connected and browsed* rather than only uploaded file-by-file, with
-  ingestion events visible live in a new sources UI.
-- **`B2` — ingestion at scale.** ✅ Done, verified 2026-08-17. Heartbeat renewal,
-  retry/backoff, status history, stuck-job surfacing, replay-via-recent-jobs, and per-job
-  progress UI are built over `B1`'s connector job path.
-- **`A4` — stop choosing a mode.** ✅ Done, verified 2026-08-17. The deterministic router,
-  persisted flow/rationale metadata, compact transcript annotation, and selector removal are
-  all live.
-- **`B3` — register and safely call one MCP tool.** ⬅ **next.** Registry, per-user
-  credentials, trust-tier enforcement, durable approval, invocation audit, and Tool console.
+1. **`B3` — register and safely call one MCP tool.** ⬅ **next.** Registry, per-user
+   credentials, trust-tier enforcement, durable approval, invocation audit, and Tool console.
+2. **`C4` — make context compiled and inspectable.** Port bitemporal memory and the budgeted
+   compiler to Postgres, expose bundle `EXPLAIN` in the app, and re-run the benchmark.
+3. **Reduced `D1` — ship the portfolio release.** Prove clean-clone Compose, cover the
+   critical journeys in Chromium, add a deterministic walkthrough, and rewrite the README
+   around reproducible measurements and honest limitations.
 
-Then `B4` (the rest of Phase B), Phase C (`C1`–`C4`), Phase D (`D1`) — §3.0, unchanged.
+`B4` and `C1`–`C3` are deliberately deferred. Do not start them after `B3` or insert them
+between `C4` and `D1`; only an explicit future owner decision may reopen that scope.
 
 **Commit shape:** one commit per numbered deliverable, not one per milestone. A backend
 deliverable and its UI slice may share a commit or be adjacent commits — never adjacent

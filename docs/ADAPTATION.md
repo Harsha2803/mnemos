@@ -4,25 +4,25 @@
 > self-contained: architecture, the capability inventory, schema, milestones, and current
 > state. [`TRACKER.md`](../TRACKER.md) holds live task status; this holds the design.
 
-**Last updated:** 2026-08-17 — `A4` is implemented and live-verified. The chat surface now
-routes every message to chat, RAG, or NL2SQL, persists and displays the compact reason, and
-has no manual answer-mode selector. Phase A is complete; `B3` is next.
+**Last updated:** 2026-08-18 — `A4` is merged in PR #20. The remaining committed roadmap
+is narrowed to `B3` → `C4` → reduced `D1`; `B4` and `C1`–`C3` are deliberately deferred
+to finish a strong, evaluable portfolio rather than an exhaustive product.
 
 ---
 
 ## 1. What Mnemos is
 
-**An enterprise AI assistant.** One conversation surface. The user asks something; a
-router decides whether the answer needs documents (**RAG**), a database (**NL2SQL**), a
-tool (**MCP**), memory, or a combination — then answers with citations you can click
-into. Underneath it is multi-tenant, authenticated, authorised and audited, because that
-is what separates an assistant from a demo.
+**An enterprise AI assistant.** One conversation surface. Today the router chooses plain
+chat, documents (**RAG**), or a database (**NL2SQL**) and shows why. `B3` adds one safely
+approved **MCP** tool call; `C4` makes governed memory and compiled context inspectable.
+Underneath it is multi-tenant, authenticated, and authorized because those controls are
+what separate an assistant from a demo.
 
-**The breadth is the achievement.** Conversation, retrieval, natural language over a
-warehouse, tool calling, ingestion at scale, identity, governance and the operational
-scaffolding around all of it — a platform of this kind is defined by having the whole
-surface, not by having one part of it done unusually well. §3 is the inventory, and every
-row of it is in the milestone plan rather than in a wish list.
+**The achievement is demonstrated depth across a coherent surface.** Conversation,
+retrieval, natural language over a warehouse, ingestion, identity, safe tool use, governed
+context, and reproducible delivery show the author's production experience without trying
+to reproduce every feature of a commercial SaaS product. §3 distinguishes built and
+committed capabilities from deliberately deferred extension seams.
 
 **It carries one deep technical claim, and the claim is measured rather than asserted:**
 every prompt is a **compiled, budgeted artifact you can open** — an inspectable context
@@ -84,15 +84,15 @@ supposed to guard against.
 
 ## 3. Capability inventory
 
-What a platform of this kind needs, what Mnemos builds for it, and which milestone owns
-it. Milestone IDs are the ones in §7; nothing here is aspirational, and anything
-deliberately out of scope says so with its reason.
+What a platform of this kind may need, what Mnemos builds or preserves as an extension
+seam, and which milestone owns it. Milestone IDs are the ones in §7; deliberately deferred
+rows are marked and are not promises in the portfolio plan.
 
 | Capability a platform of this kind needs | What Mnemos builds | Milestone |
 |---|---|---|
 | **Pluggable authentication** — more than one way to prove who you are, chosen per tenant rather than compiled in | `features/identity/providers/`: a Strategy + Factory over **two** protocols — a credential the caller knows, and a token another system minted. Internal password auth + OIDC on Keycloak. SAML is dropped (§9): it is a third adapter behind the same seam and proves nothing the second one did not | `M3.1`–`M3.3` ✅ |
 | **A session that survives a reload, and a door that is shut by default** | Platform JWT (HS256) with refresh-token rotation and family revocation; a fail-closed route dependency where an undecorated route is authenticated, and public routes are an enumerated allow-list rather than a prefix match | `M3.4` ✅ backend · `A0` |
-| **Users, roles, and per-document access that is not all-or-nothing** | `features/identity/`: users, orgs, system roles seeded at bootstrap, an RBAC permission matrix, **tag-scoped document ACLs**, API keys as a second credential type, and per-tenant row-level security under all of it | `M2a` ✅ RLS · `M3.7` ✅ roles · `C1` |
+| **Users, roles, and per-document access that is not all-or-nothing** | Built: users, orgs, protected system roles, scan-time document authorization, and per-tenant RLS. Extension seam: API keys, an exhaustive permission matrix, and tag-scoped ACL UI | `M2a` ✅ RLS · `M3.7` ✅ roles · `C1` deferred |
 | **Object storage behind a port**, so the deployment target is a config choice | `platform/objectstore/`: port + S3 adapter on **MinIO** rather than S3 itself — same API, no bill, and the constraint that keeps the benchmark reproducible on any machine (C1) | `A2` upload · `B1` |
 | **Source connectors** — content arrives from somewhere that is not an upload form | `features/connectors/`: a `SourceConnector` port + factory, with MinIO/S3, local filesystem and HTTP URL adapters. The abstraction is the deliverable; the adapter count is not | `B1` |
 | **An event bus** decoupling ingestion from the request that triggered it | `platform/events/`: an `EventBus` port with a **Redis Streams** adapter. No cloud pub/sub — it costs money and it is the same port shape, so paying for it would buy nothing the port does not already give | `B1` |
@@ -103,17 +103,17 @@ deliberately out of scope says so with its reason.
 | **Natural language over a warehouse** | `flows/nl2sql/`: introspection → glossary → generate → **AST read-only guard** → execute as a read-only DB role → narrate. Two independent defences, because a guard that is the only defence is one parser bug from a write | `A3` |
 | **A SQL surface that is a config exercise to widen** | `features/datasources/`: datasource registry, schema introspection, and a `SqlDialect` port. **Postgres only** — the second warehouse is a paid account, and the port is what makes it a config exercise rather than a rewrite | `A3` |
 | **Business vocabulary** — "revenue" means something specific here | `features/datasources/glossary`: glossary terms feeding the NL2SQL schema context | `A3` |
-| **Routing**, so the user does not have to pick a mode | `flows/router/`: classify a message to chat / RAG / NL2SQL / tools, and show *why* it was routed there | `A4` |
+| **Routing**, so the user does not have to pick a mode | `flows/router/`: classify a message to chat / RAG / NL2SQL and show *why*; `B3` adds the narrow single-tool outcome | `A4` ✅ · `B3` |
 | **A tool runtime with a trust boundary** | `features/tools/`: MCP registry, per-user credentials, trust tiers, approval gates, invocation records. A denial names the offending source on screen | `B3` |
-| **Multi-step work that can be inspected mid-flight** | `flows/agent/`: a bounded state machine over tools with checkpoints and a step trace | `B4` |
+| **Multi-step work that can be inspected mid-flight** | Optional future `flows/agent/`: a bounded state machine over tools with checkpoints and a step trace | `B4` deferred |
 | **Conversation persistence** — sessions, messages, streaming | `features/chat/`: `chat_session` + `chat_message`, SSE token streaming | `A1` |
-| **Conversation *management*** — the part that makes it usable past the first week | `features/chat/`: folders, bookmarks, feedback, search over history | `C3` |
-| **Prompts as data, not as string literals in a handler** | `features/prompts/`: DB-backed versioned prompts with diff and activation. Cheap to build, and the difference between tuning a prompt and redeploying to tune a prompt | `C2` |
-| **Cost and token accounting** | `features/observability/`: an `inference_call` ledger (monthly partitions) behind a cost dashboard | `C2` |
-| **An audit trail** | `features/observability/`: `audit_log` — who did what, readable in the UI | `C3` |
+| **Conversation *management*** — the part that makes it usable past the first week | Optional folders, bookmarks, feedback, and history search | `C3` deferred |
+| **Prompts as data, not as string literals in a handler** | Optional DB-backed versioned prompts with diff and activation | `C2` deferred |
+| **Cost and token accounting** | Optional `inference_call` ledger and cost dashboard | `C2` deferred |
+| **An audit trail** | Optional expanded `audit_log` product surface | `C3` deferred |
 | **Governed context** — the deep claim | `features/memory/` (bitemporal claims, supersession, lifecycle) + `features/context/` (the six-phase compiler) + the context inspector + the benchmark re-run on Postgres | `C4` |
 | **Deletion that reaches everything a document touched** | Cascade delete of document → chunks → embeddings → citations; memory erase lands with the memory layer | `A2` documents · `C4` memory |
-| **Realtime push** — a separate service, because a WebSocket gateway and a request/response API have different lifecycles | `entrypoints/realtime/`: WS over Redis pub/sub, its own container since `M1` | `M1` ✅ container · `D1` |
+| **Realtime push** — a separate service, because a WebSocket gateway and a request/response API have different lifecycles | `entrypoints/realtime/`: authenticated ingestion updates over Redis, its own container since `M1` | `M1` ✅ container · `B1` ✅ authenticated flow |
 | **Background execution** — same reason | `entrypoints/worker/`: its own container since `M1`; the job machinery it runs is `B2` | `M1` ✅ container · `B2` |
 | **A knowledge graph** | **Dropped.** A whole extra container and subsystem (Neo4j) for a payoff that is marginal at this scope, against a retrieval path that already fuses three operators | — |
 | **Terraform, Kubernetes, multi-node** | **Dropped.** Mnemos is portfolio-grade and single-node: production *practices*, not production *scale*. `docs/` describes the scaling stages and labels them as design intent | — |
@@ -211,10 +211,11 @@ Every tenant-scoped table: `org_id` + RLS `FORCE` on `app.current_org` GUC.
 
 ## 7. Milestones
 
-Re-cut on 2026-08-02 into four phases. The old `M1`–`M14` numbering is superseded; it is
-mapped onto these IDs at the end of this section, so a reference to an old ID found
-anywhere translates rather than needing to be guessed at. The authoritative copy of these
-tables is [TRACKER §3.0](../TRACKER.md#30-the-plan--four-phases-and-the-sentence-each-one-earns).
+Re-cut on 2026-08-02 into product milestones, then narrowed on 2026-08-18 to a
+resume-focused finish. The old `M1`–`M14` numbering is superseded and mapped at the end of
+this section for historical translation. The only remaining committed sequence is
+`B3` → `C4` → reduced `D1`; `B4` and `C1`–`C3` are deliberately deferred. The authoritative
+live copy is [TRACKER §3.0](../TRACKER.md#30-the-plan--completed-foundation-and-the-resume-focused-finish).
 
 Two rules govern every row.
 
@@ -250,22 +251,22 @@ authoritative for sequencing, not these tables' phase grouping.
 | **B1** | Object storage · source connectors (MinIO/S3, local FS, HTTP) · Redis Streams event bus · sources UI | **connect a source, browse it, and watch ingestion events arrive live** | ✅ 2026-08-17 — all 5/5 deliverables done, browser-verified against the rebuilt stack |
 | **B2** | Ingestion jobs at scale: heartbeat, retries, status history, stuck-job reaper · per-job progress UI | **ingest a folder and watch every job's progress — including one that dies, surfaced as stuck rather than silently lost** | ✅ 2026-08-17 — verified against the rebuilt stack |
 | **B3** | MCP tool runtime: registry, per-user credentials, trust tiers, approval gates · tool console | **register a tool, have the assistant call it, and approve a gated call** — with a denial that names the offending source on screen | ⬜ |
-| **B4** | Agent flow: bounded state machine over tools, checkpoints, step trace | **give it a multi-step task and watch it plan, call tools and finish — with every step inspectable** | ⬜ |
+| **B4** | Agent flow: bounded state machine over tools, checkpoints, step trace | **give it a multi-step task and watch it plan, call tools and finish — with every step inspectable** | ⏸ deferred — not required for the portfolio finish |
 
 **Phase C — make it enterprise, and land the deep claim.**
 
 | ID | What it builds | You can now… | Status |
 |---|---|---|---|
-| **C1** | API keys · full RBAC permission matrix + tag-scoped document ACLs · keys UI + real 403 states | **issue an API key, call the API with it, and watch a user without the permission be refused** — in the UI and at the wire | ⬜ |
-| **C2** | Versioned prompt store (diff, activate) · cost + token ledger · prompt manager + cost dashboard | **change the prompt behind a flow, activate the new version, and see what every answer cost** | ⬜ |
-| **C3** | Chat history depth: folders, bookmarks, feedback · audit log · search over history | **organise, bookmark, rate and search your conversations, and read the audit trail of who did what** | ⬜ |
+| **C1** | API keys · full RBAC permission matrix + tag-scoped document ACLs · keys UI + real 403 states | **issue an API key, call the API with it, and watch a user without the permission be refused** — in the UI and at the wire | ⏸ deferred — existing OIDC/JWT/RLS carries the core security signal |
+| **C2** | Versioned prompt store (diff, activate) · cost + token ledger · prompt manager + cost dashboard | **change the prompt behind a flow, activate the new version, and see what every answer cost** | ⏸ deferred — operations breadth, not a finish-line differentiator |
+| **C3** | Chat history depth: folders, bookmarks, feedback · audit log · search over history | **organise, bookmark, rate and search your conversations, and read the audit trail of who did what** | ⏸ deferred — conventional product depth |
 | **C4** | **The context layer.** Bitemporal memory + supersession · the budgeted context compiler · the context inspector · re-run the benchmark on Postgres | **open any answer and see its compiled context** — what was admitted, what was excluded and why, and the token spend against budget | ⬜ |
 
 **Phase D — ship it.**
 
 | ID | What it builds | You can now… | Status |
 |---|---|---|---|
-| **D1** | Realtime WebSocket presence + streaming polish · nginx · Playwright e2e over the whole stack · README rewritten on measured numbers | **run one command, get the whole system, and read a README whose every number was produced by a command in the repo** | ⬜ |
+| **D1** | Portfolio release: clean-clone Compose proof · critical-path Playwright · deterministic demo · README rewritten on measured numbers | **clone it, run one command, follow one walkthrough, and reproduce every material claim in the README** | ⬜ committed — final milestone |
 
 **Already built — the foundation the above stands on.**
 
@@ -282,23 +283,24 @@ authoritative for sequencing, not these tables' phase grouping.
 
 ### Old milestone numbers, mapped
 
-Nothing was dropped. `M4`–`M14` were re-cut, not discarded, and this is the translation:
+This mapping is historical. The 2026-08-18 scope reset deliberately deferred `B4` and
+`C1`–`C3`; an old design reference does not reopen them:
 
 | Old | New | Note |
 |---|---|---|
-| `M3.5` API keys | `C1` | Deferred: an API key is a second credential type, and nothing consumes the first one yet |
-| `M3.6` RBAC | split — guard to `A0`, matrix to `C1` | The **fail-closed guard** moves early because every route added in Phase A must be covered by it; the permission *matrix* can wait for something to permission |
+| `M3.5` API keys | `C1` | Deliberately deferred from the portfolio finish |
+| `M3.6` RBAC | split — guard to `A0`, matrix to `C1` | The **fail-closed guard** shipped in `A0`; the exhaustive matrix is deliberately deferred |
 | `M4` kernel port | split — retrieval to `A2`, memory + compiler + inspector to `C4` | Retrieval lands where RAG needs it so it is never built twice; the governance layer is a deep slice of its own |
 | `M5` objectstore/connectors/events | `B1` | Minimal upload lands in `A2`; the connector *abstraction* is `B1` |
 | `M6` knowledge + jobs | split — extract/chunk/embed to `A2`, job machinery to `B2` | |
-| `M7` LLM gateway + prompts + cost | split — gateway to `A1`, prompts + cost to `C2` | The gateway is a prerequisite for talking at all; prompt versioning is not |
-| `M8` chat | split — sessions/messages/streaming to `A1`, folders/bookmarks/feedback to `C3` | |
+| `M7` LLM gateway + prompts + cost | split — gateway to `A1`, prompts + cost to `C2` | The gateway shipped; prompt/cost management is deliberately deferred |
+| `M8` chat | split — sessions/messages/streaming to `A1`, folders/bookmarks/feedback to `C3` | Core chat shipped; conversation-product depth is deliberately deferred |
 | `M9` RAG | `A2` | |
 | `M10` NL2SQL | `A3` | |
 | `M11` MCP tools | `B3` | |
 | `M12` router | `A4` | Moved **earlier**: without it the user has to pick a mode, which is not what a chatbot is |
 | `M13` frontend | dissolved into `F0` + a UI slice per milestone | Dissolved 2026-08-02 and unchanged by the re-plan. "Build every screen at the end" guaranteed the APIs would be shaped without a consumer and that the whole UI would land as one unreviewable drop |
-| `M14` realtime + e2e + docs | `D1` | |
+| `M14` realtime + e2e + docs | reduced `D1` | Critical-path e2e, reproducible startup, demo, and measured docs remain; presence/nginx are requirement-driven only |
 
 The UI follows [`DesignSystem.md`](DesignSystem.md), which is normative. It is Mnemos's
 own system — its own accent, neutrals and identity — informed by Apple's design resources
@@ -307,9 +309,10 @@ Apple assets are off-limits (SF Pro as a webfont, SF Symbols) and what is used i
 
 **Current position.** `main` has `A0` (PR #11), `A1` (PR #13), `A2` (PR #14), `A3`
 (PR #15), `B1` (PR #16), the per-session log files (PR #17), the out-of-band frontend
-polish work (PR #18), and `B2` plus its final UI/correctness review (PR #19). `A4` is
-complete and verified on `agent/a4-message-router`; publication is waiting only for renewed
-personal `Harsha2803` authentication. Once closed, `B3` is next.
+polish work (PR #18), `B2` plus its final UI/correctness review (PR #19), and `A4`
+(PR #20). The documentation-only `agent/resume-focused-roadmap` branch records the
+2026-08-18 scope reset. After it merges, `B3` is next, followed only by `C4` and reduced
+`D1`.
 
 `M3`'s exit criterion "RLS blocks cross-org" turned out to be unmet by `M2` rather than
 merely untested; that is written up in §8 and in
@@ -573,7 +576,7 @@ items 34 and 35:** `authorize` and `callback` answer a browser with redirects ra
 JSON — one constant flag for every failure, and no token in any URL — and `GET /auth/me` is
 pulled forward from `C1` because the shell has to name the signed-in user and the token
 carries no email by design. It reports grants and enforces none; the permission matrix is
-still `C1`.
+preserved as deferred `C1` scope.
 
 ### M3 — identity 🟡 in progress
 
@@ -734,9 +737,10 @@ door, which is why a client must collapse concurrent refreshes into one call.
 
 **Just-in-time provisioning is on, and it grants identity rather than authority.** A first
 OIDC login creates the `app_user` row with `password_hash` NULL, no `role_binding` and no
-`user_tag`, so the user can sign in and do nothing until `C1` grants something. Matching is
-on `external_subject` and never on email: an IdP email is mutable and often unverified, so
-linking on it would let whoever controls that address inherit a local account.
+`user_tag`; it never manufactures a role from request or token input. The exhaustive grant
+management surface is deferred `C1` scope. Matching is on `external_subject` and never on
+email: an IdP email is mutable and often unverified, so linking on it would let whoever
+controls that address inherit a local account.
 
 | Command | Result |
 |---|---|
@@ -767,8 +771,7 @@ which is a C12 exception recorded in
 `frontend/` was an empty directory, so `F0` had to exist before a sign-in screen could be
 built in anything. `F0` has since landed, so the blocker is gone and that UI slice is now
 `A0` together with the fail-closed route guard (old `M3.6`'s guard half). API keys and the
-full RBAC permission matrix are `C1`. Both are specified in
-[TRACKER §5](../TRACKER.md#5-next-task) and §3.0's mapping table.
+full RBAC permission matrix remain documented as deliberately deferred `C1` scope in §7.
 
 **Done: M3.7 — `mnemosctl bootstrap` (2026-08-02).** M3.2 and M3.3 built a provider seam
 and an OIDC round trip that nothing could reach: `ProviderFactory` reads
@@ -1250,8 +1253,8 @@ and output observed, is in [TRACKER §3](../TRACKER.md#-a1--talk-to-it-verified-
 — this is the short version for a reader who only needs the shape of what landed.
 
 `features/llm/` is a narrow `ChatModel` port (`stream`/`complete`/`health`) over
-`OllamaChatModel`, so `A4`'s router and `C2`'s cost ledger can swap models later without
-touching a call site, and `/readyz` now genuinely depends on the configured model being
+`OllamaChatModel`, so `A4`'s router and any future provider/accounting extension can swap
+models without touching a call site, and `/readyz` now genuinely depends on the configured model being
 pulled (CodingStandards §7 — fail at startup, not at somebody's first message). `features/
 chat/` adds `ChatService` and `SqlChatRepository` behind the `chat_session`/`chat_message`
 tables `M2` already created; the streaming endpoint answers `text/event-stream` with named
@@ -1273,11 +1276,13 @@ bootstrap-created internal user of the same name and is correctly denied by the
 just-in-time-provisioning rule from `M3.4` (TRACKER §4 item 40) — browser evidence from
 here on signs in as `analyst@mnemos.local` instead.
 
-### Not started
+### Committed work not started
 
-**B3 through D** — §7. Phase A and `B1`/`B2` are complete as of 2026-08-17. Concretely, and
-stated plainly because the gap between what `docs/` describes and what runs is the thing
-this file exists to keep honest:
+**Three milestones remain:** `B3`, `C4`, and reduced `D1`. Phase A and `B1`/`B2` are
+complete. `B4` and `C1`–`C3` are deliberately deferred, so architecture/schema seams for
+them must not be reported as unfinished committed work. Concretely, and stated plainly
+because the gap between what `docs/` describes and what runs is the thing this file exists
+to keep honest:
 
 - **`B1` is done.** There is a source connector abstraction, an event bus, an authenticated
   realtime channel, a worker that actually processes ingestion jobs, and a browser-verified
@@ -1300,8 +1305,9 @@ this file exists to keep honest:
 - ~~**There is no router.**~~ **Built in `A4`.** Every message now selects chat, RAG, or
   NL2SQL automatically; the persisted compact reason is visible beside the answer and the
   provisional selectors/request flags are gone.
-- **There is no tool runtime, no agent flow, no prompt store and no cost ledger.** `B3`,
-  `B4`, `C2`.
+- **There is no tool runtime yet.** `B3` supplies the committed single-call MCP slice.
+  Multi-step agent flow (`B4`) and prompt/cost management (`C2`) are deferred rather than
+  silently promised.
 - **The context inspector shows a cited passage, not a context bundle.** `A2` gave it its
   first real content; what was admitted, what was excluded and why, and the token spend
   against budget, are `C4`. So is bitemporal memory, and so is re-running the benchmark on
@@ -1319,6 +1325,11 @@ identity through a full OIDC round trip and platform JWT with refresh rotation,
 `mnemosctl bootstrap`, CI, the app shell, a routed conversation surface, retrieval over
 uploaded documents with click-through citations, and guarded NL2SQL over the demo warehouse.
 Evidence for each is above.
+
+**Explicitly deferred after the 2026-08-18 scope reset:** `B4` multi-step agent planning,
+`C1` API keys/full RBAC/tag ACLs, `C2` prompt and cost management, and `C3` conversation
+organization/expanded audit UI. They remain coherent future extensions but are outside the
+resume-focused finish line unless the owner explicitly reopens scope after `D1`.
 
 ---
 
@@ -1353,6 +1364,9 @@ Evidence for each is above.
 - **Milestone IDs are `A0`–`D1` now, not `M4`–`M14`.** If you find an old ID in a document,
   a docstring or a commit message, §7's mapping table is the translation — do not guess,
   and do not leave a reader holding a number that no longer names anything.
+- **The complete committed finish is `B3` → `C4` → reduced `D1`.** Do not resume the old
+  phase sequence after `B3`; `B4` and `C1`–`C3` were deliberately deferred on 2026-08-18
+  to keep the project focused on high-value portfolio evidence.
 - **Read §7's two rules before scoping any work** (C12 and C14). A milestone that cannot
   end in a sentence a stranger could perform at `http://localhost:3000` is infrastructure,
   and infrastructure folds into the milestone it serves. That rule exists because the plan
@@ -1362,9 +1376,10 @@ Evidence for each is above.
   into a prefix match. If a handler needs to know who is calling, it asks for
   `require_caller`; if it forgets and needs one anyway, it raises — that is deliberate, and
   making the caller optional to silence it is how a route quietly stops being scoped.
-- **`B3` is a single-call tool runtime, not the agent.** Reuse the existing MCP tables,
+- **`B3` is a single-call tool runtime, not an agent loop.** Reuse the existing MCP tables,
   keep credentials per user, authorize again at the invocation boundary with the motivating
-  trust tier, and persist approval before dispatch. Multi-step planning/checkpoints are `B4`.
+  trust tier, and persist approval before dispatch. Multi-step planning/checkpoints are
+  deferred `B4` scope and are not the next task after `B3`.
 - **The local MCP fixture is part of `B3`'s exit evidence.** The default path may not depend
   on a SaaS account or paid API, and a malicious/remote endpoint still needs the connector
   path's SSRF/rebinding discipline, timeouts, schema validation, and response cap.
@@ -1376,8 +1391,8 @@ Evidence for each is above.
   finishes its port in `C4`; **re-run and update them there**, in the same commit, and do
   not let published numbers drift in the meantime.
 - `docs/` (Architecture, SystemDesign, DatabaseDesign, APIContract, ThreatModel, 12 ADRs)
-  describes a larger target than what is built. That gap is stated in the README and is
-  intentional; keep it stated.
+  preserves extension seams beyond the committed portfolio finish. The README must keep
+  those optional designs distinct from built or committed capabilities.
 - The v0.1 brute-force retrieval weakness was closed in `A2` with pgvector HNSW; keep ACL
   and revision predicates inside that scan if retrieval is touched later.
 - Do not re-run `pkill -f mnemos` — it matches the agent's own shell. Kill by port/PID.
