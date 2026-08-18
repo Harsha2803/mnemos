@@ -178,6 +178,12 @@ class Settings(BaseSettings):
     # allowlist) is stored encrypted at rest, with its own key.
     source_encryption_key: SecretStr = SecretStr(DEV_SOURCE_ENCRYPTION_KEY)
     tool_encryption_key: SecretStr = SecretStr(DEV_TOOL_ENCRYPTION_KEY)
+    # MCP endpoints are denied if they resolve to private space unless a
+    # deployment operator names the exact host here. Compose opts in only its
+    # deterministic `demo-mcp` service; user registration alone cannot widen it.
+    mcp_allowed_private_hosts: list[str] = []
+    mcp_timeout_s: int = Field(default=10, ge=1, le=60)
+    mcp_response_max_bytes: int = Field(default=1_048_576, ge=1_024, le=10_485_760)
     # The allowlisted root(s) a *deployment operator* has approved for the
     # local-filesystem connector — a second, deployment-time boundary around
     # what any org's `connector register --kind local_fs --root ...` may ever

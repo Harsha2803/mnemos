@@ -21,6 +21,7 @@ from __future__ import annotations
 
 import ipaddress
 import socket
+from collections.abc import Collection
 
 import anyio
 import httpx
@@ -67,12 +68,15 @@ def _resolve_sync(host: str, port: int) -> set[str]:
     return {str(info[4][0]) for info in infos}
 
 
-async def resolve_and_pin(url: str) -> tuple[httpx.URL, str]:
+async def resolve_and_pin(
+    url: str, *, allowed_private_hosts: Collection[str] = ()
+) -> tuple[httpx.URL, str]:
     """Validate `url`'s host and return a request URL pinned to a checked
     address, plus the original hostname (for the `Host` header and SNI).
 
-    Raises `SsrfRejectedError` if the host itself, or any address it
-    resolves to, falls inside the deny-list; `ValidationError` for anything
+    Raises `SsrfRejectedError` if the host itself, or any address it resolves
+    to, falls inside the deny-list and the deployment operator has not named
+    that exact host in ``allowed_private_hosts``; `ValidationError` for anything
     that is not a plain `http(s)://host[:port]/...` URL (embedded
     credentials are refused outright — `http://user:pass@host` is a classic
     way to smuggle a second, differently-parsed hostname past a naive check).
@@ -93,9 +97,12 @@ async def resolve_and_pin(url: str) -> tuple[httpx.URL, str]:
     if not addresses:
         raise ValidationError(f"host {parsed.host!r} resolved to no address", url=url)
 
+    private_host_allowed = parsed.host.casefold() in {
+        host.casefold() for host in allowed_private_hosts
+    }
     for raw in addresses:
         ip = ipaddress.ip_address(raw)
-        if _is_denied(ip):
+        if _is_denied(ip) and not private_host_allowed:
             raise SsrfRejectedError(
                 f"{parsed.host!r} resolves to a denied address range",
                 url=url,
