@@ -406,6 +406,8 @@ class SqlToolRepository:
         caller_trust_tier: TrustTier,
         denied_reason: str | None,
         offending_bundle_item_id: str | None,
+        error_code: str | None = None,
+        error_detail: str | None = None,
     ) -> McpInvocationRecord:
         invocation_id = McpInvocationId(self._ids.new())
         async with self._db.session(org_id=org_id) as session:
@@ -419,6 +421,8 @@ class SqlToolRepository:
                     status=status.value,
                     caller_trust_tier=int(caller_trust_tier),
                     denied_reason=denied_reason,
+                    error_code=error_code,
+                    error_detail=error_detail,
                     offending_bundle_item_id=(
                         uuid.UUID(offending_bundle_item_id)
                         if offending_bundle_item_id is not None
@@ -455,6 +459,7 @@ class SqlToolRepository:
         duration_ms: int | None = None,
         error_code: str | None = None,
         error_detail: str | None = None,
+        denied_reason: str | None = None,
     ) -> McpInvocationRecord | None:
         values: dict[str, object] = {"status": status.value}
         if approved_by is not None:
@@ -469,6 +474,8 @@ class SqlToolRepository:
             values["error_code"] = error_code
         if error_detail is not None:
             values["error_detail"] = error_detail
+        if denied_reason is not None:
+            values["denied_reason"] = denied_reason
         async with self._db.session(org_id=org_id) as session:
             updated = await session.execute(
                 update(McpInvocation)
@@ -503,3 +510,16 @@ class SqlToolRepository:
             rows = result.all()
         return [_invocation(row, source) for row, source in rows]
 
+    async def get_bundle_item_source(
+        self, *, org_id: OrgId, bundle_item_id: str
+    ) -> str | None:
+        try:
+            item_id = uuid.UUID(bundle_item_id)
+        except ValueError:
+            return None
+        async with self._db.session(org_id=org_id) as session:
+            return await session.scalar(
+                select(Document.title)
+                .join(BundleItem, BundleItem.document_id == Document.id)
+                .where(BundleItem.org_id == org_id, BundleItem.id == item_id)
+            )

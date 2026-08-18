@@ -101,6 +101,8 @@ class ToolRepository(Protocol):
         caller_trust_tier: TrustTier,
         denied_reason: str | None,
         offending_bundle_item_id: str | None,
+        error_code: str | None = None,
+        error_detail: str | None = None,
     ) -> McpInvocationRecord: ...
 
     async def get_invocation(
@@ -120,9 +122,13 @@ class ToolRepository(Protocol):
         duration_ms: int | None = None,
         error_code: str | None = None,
         error_detail: str | None = None,
+        denied_reason: str | None = None,
     ) -> McpInvocationRecord | None: ...
 
     async def list_invocations(
         self, *, org_id: OrgId, user_id: UserId
     ) -> Sequence[McpInvocationRecord]: ...
 
+    async def get_bundle_item_source(
+        self, *, org_id: OrgId, bundle_item_id: str
+    ) -> str | None: ...

@@ -13,8 +13,18 @@ from mnemos.features.tools.domain.models import (
     McpServerRecord,
     McpToolRecord,
 )
+from mnemos.features.tools.domain.policy import (
+    GRANT_DENIED,
+    LIVE_ROLE_DENIED,
+    TRUST_DENIED,
+    ToolAuthorizationDecision,
+    authorize_tool_call,
+)
 
 __all__ = [
+    "GRANT_DENIED",
+    "LIVE_ROLE_DENIED",
+    "TRUST_DENIED",
     "McpCredentialState",
     "McpGrantId",
     "McpGrantRecord",
@@ -24,4 +34,6 @@ __all__ = [
     "McpServerRecord",
     "McpToolId",
     "McpToolRecord",
+    "ToolAuthorizationDecision",
+    "authorize_tool_call",
 ]
