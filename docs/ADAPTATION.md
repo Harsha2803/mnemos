@@ -4,13 +4,13 @@
 > self-contained: architecture, the capability inventory, schema, milestones, and current
 > state. [`TRACKER.md`](../TRACKER.md) holds live task status; this holds the design.
 
-**Last updated:** 2026-08-22 — reduced `D1` deliverables 1-4 of 5 are done (PR #25, still
-open): a genuinely clean clone comes up ready, all 14 critical-path Playwright tests pass,
-`make demo-seed` + `docs/Demo.md` give a verified scripted walkthrough, and the README is
-rewritten around exact current numbers (464 backend / 114 frontend / 14 Playwright tests,
-42 tables with 41 under `FORCE` RLS) and an added Known-limitations section. Deliverable 5
-(final release verification and repository lifecycle) remains. Full detail is in
-`TRACKER.md`'s 2026-08-22 dated notes. `B4` and `C1`–`C3` remain deliberately deferred.
+**Last updated:** 2026-08-22 — reduced `D1` is **complete** (PR #25): a genuinely clean
+clone comes up ready, all 14 critical-path Playwright tests pass (three real bugs found and
+fixed along the way — see below), `make demo-seed` + `docs/Demo.md` give a live-verified
+scripted walkthrough, and the README is rewritten on exact final numbers (465 backend / 114
+frontend / 14 Playwright tests, 42 tables with 41 under `FORCE` RLS) with an added
+Known-limitations section. **No committed milestone remains.** `B4` and `C1`–`C3` stay
+deliberately deferred; full detail is in `TRACKER.md`'s 2026-08-22 dated notes.
 
 ---
 
@@ -270,7 +270,7 @@ authoritative for sequencing, not these tables' phase grouping.
 
 | ID | What it builds | You can now… | Status |
 |---|---|---|---|
-| **D1** | Portfolio release: clean-clone Compose proof · critical-path Playwright · deterministic demo · README rewritten on measured numbers | **clone it, run one command, follow one walkthrough, and reproduce every material claim in the README** | 🟡 4/5 deliverables done, PR #25 — final release verification remains |
+| **D1** | Portfolio release: clean-clone Compose proof · critical-path Playwright · deterministic demo · README rewritten on measured numbers | **clone it, run one command, follow one walkthrough, and reproduce every material claim in the README** | ✅ 2026-08-22, PR #25 — all 5 deliverables done |
 
 **Already built — the foundation the above stands on.**
 
@@ -314,8 +314,10 @@ Apple assets are off-limits (SF Pro as a webfont, SF Symbols) and what is used i
 **Current position.** `main` has `A0` (PR #11), `A1` (PR #13), `A2` (PR #14), `A3`
 (PR #15), `B1` (PR #16), the per-session log files (PR #17), the out-of-band frontend
 polish work (PR #18), `B2` plus its final UI/correctness review (PR #19), and `A4`
-(PR #20). The documentation-only scope reset merged in PR #21, and `B3` is complete on
-PR #23. Close that PR's repository lifecycle, then continue only with `C4` and reduced `D1`.
+(PR #20). The documentation-only scope reset merged in PR #21, `B3` is complete on PR #23,
+`C4` on PR #24, and reduced `D1` — the last committed milestone — on PR #25. No committed
+milestone remains; `B4` and `C1`–`C3` stay deliberately deferred pending an explicit owner
+decision.
 
 `M3`'s exit criterion "RLS blocks cross-org" turned out to be unmet by `M2` rather than
 merely untested; that is written up in §8 and in
@@ -905,7 +907,7 @@ the whole `up`. It does now, so plain `docker compose up -d` brings the frontend
 everything else and `web` has a healthcheck of its own — a stack whose UI needs a
 remembered extra flag is a stack whose UI does not get looked at.
 
-### D1 — portfolio release 🟡 4/5 deliverables done
+### D1 — portfolio release ✅ verified 2026-08-22
 
 Full evidence and dated narrative for each deliverable is in `TRACKER.md`'s 2026-08-22
 notes; this is the summary.
@@ -943,10 +945,30 @@ suite, and added a "Known limitations" section covering small-model NL2SQL/narra
 behaviour, Keycloak's dev-mode posture, the single-secret JWT trust domain, and the
 deferred-scope ledger.
 
-**Deliverable 5 — release verification and lifecycle — not done yet.** Full backend/frontend
-gates, a rebuilt Compose stack, `/readyz`, the Playwright suite, and `make bench` (only if
-the retrieval/compile path moved, which it has not) all need a final combined run before
-PR #25 goes ready and merges.
+**Deliverable 5 — release verification and lifecycle.** The first full rerun of all 14
+Playwright tests against a freshly rebuilt stack found a **third** real bug:
+`SqlToolRepository.list_tools` (and the post-discover tool list) ordered by `McpTool.name`
+alone. Every registered demo server caches a tool literally named `echo`, so ties on `name`
+had no guaranteed order — Postgres is free to answer the identical query differently across
+executions once more than one same-named row exists, which only happened once this session
+had run `tools.spec.ts` twice. `tools.spec.ts` intermittently proposed a call against a
+*different* same-named tool than the one it had just granted, denied with
+`grant_missing_or_expired`. Fixed by adding `McpTool.id` (UUIDv7, time-ordered) as an
+explicit tiebreak in both places, plus the same fix for `list_invocations`' `created_at`
+ordering found nearby. The regression test inspects the compiled `ORDER BY` SQL directly
+rather than trusting row order — proven necessary by reverting the fix and confirming a
+same-session behavioural assertion alone still passed by coincidence on a small table.
+
+Final combined evidence, all against the rebuilt stack: backend `pytest` — **465 passed**;
+`make lint` / `make types` (216 source files) / `make check` all clean. Frontend lint,
+`tsc --noEmit`, `npm run test` (**114 passed**), and `npm run build` all clean. Full Compose
+rebuild, `/readyz` all four dependencies `ok`, ten containers healthy/running. `npx
+playwright test` — **14/14 passed**, the third consecutive full run in one session and the
+first with the ordering fix present — proof the fix closed it rather than the failure
+having been coincidental. `make bench` was not re-run: nothing in `D1` touched retrieval,
+memory or the compiler, so `bench_results/hashing.json` remains the accurate measurement.
+
+**`D1` is complete. No committed milestone remains.**
 
 ### C4 — governed context and bitemporal memory ✅ verified 2026-08-18
 
@@ -1391,7 +1413,7 @@ here on signs in as `analyst@mnemos.local` instead.
 
 ### Committed work not started
 
-**One milestone remains:** reduced `D1`. Phase A, `B1`–`B3`, and `C4` are complete.
+**No milestone remains.** Phase A, `B1`–`B3`, `C4`, and reduced `D1` are all complete.
 `B4` and `C1`–`C3` are deliberately deferred, so architecture/schema seams for
 them must not be reported as unfinished committed work. Concretely, and stated plainly
 because the gap between what `docs/` describes and what runs is the thing this file exists
@@ -1435,17 +1457,20 @@ to keep honest:
 - ~~**There is no conversation surface.**~~ **Built in `A1`.**
 
 What *is* built is the product surface and foundation those stand on: the container stack,
-the 41-table schema with row-level security that is in force rather than merely declared,
+the 42-table schema with row-level security that is in force rather than merely declared,
 identity through a full OIDC round trip and platform JWT with refresh rotation,
 `mnemosctl bootstrap`, CI, the app shell, a routed conversation surface, retrieval over
 uploaded documents with click-through citations, guarded NL2SQL over the demo warehouse,
-and one safely approved self-hosted MCP tool call.
-Evidence for each is above.
+one safely approved self-hosted MCP tool call, bitemporal governed memory with a budgeted
+context compiler and Bundle inspector, and — as of `D1` — a proven clean-clone startup path,
+a green critical-path Playwright suite, a scripted demo (`docs/Demo.md`), and a README
+rewritten on exactly these measured numbers. Evidence for each is above.
 
-**Explicitly deferred after the 2026-08-18 scope reset:** `B4` multi-step agent planning,
-`C1` API keys/full RBAC/tag ACLs, `C2` prompt and cost management, and `C3` conversation
-organization/expanded audit UI. They remain coherent future extensions but are outside the
-resume-focused finish line unless the owner explicitly reopens scope after `D1`.
+**Explicitly deferred, unchanged since the 2026-08-18 scope reset:** `B4` multi-step agent
+planning, `C1` API keys/full RBAC/tag ACLs, `C2` prompt and cost management, and `C3`
+conversation organization/expanded audit UI. They remain coherent future extensions but are
+outside the resume-focused finish line unless the project owner explicitly reopens scope —
+there is no next committed milestone that would do so automatically.
 
 ---
 
@@ -1480,9 +1505,9 @@ resume-focused finish line unless the owner explicitly reopens scope after `D1`.
 - **Milestone IDs are `A0`–`D1` now, not `M4`–`M14`.** If you find an old ID in a document,
   a docstring or a commit message, §7's mapping table is the translation — do not guess,
   and do not leave a reader holding a number that no longer names anything.
-- **The complete remaining finish is reduced `D1`.** Do not resume the old phase sequence;
-  `B4` and `C1`–`C3` were deliberately deferred on 2026-08-18 to keep the project focused
-  on high-value portfolio evidence.
+- **`D1` is done; no committed milestone remains.** Do not resume the old phase sequence
+  or invent new scope; `B4` and `C1`–`C3` were deliberately deferred on 2026-08-18 and stay
+  deferred pending an explicit owner decision, not an agent's judgment call.
 - **Read §7's two rules before scoping any work** (C12 and C14). A milestone that cannot
   end in a sentence a stranger could perform at `http://localhost:3000` is infrastructure,
   and infrastructure folds into the milestone it serves. That rule exists because the plan
@@ -1495,10 +1520,23 @@ resume-focused finish line unless the owner explicitly reopens scope after `D1`.
 - **`C4` is complete; preserve its invariants during D1.** Keep A2 ACL/revision predicates
   inside the scan, both memory clocks immutable, bundle replay persisted rather than
   recompiled, and `tokens_consumed <= token_budget` exact after rendering.
-- **D1 is proof and handoff, not product expansion.** Start from a genuinely clean clone,
-  consolidate the existing critical Playwright journeys, add a deterministic walkthrough,
-  and organize the README around exact reproduction commands and honest limitations.
-  4 of 5 deliverables are done (PR #25); only final release verification/lifecycle remains.
+- **`D1` is proof and handoff, not product expansion, and it is done (PR #25).** A genuinely
+  clean clone comes up ready, all 14 critical-path Playwright tests pass, `make demo-seed` +
+  `docs/Demo.md` give a live-verified walkthrough, and the README is rewritten on exact
+  final numbers with honest limitations.
+- **Every `ORDER BY` needs a tiebreak on a column that is actually unique in its scope, not
+  one that merely usually is.** Found live, twice, in `D1`: `mcp_tool.name` is not unique
+  (every demo server caches a tool called `echo`) and neither is `mcp_invocation.created_at`
+  under fast sequential inserts. A small, freshly-populated table often (never by contract)
+  answers a tied `ORDER BY` in insertion order, so a same-session behavioural test can pass
+  by coincidence on the unfixed code — proven by reverting the fix and watching exactly that
+  happen. `SqlToolRepository` now breaks both ties on `id` (UUIDv7, time-ordered); the
+  regression test asserts on the compiled SQL's `ORDER BY` clause, not on row order, because
+  that is the only way to pin the actual guarantee. `features/knowledge/adapters/
+  repository.py`'s document list has the identical shape (`created_at DESC` alone) and was
+  deliberately left unfixed — no test exercises positional order there and no failure has
+  been observed — but it is the same class of latent bug if a future feature ever reads
+  that list by position.
 - **Keycloak's seeded users have pinned `id` fields in `deploy/keycloak/mnemos-realm.json`
   — do not remove them.** Its dev-mode storage has no persistent volume (unlike every other
   stateful service), so a fresh import on container recreation is normal; the pinned ids are

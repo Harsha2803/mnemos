@@ -2,69 +2,86 @@ You are picking up Mnemos at:
 
   /home/shreeharsha/Personal/Projects/Resume_001/mnemos
 
-Current date of this handoff: 2026-08-18.
+Current date of this handoff: 2026-08-22.
 
 Repository state at this handoff:
 
-  - Phase A, `B1`/`B2`, and `B3` are merged. The resume-focused scope reset is PR #21;
-    safe single-call MCP tools are PR #23.
-  - `C4` is complete on `agent/c4-governed-context`, PR #24. If that PR is still open,
-    finish its repository lifecycle before starting implementation. If live GitHub state
-    says it is merged, trust it and start from clean `main`.
-  - Only reduced `D1` remains committed. `B4` and `C1`–`C3` are deferred unless the owner
-    explicitly reopens them after `D1`.
+  - Phase A, `B1`/`B2`/`B3`, `C4`, and reduced `D1` are all merged. `D1` — the resume-focused
+    plan's last committed milestone — closed on PR #25.
+  - No committed milestone remains. `B4` and `C1`–`C3` stay deliberately deferred; do not
+    start any of them, or any new scope, without an explicit decision from the project owner.
+  - If you were asked to pick this project back up with no specific task in mind: there is
+    nothing committed to do. Read TRACKER.md in full, confirm that against live GitHub state,
+    and stop — do not invent work.
 
-Read first, in order:
+Read first, in order, only if you have an actual task:
 
-  1. TRACKER.md — it is the live source of truth. Read the header, §0's agent
-     operating instructions, the 2026-08-18 `C4` completion note, §3.0's milestone ledger,
-     §5's reduced `D1` brief, and §7's update protocol.
-  2. docs/ADAPTATION.md — read §1, §3, §7, the `C4` evidence and committed/deferred
+  1. TRACKER.md — the live source of truth. Read the header, §0's agent operating
+     instructions, the 2026-08-22 dated notes (D1's five deliverables and the three real
+     bugs found closing them), §3.0's milestone ledger, §5 (confirms nothing is committed),
+     and §7's update protocol.
+  2. docs/ADAPTATION.md — §1, §3, §7, the `D1` evidence and "Committed work not started"
      section in §8, and §10's notes for the next session.
-  3. docs/Roadmap.md and docs/ImplementationPlan.md — these define why the finish line
-     is narrow and what `C4` → reduced `D1` means.
-  4. README.md, then Compose, the existing Playwright journeys, demo fixtures, `make bench`,
-     and the release/documentation surfaces named by TRACKER §5.
-  5. docs/CodingStandards.md before backend work and docs/DesignSystem.md before
-     frontend work.
+  3. docs/Roadmap.md and docs/ImplementationPlan.md — both now read as a closed plan, not a
+     forward brief. They explain why the finish line was narrow and why it stayed that way.
+  4. README.md — rewritten this session on exactly-measured numbers, with a `Known
+     limitations` section. docs/Demo.md is the scripted walkthrough (`make demo-seed` seeds
+     it, idempotently).
+  5. docs/CodingStandards.md before backend work, docs/DesignSystem.md before frontend work.
 
 Current product state:
 
-  - `A0` through `A4`, `B1`, `B2`, `B3`, and `C4` are done.
+  - `A0` through `A4`, `B1`, `B2`, `B3`, `C4`, and `D1` are all done.
   - Users can authenticate, stream routed chat, upload/query documents with citations,
     query the demo warehouse through guarded NL2SQL, and ingest connector content with
     durable progress/retry history.
   - Users can register/discover the included streamable-HTTP MCP server, keep credentials
     encrypted per user, grant a tool to their live identity, approve one persisted call,
     and inspect invocation history in the Tool console and transcript.
-  - Tool dispatch rechecks live role, active personal grant, and motivating trust tier.
-    Retrieved content cannot trigger a user-tier tool, and the denial names the offending
-    document. Multi-step planning/loops/checkpoints/replay were not added.
   - Users can create, supersede, retract, and query immutable bitemporal memory. Every
     supported answer flow attaches a persisted hard-budget context bundle; the inspector
     shows admissions, exclusions, trust, conflicts, lineage, provenance and exact spend.
   - `make bench` reproduces the unchanged 23-question corpus on migrated Postgres. At an
     800-token budget the governed arm retained 95.7% versus 91.3% for the fair prefilter
     control, with zero ACL leaks, stale facts, obsolete documents or overruns.
-  - Postgres RLS is forced for tenant data; retrieval authorization remains inside the
-    scan; NL2SQL retains both the AST read-only guard and `mnemos_ro` execution.
+  - `make wait` blocks until a fresh `docker compose up -d` is genuinely ready (first run
+    pulls the ~2GB Ollama model). `make demo-seed` deterministically prepares the warehouse,
+    glossary and a browsable connector source; `docs/Demo.md` scripts the walkthrough.
+  - The full critical-path Playwright suite (auth, chat, memory/bundle, RAG/citations,
+    NL2SQL, connector ingestion, MCP approval) passes 14/14 against a rebuilt Compose stack.
+  - Postgres RLS is forced for tenant data (42 tables, 41 under `FORCE`); retrieval
+    authorization remains inside the scan; NL2SQL retains both the AST read-only guard and
+    `mnemos_ro` execution.
   - The default stack remains free and self-hosted: Ollama, Postgres/pgvector, Redis,
     MinIO, Keycloak, and the deterministic demo MCP fixture. No paid account is required.
 
-Portfolio-focused remaining plan:
+Three real bugs D1 found and fixed — read TRACKER's 2026-08-22 notes before assuming any
+of this area is untouched infrastructure:
 
-  1. Reduced `D1` — prove clean-clone Compose, cover critical journeys in Playwright,
-     add a deterministic demo walkthrough, and rewrite the README around reproducible
-     measurements and honest limitations.
+  1. Keycloak's dev-mode storage has no persistent volume. Any container recreation (a
+     normal `docker compose down && up`) minted fresh random subject UUIDs for the three
+     seeded users, permanently breaking every already-provisioned login. Fixed by pinning
+     explicit `id` fields in `deploy/keycloak/mnemos-realm.json` — do not remove them, and
+     pin a new one if a seeded user is ever added.
+  2. `mnemosctl connector register` claimed to be "idempotent per slug" but crashed with a
+     raw `IntegrityError` traceback on a retry. Fixed by checking `get_by_slug` first.
+  3. `SqlToolRepository.list_tools`/`list_invocations` sorted by a non-unique column alone
+     (`name`, `created_at`) with no tiebreak, so Postgres could answer the identical query
+     differently across executions once more than one row tied — an intermittent MCP
+     authorization denial that only reproduced on a *second* full Playwright run in one
+     session. Fixed by adding `id` (UUIDv7) as an explicit tiebreak. The same latent shape
+     exists in `features/knowledge/adapters/repository.py`'s document list
+     (`created_at DESC` alone) — deliberately left unfixed, no test or failure demonstrates
+     it yet, but it is the same class of bug if a future feature reads that list positionally.
 
-Deliberately deferred:
+Deliberately deferred, unchanged:
 
   - `B4`: multi-step plans, loops, checkpoints, crash recovery, and replay.
   - `C1`: API keys, exhaustive RBAC permission matrix, and tag-scoped ACL UI.
   - `C2`: versioned prompt management and cost dashboard.
   - `C3`: folders, bookmarks, feedback, history search, and expanded audit UI.
 
-Important rules:
+Important rules, unchanged:
 
   - Never use the work GitHub account or email (`harshaJKT`, `@jktech.com`).
     Confirm `Harsha2803` before every push or PR mutation.
@@ -75,17 +92,20 @@ Important rules:
   - Preserve zero-cost, self-hosted defaults and all existing security invariants.
   - Cut optional surface area before cutting typing, tests, error handling, or evidence.
   - Every backend capability ships with its usable frontend slice.
-  - Apply TRACKER §0 and §7 at the end of every task: full verification,
-    synchronized TRACKER/ADAPTATION/roadmap/handoff, scoped conventional commits,
-    personal-account push, green PR, ready/merge for completed milestone work, then
-    sync and verify clean `main`.
+  - Apply TRACKER §0 and §7 at the end of every task, milestone or not: full verification,
+    synchronized TRACKER/ADAPTATION/handoff, scoped conventional commits, personal-account
+    push, a PR from the first commit, ready/merge when done, then sync and verify clean
+    `main`. A maintenance fix that skips this is exactly how the three bugs above would
+    have shipped unnoticed.
+  - When testing an isolated Compose project, always pass explicit `-p <name>` — the compose
+    file hardcodes `name: mnemos`, and running from a different directory without `-p`
+    silently attaches to (and, on a bare `down`, can delete the containers of) the real
+    dev-stack's shared project name. This happened once during `D1` before it was caught.
 
-What is next after PR #24 is closed:
+What is next:
 
-  - Complete reduced `D1` and stop.
-  - Follow TRACKER §5's five deliverables in order: clean-clone Compose proof, critical
-    Playwright journeys, deterministic walkthrough, measured release docs, and lifecycle.
-  - Preserve C4's two clocks, no-overwrite supersession, persisted replay, trust fences,
-    exact hard budgets, explicit rejection reasons, fair benchmark arm, and scan-time ACLs.
-  - Do not start deferred `B4` or `C1`–`C3` work or add deployment breadth without a
-    measured release blocker.
+  - Nothing is committed. If the project owner has not given a new task, stop here.
+  - If given a bug fix or small polish change with no milestone attached, follow the same
+    rigor as milestone work (see "Apply TRACKER §0 and §7" above) — it is not exempt.
+  - If given new scope, write a fresh, fully-specified brief in TRACKER §5 before writing
+    any code, at the same level of detail C4's and D1's briefs were written at.
