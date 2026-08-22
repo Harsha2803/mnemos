@@ -7,6 +7,8 @@ from dataclasses import asdict
 
 import asyncpg
 import pytest
+from sqlalchemy import Executable
+from sqlalchemy.ext.asyncio import AsyncSession
 
 import mnemos.platform.models  # noqa: F401 -- load the complete mapped graph
 from mnemos.core.clock import FrozenClock
@@ -314,5 +316,106 @@ async def test_mcp_state_is_tenant_scoped_per_user_durable_and_explainable(
         conn = await asyncpg.connect(postgres.owner_dsn)
         try:
             await conn.execute("DELETE FROM org WHERE id = ANY($1::uuid[])", [org_a, org_b])
+        finally:
+            await conn.close()
+
+
+@pytest.mark.asyncio
+async def test_list_tools_orders_same_named_tools_deterministically(
+    postgres: Postgres,
+) -> None:
+    """`name` is not unique — every server can cache a tool called `echo`
+    (`demo-mcp`'s own fixture, and `frontend/e2e/tools.spec.ts`'s repeated-run
+    reality) — so a bare `ORDER BY name` has no guaranteed tie order and
+    Postgres is free to answer identical queries differently across calls.
+    `tools.spec.ts` reads `.last()` as "the tool I just discovered", which
+    reproduced as an intermittent "Invocation denied" (proposing against a
+    *different* same-named tool than the one just granted) once this database
+    had accumulated more than one same-named tool from repeated runs — found
+    running the full suite twice in one session for D1. `SqlToolRepository`
+    now breaks the tie on `id` (UUIDv7, time-ordered).
+
+    **Why this asserts on the compiled `ORDER BY` clause, not just row
+    order:** a small, freshly-inserted table has no index on `name` and
+    Postgres commonly (not by contract) answers with a sequential scan in
+    physical/insertion order — so a same-session, few-rows behavioural
+    assertion can pass by coincidence on the *unfixed* code too. Reverting
+    the fix and running only the behavioural assertions below confirmed
+    exactly that: they still passed. Only inspecting the statement Postgres
+    actually receives pins the real guarantee.
+    """
+    org_id, *_ = await _seed_identity(postgres)
+    database = Database(Settings(database_url=postgres.app_url, env="test"))
+    repository = SqlToolRepository(database, DEFAULT_ID_GENERATOR)
+    clock = FrozenClock()
+    captured: list[str] = []
+    real_scalars = AsyncSession.scalars
+
+    async def _spying_scalars(
+        self: AsyncSession, statement: Executable, *args: object, **kwargs: object
+    ) -> object:
+        captured.append(str(statement.compile(compile_kwargs={"literal_binds": True})))  # type: ignore[attr-defined]
+        return await real_scalars(self, statement, *args, **kwargs)  # type: ignore[call-overload]
+
+    try:
+        server_ids = []
+        for slug in ("demo-1", "demo-2", "demo-3"):
+            server = await repository.create_server(
+                org_id=org_id,
+                slug=slug,
+                name=slug,
+                description="",
+                endpoint="http://demo-mcp:8100/mcp",
+                min_trust_tier=TrustTier.USER,
+                requires_approval=True,
+            )
+            server_ids.append(server.id)
+            await repository.replace_discovered_tools(
+                org_id=org_id,
+                server_id=server.id,
+                tools=(
+                    McpToolRecord(
+                        id=McpToolId(uuid7()),
+                        org_id=org_id,
+                        server_id=server.id,
+                        name="echo",
+                        description="Echo text",
+                        input_schema={"type": "object"},
+                        is_enabled=True,
+                        requires_approval=False,
+                        is_mutating=False,
+                    ),
+                ),
+                discovered_at=clock.now(),
+            )
+
+        AsyncSession.scalars = _spying_scalars  # type: ignore[assignment]
+        try:
+            first_read = await repository.list_tools(org_id=org_id)
+        finally:
+            AsyncSession.scalars = real_scalars  # type: ignore[assignment]
+
+        # The actual regression: the query Postgres received must name `id`
+        # as a tiebreak after `name` in ORDER BY, not merely happen to return
+        # rows in a hoped-for order.
+        assert captured, "list_tools did not call AsyncSession.scalars"
+        order_by_sql = captured[-1].split("ORDER BY", 1)[1]
+        name_pos = order_by_sql.find("mcp_tool.name")
+        id_pos = order_by_sql.find("mcp_tool.id")
+        assert name_pos != -1
+        assert id_pos != -1
+        assert name_pos < id_pos, f"id must be a tiebreak after name: {order_by_sql!r}"
+
+        echoes = [t for t in first_read if t.name == "echo"]
+        assert len(echoes) == 3
+        # The most recently discovered "echo" sorts last, matching what a UI
+        # reading `.last()` as "the one I just touched" actually needs.
+        assert echoes[-1].server_id == server_ids[-1]
+    finally:
+        AsyncSession.scalars = real_scalars  # type: ignore[assignment]
+        await database.dispose()
+        conn = await asyncpg.connect(postgres.owner_dsn)
+        try:
+            await conn.execute("DELETE FROM org WHERE id = $1", org_id)
         finally:
             await conn.close()
