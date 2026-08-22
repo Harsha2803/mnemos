@@ -1,4 +1,4 @@
-import { Bookmark, BookmarkCheck, Check, Copy, Search } from "lucide-react";
+import { Bookmark, BookmarkCheck, Check, Copy, Search, ThumbsDown, ThumbsUp } from "lucide-react";
 import Link from "next/link";
 import { useState } from "react";
 
@@ -39,6 +39,8 @@ export type DisplayMessage = {
    * state, absent (never `false`) on a message still streaming in, since a
    * message cannot be bookmarked before it exists. */
   bookmarked?: boolean;
+  /** `C3` deliverable 3 — same absent-while-streaming reasoning as `bookmarked`. */
+  feedback?: "up" | "down" | null;
 };
 
 export type MessageBubbleProps = {
@@ -46,6 +48,12 @@ export type MessageBubbleProps = {
   onCitationClick?: (citation: Citation) => void;
   onMessageSelect?: () => void;
   onToggleBookmark?: () => void;
+  /**
+   * `rating: null` clears an existing rating (clicking the already-selected
+   * thumb toggles it off). `comment` is attached only when the caller typed
+   * one into the optional follow-up field after rating a message down.
+   */
+  onRate?: (rating: "up" | "down" | null, comment?: string) => void;
   selectedCitationId?: string;
 };
 
@@ -66,15 +74,40 @@ export function MessageBubble({
   onCitationClick,
   onMessageSelect,
   onToggleBookmark,
+  onRate,
   selectedCitationId,
 }: MessageBubbleProps) {
   const isUser = message.role === "user";
   const [copied, setCopied] = useState(false);
+  const [showCommentBox, setShowCommentBox] = useState(false);
+  const [comment, setComment] = useState("");
 
   async function copyAnswer(): Promise<void> {
     await navigator.clipboard.writeText(message.content);
     setCopied(true);
     window.setTimeout(() => setCopied(false), 1500);
+  }
+
+  function handleThumbsUp(): void {
+    setShowCommentBox(false);
+    onRate?.(message.feedback === "up" ? null : "up");
+  }
+
+  function handleThumbsDown(): void {
+    if (message.feedback === "down") {
+      setShowCommentBox(false);
+      onRate?.(null);
+      return;
+    }
+    onRate?.("down");
+    setShowCommentBox(true);
+  }
+
+  function submitComment(): void {
+    const trimmed = comment.trim();
+    setShowCommentBox(false);
+    setComment("");
+    if (trimmed.length > 0) onRate?.("down", trimmed);
   }
 
   return (
@@ -150,7 +183,58 @@ export function MessageBubble({
               {message.bookmarked === true ? "Bookmarked" : "Bookmark"}
             </Button>
           )}
+          {onRate && (
+            <>
+              <Button
+                rank="plain"
+                className="!px-2 text-footnote"
+                aria-label={message.feedback === "up" ? "Remove rating" : "Good answer"}
+                aria-pressed={message.feedback === "up"}
+                onClick={handleThumbsUp}
+              >
+                <ThumbsUp
+                  className="size-4"
+                  strokeWidth={1.5}
+                  fill={message.feedback === "up" ? "currentColor" : "none"}
+                  aria-hidden="true"
+                />
+              </Button>
+              <Button
+                rank="plain"
+                className="!px-2 text-footnote"
+                aria-label={message.feedback === "down" ? "Remove rating" : "Bad answer"}
+                aria-pressed={message.feedback === "down"}
+                onClick={handleThumbsDown}
+              >
+                <ThumbsDown
+                  className="size-4"
+                  strokeWidth={1.5}
+                  fill={message.feedback === "down" ? "currentColor" : "none"}
+                  aria-hidden="true"
+                />
+              </Button>
+            </>
+          )}
         </div>
+      )}
+      {showCommentBox && (
+        <label className="mx-1 block">
+          <span className="sr-only">What went wrong? (optional)</span>
+          <input
+            autoFocus
+            value={comment}
+            onChange={(event) => setComment(event.target.value)}
+            onKeyDown={(event) => {
+              if (event.key === "Enter") {
+                event.preventDefault();
+                submitComment();
+              }
+            }}
+            onBlur={submitComment}
+            placeholder="What went wrong? (optional)"
+            className="hit-target w-full max-w-xs rounded-md border border-separator bg-bg px-3 text-footnote text-label"
+          />
+        </label>
       )}
       {!isUser && (message.citations?.length ?? 0) >= 2 && (
         <div className="flex flex-wrap gap-2 px-1" aria-label="Evidence used by this answer">

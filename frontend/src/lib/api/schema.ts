@@ -321,6 +321,24 @@ export interface paths {
         patch?: never;
         trace?: never;
     };
+    "/api/v1/chat/messages/{message_id}/feedback": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        /** Upsert Feedback */
+        put: operations["upsert_feedback_api_v1_chat_messages__message_id__feedback_put"];
+        post?: never;
+        /** Remove Feedback */
+        delete: operations["remove_feedback_api_v1_chat_messages__message_id__feedback_delete"];
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
     "/api/v1/knowledge/documents": {
         parameters: {
             query?: never;
@@ -773,6 +791,8 @@ export interface components {
             created_at: string;
             /** Bookmarked */
             bookmarked: boolean;
+            /** Feedback */
+            feedback: ("up" | "down") | null;
         };
         /** ChatSessionDetailResponse */
         ChatSessionDetailResponse: {
@@ -886,6 +906,22 @@ export interface components {
             superseded_by: string | null;
             /** Chunk Count */
             chunk_count: number;
+            /** Created At */
+            created_at: string;
+        };
+        /** FeedbackResponse */
+        FeedbackResponse: {
+            /** Id */
+            id: string;
+            /** Message Id */
+            message_id: string;
+            /**
+             * Rating
+             * @enum {string}
+             */
+            rating: "up" | "down";
+            /** Comment */
+            comment: string | null;
             /** Created At */
             created_at: string;
         };
@@ -1462,6 +1498,16 @@ export interface components {
         UpsertBookmarkRequest: {
             /** Note */
             note?: string | null;
+        };
+        /** UpsertFeedbackRequest */
+        UpsertFeedbackRequest: {
+            /**
+             * Rating
+             * @enum {string}
+             */
+            rating: "up" | "down";
+            /** Comment */
+            comment?: string | null;
         };
         /** ValidationError */
         ValidationError: {
@@ -2092,6 +2138,70 @@ export interface operations {
                 content: {
                     "application/json": components["schemas"]["BookmarkListResponse"];
                 };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
+    upsert_feedback_api_v1_chat_messages__message_id__feedback_put: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                message_id: string;
+            };
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["UpsertFeedbackRequest"];
+            };
+        };
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["FeedbackResponse"];
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
+    remove_feedback_api_v1_chat_messages__message_id__feedback_delete: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                message_id: string;
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Successful Response */
+            204: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content?: never;
             };
             /** @description Validation Error */
             422: {

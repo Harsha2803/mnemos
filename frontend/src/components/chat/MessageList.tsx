@@ -18,6 +18,7 @@ export type MessageListProps = {
   onCitationClick?: (citation: Citation) => void;
   onMessageSelect?: (message: DisplayMessage) => void;
   onToggleBookmark?: (message: DisplayMessage) => void;
+  onRate?: (message: DisplayMessage, rating: "up" | "down" | null, comment?: string) => void;
   selectedCitationId?: string;
 };
 
@@ -26,6 +27,7 @@ export function MessageList({
   onCitationClick,
   onMessageSelect,
   onToggleBookmark,
+  onRate,
   selectedCitationId,
 }: MessageListProps) {
   const bottomRef = useRef<HTMLDivElement>(null);
@@ -70,6 +72,11 @@ export function MessageList({
           onMessageSelect={message.role === "assistant" ? () => onMessageSelect?.(message) : undefined}
           onToggleBookmark={
             message.role === "assistant" ? () => onToggleBookmark?.(message) : undefined
+          }
+          onRate={
+            message.role === "assistant"
+              ? (rating, comment) => onRate?.(message, rating, comment)
+              : undefined
           }
           selectedCitationId={selectedCitationId}
         />

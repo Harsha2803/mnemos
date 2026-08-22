@@ -15,6 +15,8 @@ export type FolderList = components["schemas"]["FolderListResponse"];
 export type Bookmark = components["schemas"]["BookmarkResponse"];
 export type BookmarkedMessage = components["schemas"]["BookmarkedMessageResponse"];
 export type BookmarkList = components["schemas"]["BookmarkListResponse"];
+export type Feedback = components["schemas"]["FeedbackResponse"];
+export type FeedbackRating = Feedback["rating"];
 
 export async function fetchSessions(signal?: AbortSignal): Promise<ChatSessionList> {
   const { data, error } = await api.GET("/api/v1/chat/sessions", { signal });
@@ -143,4 +145,24 @@ export async function fetchBookmarks(signal?: AbortSignal): Promise<BookmarkList
   const { data, error } = await api.GET("/api/v1/chat/bookmarks", { signal });
   if (error !== undefined) throw new Error("could not load bookmarks");
   return data;
+}
+
+export async function upsertFeedback(
+  messageId: string,
+  rating: FeedbackRating,
+  comment?: string,
+): Promise<Feedback> {
+  const { data, error } = await api.PUT("/api/v1/chat/messages/{message_id}/feedback", {
+    params: { path: { message_id: messageId } },
+    body: { rating, comment: comment ?? null },
+  });
+  if (error !== undefined) throw new Error("could not save this rating");
+  return data;
+}
+
+export async function removeFeedback(messageId: string): Promise<void> {
+  const { error } = await api.DELETE("/api/v1/chat/messages/{message_id}/feedback", {
+    params: { path: { message_id: messageId } },
+  });
+  if (error !== undefined) throw new Error("could not clear this rating");
 }

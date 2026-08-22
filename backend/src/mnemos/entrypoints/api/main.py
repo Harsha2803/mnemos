@@ -40,6 +40,7 @@ from mnemos.entrypoints.api.routers import bookmarks as bookmarks_router
 from mnemos.entrypoints.api.routers import chat as chat_router
 from mnemos.entrypoints.api.routers import connectors as connectors_router
 from mnemos.entrypoints.api.routers import context as context_router
+from mnemos.entrypoints.api.routers import feedback as feedback_router
 from mnemos.entrypoints.api.routers import folders as folders_router
 from mnemos.entrypoints.api.routers import knowledge as knowledge_router
 from mnemos.entrypoints.api.routers import memory as memory_router
@@ -52,6 +53,7 @@ from mnemos.entrypoints.api.security import (
 )
 from mnemos.features.chat.adapters.repository import SqlChatRepository
 from mnemos.features.chat.application.bookmarks import BookmarkService
+from mnemos.features.chat.application.feedback import FeedbackService
 from mnemos.features.chat.application.folders import FolderService
 from mnemos.features.chat.application.service import ChatService
 from mnemos.features.connectors.adapters.crypto import SourceConfigCipher
@@ -189,6 +191,7 @@ async def lifespan(app: FastAPI) -> AsyncIterator[None]:
     chat_repository = SqlChatRepository(app.state.db, DEFAULT_ID_GENERATOR)
     app.state.folder_service = FolderService(repository=chat_repository)
     app.state.bookmark_service = BookmarkService(repository=chat_repository)
+    app.state.feedback_service = FeedbackService(repository=chat_repository)
     app.state.memory_service = MemoryService(
         repository=SqlMemoryRepository(app.state.db, DEFAULT_ID_GENERATOR),
         clock=SYSTEM_CLOCK,
@@ -477,6 +480,7 @@ def create_app() -> FastAPI:
     app.include_router(chat_router.router, prefix=settings.api_prefix)
     app.include_router(folders_router.router, prefix=settings.api_prefix)
     app.include_router(bookmarks_router.router, prefix=settings.api_prefix)
+    app.include_router(feedback_router.router, prefix=settings.api_prefix)
     app.include_router(knowledge_router.router, prefix=settings.api_prefix)
     app.include_router(connectors_router.router, prefix=settings.api_prefix)
     app.include_router(tools_router.router, prefix=settings.api_prefix)

@@ -21,11 +21,12 @@ from sqlalchemy import delete, exists, func, literal, select, tuple_, update
 from sqlalchemy.dialects.postgresql import insert
 
 from mnemos.core.ids import IdGenerator
-from mnemos.core.types import MessageRole
+from mnemos.core.types import FeedbackRating, MessageRole
 from mnemos.features.chat.adapters.models import (
     Bookmark,
     ChatMessage,
     ChatSession,
+    Feedback,
     Folder,
     MessageCitation,
 )
@@ -40,6 +41,8 @@ from mnemos.features.chat.domain import (
     ChatSessionSummary,
     CitationInput,
     CitationRecord,
+    FeedbackId,
+    FeedbackRecord,
     FolderId,
     FolderRecord,
 )
@@ -171,13 +174,24 @@ class SqlChatRepository:
             )
         )
         query = (
-            select(ChatMessage, bookmarked_expr)
+            select(ChatMessage, bookmarked_expr, Feedback.rating)
+            .outerjoin(
+                Feedback,
+                (Feedback.message_id == ChatMessage.id) & (Feedback.user_id == user_id),
+            )
             .where(ChatMessage.org_id == org_id, ChatMessage.session_id == session_id)
             .order_by(ChatMessage.ordinal.asc())
         )
         async with self._db.session(org_id=org_id) as session:
             rows = (await session.execute(query)).all()
-        return [_message_record(row[0], bookmarked=row[1]) for row in rows]
+        return [
+            _message_record(
+                message,
+                bookmarked=bookmarked,
+                feedback=FeedbackRating(rating) if rating is not None else None,
+            )
+            for message, bookmarked, rating in rows
+        ]
 
     async def append_user_message(
         self, *, org_id: OrgId, session_id: ChatSessionId, content: str
@@ -422,6 +436,62 @@ class SqlChatRepository:
             for bookmark, message, session_row in rows
         ]
 
+    async def upsert_feedback(
+        self,
+        *,
+        org_id: OrgId,
+        user_id: UserId,
+        message_id: ChatMessageId,
+        rating: FeedbackRating,
+        comment: str | None,
+    ) -> FeedbackRecord | None:
+        async with self._db.session(org_id=org_id) as session:
+            owned = await session.scalar(
+                select(ChatMessage.id)
+                .join(ChatSession, ChatSession.id == ChatMessage.session_id)
+                .where(
+                    ChatMessage.id == message_id,
+                    ChatMessage.org_id == org_id,
+                    ChatSession.user_id == user_id,
+                )
+            )
+            if owned is None:
+                return None
+            statement = insert(Feedback).values(
+                id=self._ids.new(),
+                org_id=org_id,
+                user_id=user_id,
+                message_id=message_id,
+                rating=rating.value,
+                comment=comment,
+            )
+            row = await session.scalar(
+                statement.on_conflict_do_update(
+                    constraint="uq_feedback_user_id_message_id",
+                    set_={
+                        "rating": statement.excluded.rating,
+                        "comment": statement.excluded.comment,
+                        "updated_at": func.now(),
+                    },
+                ).returning(Feedback)
+            )
+        return _feedback_record(row) if row is not None else None
+
+    async def remove_feedback(
+        self, *, org_id: OrgId, user_id: UserId, message_id: ChatMessageId
+    ) -> bool:
+        async with self._db.session(org_id=org_id) as session:
+            deleted = await session.scalar(
+                delete(Feedback)
+                .where(
+                    Feedback.org_id == org_id,
+                    Feedback.user_id == user_id,
+                    Feedback.message_id == message_id,
+                )
+                .returning(Feedback.id)
+            )
+        return deleted is not None
+
     async def _append_message(
         self,
         *,
@@ -497,7 +567,9 @@ def _folder_record(row: Folder, *, session_count: int) -> FolderRecord:
     )
 
 
-def _message_record(row: ChatMessage, *, bookmarked: bool = False) -> ChatMessageRecord:
+def _message_record(
+    row: ChatMessage, *, bookmarked: bool = False, feedback: FeedbackRating | None = None
+) -> ChatMessageRecord:
     return ChatMessageRecord(
         id=ChatMessageId(row.id),
         session_id=ChatSessionId(row.session_id),
@@ -515,6 +587,7 @@ def _message_record(row: ChatMessage, *, bookmarked: bool = False) -> ChatMessag
         error_code=row.error_code,
         created_at=row.created_at,
         bookmarked=bookmarked,
+        feedback=feedback,
     )
 
 
@@ -525,6 +598,19 @@ def _bookmark_record(row: Bookmark) -> BookmarkRecord:
         user_id=UserId(row.user_id),
         message_id=ChatMessageId(row.message_id),
         note=row.note,
+        created_at=row.created_at,
+        updated_at=row.updated_at,
+    )
+
+
+def _feedback_record(row: Feedback) -> FeedbackRecord:
+    return FeedbackRecord(
+        id=FeedbackId(row.id),
+        org_id=OrgId(row.org_id),
+        user_id=UserId(row.user_id),
+        message_id=ChatMessageId(row.message_id),
+        rating=FeedbackRating(row.rating),
+        comment=row.comment,
         created_at=row.created_at,
         updated_at=row.updated_at,
     )

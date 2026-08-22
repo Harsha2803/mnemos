@@ -9,7 +9,13 @@ from mnemos.features.chat.domain.events import (
     AssistantToken,
     ChatStreamEvent,
 )
-from mnemos.features.chat.domain.ids import BookmarkId, ChatMessageId, ChatSessionId, FolderId
+from mnemos.features.chat.domain.ids import (
+    BookmarkId,
+    ChatMessageId,
+    ChatSessionId,
+    FeedbackId,
+    FolderId,
+)
 from mnemos.features.chat.domain.models import (
     BookmarkedMessage,
     BookmarkPage,
@@ -20,6 +26,7 @@ from mnemos.features.chat.domain.models import (
     ChatSessionSummary,
     CitationInput,
     CitationRecord,
+    FeedbackRecord,
     FolderRecord,
 )
 
@@ -40,6 +47,8 @@ __all__ = [
     "ChatStreamEvent",
     "CitationInput",
     "CitationRecord",
+    "FeedbackId",
+    "FeedbackRecord",
     "FolderId",
     "FolderRecord",
 ]

@@ -11,8 +11,14 @@ from dataclasses import dataclass
 from datetime import datetime
 from uuid import UUID
 
-from mnemos.core.types import MessageRole
-from mnemos.features.chat.domain.ids import BookmarkId, ChatMessageId, ChatSessionId, FolderId
+from mnemos.core.types import FeedbackRating, MessageRole
+from mnemos.features.chat.domain.ids import (
+    BookmarkId,
+    ChatMessageId,
+    ChatSessionId,
+    FeedbackId,
+    FolderId,
+)
 from mnemos.features.identity.domain import OrgId, UserId
 
 
@@ -59,9 +65,23 @@ class ChatMessageRecord:
     error_code: str | None
     created_at: datetime
     # Caller-relative state, populated only by `list_messages_with_state` (a
-    # message freshly appended by `stream_reply` cannot be bookmarked before
-    # it exists, so the default is correct there without a join).
+    # message freshly appended by `stream_reply` cannot be bookmarked or
+    # rated before it exists, so the defaults are correct there without a
+    # join).
     bookmarked: bool = False
+    feedback: FeedbackRating | None = None
+
+
+@dataclass(frozen=True, slots=True)
+class FeedbackRecord:
+    id: FeedbackId
+    org_id: OrgId
+    user_id: UserId
+    message_id: ChatMessageId
+    rating: FeedbackRating
+    comment: str | None
+    created_at: datetime
+    updated_at: datetime
 
 
 @dataclass(frozen=True, slots=True)

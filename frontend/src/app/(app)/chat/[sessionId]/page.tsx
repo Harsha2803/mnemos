@@ -9,7 +9,7 @@ import { Composer } from "@/components/chat/Composer";
 import type { DisplayMessage } from "@/components/chat/MessageBubble";
 import { MessageList } from "@/components/chat/MessageList";
 import { Skeleton } from "@/components/ui/Skeleton";
-import { fetchSession, removeBookmark, upsertBookmark } from "@/lib/chat/api";
+import { fetchSession, removeBookmark, removeFeedback, upsertBookmark, upsertFeedback } from "@/lib/chat/api";
 import { streamChatReply } from "@/lib/chat/stream";
 import { useInspectorSelection } from "@/lib/inspector/SelectionProvider";
 import type { Citation } from "@/lib/knowledge/api";
@@ -55,6 +55,7 @@ export default function ChatSessionPage() {
         routeReason: message.router_rationale,
         citations: citations.filter((c) => c.message_id === message.id),
         bookmarked: message.bookmarked,
+        feedback: message.feedback,
       })),
     );
   }, [data, sessionId]);
@@ -207,6 +208,24 @@ export default function ChatSessionPage() {
     });
   }
 
+  function handleRate(
+    message: DisplayMessage,
+    rating: "up" | "down" | null,
+    comment?: string,
+  ): void {
+    const previous = message.feedback;
+    setMessages((prev) =>
+      prev.map((m) => (m.id === message.id ? { ...m, feedback: rating } : m)),
+    );
+    const request =
+      rating === null ? removeFeedback(message.id) : upsertFeedback(message.id, rating, comment);
+    request.catch(() => {
+      setMessages((prev) =>
+        prev.map((m) => (m.id === message.id ? { ...m, feedback: previous } : m)),
+      );
+    });
+  }
+
   function handleMessageSelect(message: DisplayMessage): void {
     select({
       kind: "message",
@@ -234,6 +253,7 @@ export default function ChatSessionPage() {
             onCitationClick={handleCitationClick}
             onMessageSelect={handleMessageSelect}
             onToggleBookmark={handleToggleBookmark}
+            onRate={handleRate}
             selectedCitationId={selection?.kind === "citation" ? selection.citation.id : undefined}
           />
         )}

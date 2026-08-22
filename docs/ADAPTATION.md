@@ -5,11 +5,11 @@
 > state. [`TRACKER.md`](../TRACKER.md) holds live task status; this holds the design.
 
 **Last updated:** 2026-08-22 — `D1` shipped (PR #25); `C3` — conversation product depth —
-was then reopened by explicit project-owner decision (docs/Roadmap.md §2). Deliverables 1-2
-(folders, bookmarks) are done: backend vertical slices, 14 new tests plus 0 regressions
-across 267 backend tests, frontend UI plus a new `/bookmarks` screen with 0 regressions
-across 117 frontend tests, and live browser walkthroughs against rebuilt containers.
-Deliverables 3-5 (feedback, history search, audit log) remain. `B4`, `C1`, `C2` stay
+was then reopened by explicit project-owner decision (docs/Roadmap.md §2). Deliverables 1-3
+(folders, bookmarks, feedback) are done: backend vertical slices, 21 new tests plus 0
+regressions across 274 backend tests, frontend UI plus a new `/bookmarks` screen with 0
+regressions across 122 frontend tests, and live browser walkthroughs against rebuilt
+containers. Deliverables 4-5 (history search, audit log) remain. `B4`, `C1`, `C2` stay
 deliberately deferred; full detail is in `TRACKER.md`'s 2026-08-22 dated notes.
 
 ---
@@ -1421,12 +1421,12 @@ because the gap between what `docs/` describes and what runs is the thing this f
 to keep honest:
 
 - ~~**There is no conversation *organization* — no folders, bookmarks, feedback, or
-  history search.**~~ **`C3` deliverables 1-2 (folders, bookmarks) built 2026-08-22.**
-  Sessions can be grouped into folders, created/renamed/deleted from the sidebar, with a
-  session movable in and out. Any assistant answer can be bookmarked with a note from the
-  transcript and reviewed on a dedicated `/bookmarks` screen. Feedback, history search and
-  the audit log (deliverables 3-5) remain not started — full evidence in TRACKER's
-  2026-08-22 `C3` dated notes.
+  history search.**~~ **`C3` deliverables 1-3 (folders, bookmarks, feedback) built
+  2026-08-22.** Sessions can be grouped into folders, created/renamed/deleted from the
+  sidebar, with a session movable in and out. Any assistant answer can be bookmarked with a
+  note from the transcript and reviewed on a dedicated `/bookmarks` screen, or rated up/down
+  with an optional comment on a down rating. History search and the audit log (deliverables
+  4-5) remain not started — full evidence in TRACKER's 2026-08-22 `C3` dated notes.
 
 - **`B1` is done.** There is a source connector abstraction, an event bus, an authenticated
   realtime channel, a worker that actually processes ingestion jobs, and a browser-verified

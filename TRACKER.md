@@ -6,16 +6,16 @@
 > **and [`docs/ADAPTATION.md`](docs/ADAPTATION.md)** *in the same commit* — a stale
 > tracker is worse than none.
 
-**Last updated:** 2026-08-22 — `C3` deliverables 1-2 (folders, bookmarks) are **done**:
-backend vertical slices, 14 new backend tests plus 0 regressions across 267, frontend UI for
-both plus a new `/bookmarks` screen, 0 regressions across 117 frontend tests, and live
-browser walkthroughs against rebuilt `api`/`web` containers for each. Full evidence is in
-this file's 2026-08-22 dated notes. Deliverables 3-5 (feedback, history search, audit log)
-remain.
+**Last updated:** 2026-08-22 — `C3` deliverables 1-3 (folders, bookmarks, feedback) are
+**done**: backend vertical slices, 21 new backend tests plus 0 regressions across 274,
+frontend UI for all three plus a new `/bookmarks` screen, 0 regressions across 122 frontend
+tests, and live browser walkthroughs against rebuilt `api`/`web` containers for each. Full
+evidence is in this file's 2026-08-22 dated notes. Deliverables 4-5 (history search, audit
+log) remain.
 **Phase:** **`C3` — conversation product depth.** Committed 2026-08-22 by explicit
 project-owner decision, reopening scope the 2026-08-18 reset had deferred. `B4`, `C1`, `C2`
 stay deliberately deferred; do not start any of them without a separate explicit decision.
-**Next task:** `C3` deliverable 3 (feedback) — full brief in §5.
+**Next task:** `C3` deliverable 4 (history search) — full brief in §5.
 **Branch right now:** `agent/c3-conversation-depth`, PR #26 (draft) — pushed after
 deliverable 1's commit.
 
@@ -3298,6 +3298,55 @@ Recorded so they are not rediscovered as surprises:
 > empty state ("No bookmarks yet") renders correctly afterward. Zero console errors.
 >
 > **Not done yet, by design — deliverables 3-5** (feedback, history search, audit log) remain.
+
+---
+
+> ### 2026-08-22 — `C3` deliverable 3 done: feedback
+>
+> **Backend.** `domain/models.py` gained `FeedbackRecord`; `ChatMessageRecord` gained
+> `feedback: FeedbackRating | None = None` alongside `bookmarked`, same absent-while-streaming
+> reasoning. `list_messages_with_state` (added in deliverable 2, anticipated this) now also
+> `outerjoin`s `feedback` filtered to `user_id` in the same query — one extra join, not a
+> second round trip. `upsert_feedback`/`remove_feedback` mirror `upsert_bookmark`'s
+> ownership-checked-in-statement shape exactly. New router `entrypoints/api/routers/
+> feedback.py`: `PUT`/`DELETE /chat/messages/{id}/feedback`, `{rating: "up"|"down", comment?}`.
+> **No list endpoint** — feedback is per-message state read through `ChatMessageRecord`, not a
+> standalone screen; an aggregate feedback view is the `C2`-adjacent extension named out of
+> scope in the original brief. The schema's `reason` column stays unused, as planned — only
+> `comment` (free text) is exposed, no invented taxonomy.
+>
+> **Tests.** `backend/tests/test_feedback_endpoints.py` (7 tests, real Postgres): rate up then
+> switch to down with a comment updates the same row, not a new one; session detail reflects
+> feedback before/after; removing feedback clears it; removing feedback that does not exist is
+> a 404; rating another user's message in the same org is a 404 (RLS cannot produce this, the
+> join has to); rating a message from another org is a 404; a session belonging to a different
+> user cannot even be read, confirming isolation. Full suite: 274 passed (267 + 7), 0
+> regressions. `ruff`/`ruff format`/`mypy --strict` clean.
+>
+> **Frontend.** `lib/chat/api.ts` gained `upsertFeedback`/`removeFeedback`. `MessageBubble.tsx`
+> gained `ThumbsUp`/`ThumbsDown` buttons in the action row — filled vs. outline icon marks
+> selection (never colour alone, DesignSystem §3), `aria-pressed` reflects state. Clicking the
+> already-selected thumb clears the rating (a real toggle, not just two one-way buttons).
+> Thumbs-down submits the rating immediately *and* reveals an optional single-line "What went
+> wrong? (optional)" field right after — typing something and pressing Enter (or blurring)
+> attaches it as `comment` via a second upsert to the same row; leaving it empty is a complete,
+> valid action on its own. Both ratings are optimistic, same pattern as the bookmark toggle.
+>
+> **Frontend tests.** New `components/chat/feedback.test.tsx` (5 tests): rating up reports the
+> message and rating; rating down reveals the comment field; typing a comment and pressing
+> Enter attaches it to the down rating; clicking an already-selected thumb clears it; a user
+> turn never gets rating buttons. Full suite: 122 passed (117 + 5), 0 regressions.
+> `npm run typecheck` and `npm run lint` clean.
+>
+> **Live-verified in a real browser**: rebuilt `api`/`web`, regenerated `schema.ts`, then on an
+> existing demo-seeded answer: rated it down with a comment, confirmed the filled-icon selected
+> state and the comment field's inline appearance, reloaded and confirmed the down rating
+> persisted from the server, switched to up, then clicked the selected thumb again and
+> confirmed the rating cleared back to the unrated state. Zero console errors. `feedback` table
+> confirmed empty afterward — the clear-on-second-click step is what left it that way, not a
+> manual cleanup step.
+>
+> **Not done yet, by design — deliverables 4-5** (history search, audit log) remain.
 
 ---
 

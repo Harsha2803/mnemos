@@ -82,6 +82,7 @@ class ChatMessageResponse(BaseModel):
     finish_reason: str | None
     created_at: str
     bookmarked: bool
+    feedback: Literal["up", "down"] | None
 
 
 class CitationResponse(BaseModel):
@@ -154,6 +155,7 @@ def _message_response(record: ChatMessageRecord) -> ChatMessageResponse:
         finish_reason=record.finish_reason,
         created_at=record.created_at.isoformat(),
         bookmarked=record.bookmarked,
+        feedback=record.feedback.value if record.feedback is not None else None,
     )
 
 

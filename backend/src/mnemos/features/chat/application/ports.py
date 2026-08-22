@@ -8,6 +8,7 @@ from collections.abc import Sequence
 from datetime import datetime
 from typing import Protocol
 
+from mnemos.core.types import FeedbackRating
 from mnemos.features.chat.domain import (
     BookmarkedMessage,
     BookmarkId,
@@ -18,6 +19,7 @@ from mnemos.features.chat.domain import (
     ChatSessionSummary,
     CitationInput,
     CitationRecord,
+    FeedbackRecord,
     FolderId,
     FolderRecord,
 )
@@ -83,14 +85,14 @@ class ChatRepository(Protocol):
     async def list_messages_with_state(
         self, *, org_id: OrgId, session_id: ChatSessionId, user_id: UserId
     ) -> Sequence[ChatMessageRecord]:
-        """Same as `list_messages`, plus `bookmarked` (and, from deliverable 3,
-        `feedback`) populated via a `LEFT JOIN` filtered to `user_id` — one
-        query, not a per-message lookup. Only `ChatService.get_session_detail`
-        needs this; `stream_reply`'s history-for-the-model-prompt load and
-        `ContextService`'s history read (`features/context/`, a caller outside
-        this feature) go through the plain `list_messages` instead, because
-        neither renders a bookmark button and neither should have to know a
-        caller's identity just to read message content for a prompt."""
+        """Same as `list_messages`, plus `bookmarked` and `feedback` populated
+        via joins filtered to `user_id` — one query, not a per-message lookup.
+        Only `ChatService.get_session_detail` needs this; `stream_reply`'s
+        history-for-the-model-prompt load and `ContextService`'s history read
+        (`features/context/`, a caller outside this feature) go through the
+        plain `list_messages` instead, because neither renders a bookmark or
+        rating control and neither should have to know a caller's identity
+        just to read message content for a prompt."""
         ...
 
     async def append_user_message(
@@ -176,6 +178,23 @@ class ChatRepository(Protocol):
         """Newest first by `(created_at, id)` — the same explicit tiebreak
         every new list query in this milestone uses."""
         ...
+
+    async def upsert_feedback(
+        self,
+        *,
+        org_id: OrgId,
+        user_id: UserId,
+        message_id: ChatMessageId,
+        rating: FeedbackRating,
+        comment: str | None,
+    ) -> FeedbackRecord | None:
+        """Same ownership-checked-in-statement shape as `upsert_bookmark`;
+        `None` means the message does not exist or is not this `user_id`'s."""
+        ...
+
+    async def remove_feedback(
+        self, *, org_id: OrgId, user_id: UserId, message_id: ChatMessageId
+    ) -> bool: ...
 
 
 __all__ = ["UNSET", "ChatMessageId", "ChatRepository", "_UnsetType"]
