@@ -11,12 +11,18 @@ from mnemos.core.types import MemoryKind, TrustTier
 from mnemos.features.identity.domain import OrgId, UserId
 from mnemos.features.memory.application.ports import MemoryRepository
 from mnemos.features.memory.domain import MemoryHistory, MemoryId, MemoryWriteResult
+from mnemos.features.observability.application.ports import AuditRepository
 
 
 class MemoryService:
-    def __init__(self, *, repository: MemoryRepository, clock: Clock) -> None:
+    def __init__(
+        self, *, repository: MemoryRepository, clock: Clock, audit: AuditRepository | None = None
+    ) -> None:
         self._repository = repository
         self._clock = clock
+        # Optional so every existing test construction of this service keeps
+        # working unchanged (TRACKER §5 deliverable 5).
+        self._audit = audit
 
     async def create(
         self,
@@ -41,7 +47,7 @@ class MemoryService:
         end = valid_to or END_OF_TIME
         if end <= start:
             raise ValidationError("valid_to must be later than valid_from", field="valid_to")
-        return await self._repository.write(
+        result = await self._repository.write(
             org_id=org_id,
             user_id=user_id,
             subject_kind=subject_kind.strip(),
@@ -60,12 +66,36 @@ class MemoryService:
             recorded_at=self._clock.now(),
             supersede_id=supersede_id,
         )
+        # Only a genuine supersession is audited here — a plain `create()`
+        # (no `supersede_id`) is routine authoring, not the bitemporal
+        # mutation TRACKER §5 deliverable 5 names.
+        if supersede_id is not None and self._audit is not None:
+            await self._audit.record(
+                org_id=org_id,
+                actor_id=user_id,
+                actor_kind="user",
+                action="memory.supersede",
+                resource_kind="memory",
+                resource_id=str(result.claim.id),
+                outcome="allow",
+            )
+        return result
 
-    async def retract(self, *, org_id: OrgId, memory_id: MemoryId) -> None:
+    async def retract(self, *, org_id: OrgId, user_id: UserId, memory_id: MemoryId) -> None:
         if not await self._repository.retract(
             org_id=org_id, memory_id=memory_id, at=self._clock.now()
         ):
             raise NotFoundError(f"memory {memory_id} not found")
+        if self._audit is not None:
+            await self._audit.record(
+                org_id=org_id,
+                actor_id=user_id,
+                actor_kind="user",
+                action="memory.retract",
+                resource_kind="memory",
+                resource_id=str(memory_id),
+                outcome="allow",
+            )
 
     async def history(
         self,

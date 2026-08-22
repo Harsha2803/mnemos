@@ -52,6 +52,7 @@ from mnemos.features.identity.providers import (
     PlatformTokenCodec,
     PlatformTokenConfig,
 )
+from mnemos.features.observability.domain import AuditEventRecord, AuditLogId
 
 SECRET = "a-thirty-two-byte-or-longer-signing-secret"
 ISSUER = "mnemos"
@@ -257,6 +258,47 @@ class FakeUsers:
         self.logins.append((user_id, at))
 
 
+class FakeAudit:
+    """In-memory `AuditRepository`, recording every event it was asked to write."""
+
+    def __init__(self) -> None:
+        self.events: list[AuditEventRecord] = []
+        self._ids = Uuid7Generator()
+
+    async def record(
+        self,
+        *,
+        org_id: OrgId,
+        actor_id: UserId | None,
+        actor_kind: str,
+        action: str,
+        resource_kind: str,
+        resource_id: str | None,
+        outcome: str,
+        reason: str | None = None,
+        request_id: str | None = None,
+        detail: dict[str, object] | None = None,
+    ) -> AuditEventRecord:
+        event = AuditEventRecord(
+            id=AuditLogId(self._ids.new()),
+            org_id=org_id,
+            actor_id=actor_id,
+            actor_kind=actor_kind,
+            action=action,
+            resource_kind=resource_kind,
+            resource_id=resource_id,
+            outcome=outcome,
+            reason=reason,
+            request_id=request_id,
+            ip_address=None,
+            user_agent=None,
+            detail=detail or {},
+            occurred_at=NOW,
+        )
+        self.events.append(event)
+        return event
+
+
 # --------------------------------------------------------------------- fixtures
 
 
@@ -280,6 +322,7 @@ def build_service(
     sessions: FakeSessions,
     users: FakeUsers,
     *orgs: OrgRecord,
+    audit: FakeAudit | None = None,
 ) -> TokenService:
     return TokenService(
         orgs=FakeOrgs(*(orgs or (ACME,))),
@@ -292,12 +335,20 @@ def build_service(
         ),
         clock=clock,
         refresh_ttl_s=REFRESH_TTL_S,
+        audit=audit,
     )
 
 
 @pytest.fixture
-def service(clock: FrozenClock, sessions: FakeSessions, users: FakeUsers) -> TokenService:
-    return build_service(clock, sessions, users, ACME, GLOBEX)
+def audit() -> FakeAudit:
+    return FakeAudit()
+
+
+@pytest.fixture
+def service(
+    clock: FrozenClock, sessions: FakeSessions, users: FakeUsers, audit: FakeAudit
+) -> TokenService:
+    return build_service(clock, sessions, users, ACME, GLOBEX, audit=audit)
 
 
 def oidc_subject(org: OrgRecord = ACME, **overrides: object) -> AuthenticatedSubject:
@@ -351,6 +402,21 @@ async def test_a_verified_subject_receives_a_working_pair(
     assert claims.session_id == pair.session_id
     assert claims.subject == users.users[0].user_id
     assert users.logins == [(claims.subject, NOW)], "`last_login_at` is stamped"
+
+
+async def test_a_successful_sign_in_is_audited(
+    service: TokenService, users: FakeUsers, audit: FakeAudit
+) -> None:
+    """`C3` deliverable 5 — every successful sign-in is a durable audit row,
+    scoped to the org and the user it actually opened a session for."""
+    pair = await service.issue_for_subject(subject=oidc_subject(), org_slug="acme")
+
+    [event] = audit.events
+    assert event.org_id == ACME.org_id
+    assert event.actor_id == users.users[0].user_id
+    assert event.action == "auth.sign_in"
+    assert event.outcome == "allow"
+    assert event.actor_id == claims_of(pair.access_token).subject
 
 
 async def test_a_second_login_opens_a_second_independent_session(
@@ -585,6 +651,29 @@ async def test_revoke_kills_the_whole_chain_and_says_nothing(
         await service.refresh(second.refresh_token)
 
 
+async def test_sign_out_is_audited(service: TokenService, audit: FakeAudit) -> None:
+    """`C3` deliverable 5. The sign-in from opening the session is also in
+    `audit.events` here — this test only asserts the sign-out half exists."""
+    pair = await service.issue_for_subject(subject=oidc_subject(), org_slug="acme")
+
+    await service.revoke(pair.refresh_token)
+
+    sign_outs = [e for e in audit.events if e.action == "auth.sign_out"]
+    [event] = sign_outs
+    assert event.org_id == ACME.org_id
+    assert event.actor_id == claims_of(pair.access_token).subject
+    assert event.outcome == "allow"
+
+
+async def test_a_silent_revoke_of_an_unknown_token_is_not_audited(
+    service: TokenService, audit: FakeAudit
+) -> None:
+    """RFC 7009 §2.2's silence extends to the audit trail: a token that was
+    never valid names no session and no user to attribute an event to."""
+    assert await service.revoke("garbage") is None
+    assert audit.events == []
+
+
 @pytest.mark.parametrize(
     "presented", ["", "garbage", "acme.never-issued", "nosuchorg.secret", "acme."]
 )
@@ -668,6 +757,29 @@ async def test_an_email_belonging_to_another_subject_is_refused(
         )
     assert denial.value.message == AUTHENTICATION_FAILED
     assert len(users.created) == 1
+
+
+async def test_a_denied_sign_in_is_audited_with_the_real_reason(
+    service: TokenService, audit: FakeAudit
+) -> None:
+    """`C3` deliverable 5 — a denial is exactly the row an audit trail exists
+    for. `AUTHENTICATION_FAILED` is what the *caller* sees on the wire
+    (`AuthenticationError.message`); the collision reason itself is not a
+    secret and belongs in the audit row an admin actually reads."""
+    await service.issue_for_subject(subject=oidc_subject(), org_slug="acme")
+
+    with pytest.raises(AuthenticationError):
+        await service.issue_for_subject(
+            subject=oidc_subject(external_subject="a-different-keycloak-subject"),
+            org_slug="acme",
+        )
+
+    denials = [e for e in audit.events if e.outcome == "deny"]
+    [event] = denials
+    assert event.org_id == ACME.org_id
+    assert event.action == "auth.sign_in"
+    assert event.reason is not None
+    assert "already belongs to a different subject" in event.reason
 
 
 async def test_a_subject_with_no_email_is_refused_rather_than_invented(

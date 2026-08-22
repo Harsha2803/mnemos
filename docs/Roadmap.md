@@ -24,7 +24,7 @@ document contains another possible feature.
 
 ## 2. Scope decision
 
-Four previously planned milestones are removed from the required finish line:
+Four previously planned milestones were removed from the required finish line on 2026-08-18:
 
 - `B4` multi-step agent orchestration is deferred; a reliable, gated single-call runtime is
   a stronger artifact than a broad agent loop with incomplete recovery semantics.
@@ -32,11 +32,14 @@ Four previously planned milestones are removed from the required finish line:
   live-role authorization already provide strong security evidence.
 - `C2` prompt versioning/cost dashboards is deferred; it adds operations breadth but is not
   central to the portfolio thesis.
-- `C3` conversation organization and expanded audit UI is deferred; it is conventional CRUD
-  rather than differentiating engineering work.
+- ~~`C3` conversation organization and expanded audit UI is deferred; it is conventional
+  CRUD rather than differentiating engineering work.~~ **Reopened 2026-08-22 by explicit
+  project-owner decision.** See `TRACKER.md` §5 for the committed brief. `B4`, `C1`, `C2`
+  remain deferred, unchanged.
 
-The schema and architecture may retain seams for these capabilities. Retaining a seam does
-not make the feature part of the committed plan.
+The schema and architecture may retain seams for deferred capabilities. Retaining a seam
+does not make the feature part of the committed plan until it is explicitly reopened, as
+`C3` was.
 
 ## 3. Scope discipline
 

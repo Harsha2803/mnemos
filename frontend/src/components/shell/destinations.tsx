@@ -1,4 +1,4 @@
-import { Brain, FileText, LayoutGrid, MessageCircle, Plug, Wrench, type LucideIcon } from "lucide-react";
+import { Bookmark, Brain, FileText, LayoutGrid, MessageCircle, Plug, ScrollText, Wrench, type LucideIcon } from "lucide-react";
 
 export type Destination = {
   href: string;
@@ -19,10 +19,12 @@ export type Destination = {
 export const DESTINATIONS: readonly Destination[] = [
   { href: "/", label: "Overview", Icon: LayoutGrid },
   { href: "/chat", label: "Chat", Icon: MessageCircle },
+  { href: "/bookmarks", label: "Bookmarks", Icon: Bookmark },
   { href: "/knowledge", label: "Knowledge", Icon: FileText },
   { href: "/memory", label: "Memory", Icon: Brain },
   { href: "/sources", label: "Sources", Icon: Plug },
   { href: "/tools", label: "Tools", Icon: Wrench },
+  { href: "/audit", label: "Audit log", Icon: ScrollText },
 ];
 
 /**

@@ -250,6 +250,112 @@ export interface paths {
         patch?: never;
         trace?: never;
     };
+    "/api/v1/chat/folders": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /** List Folders */
+        get: operations["list_folders_api_v1_chat_folders_get"];
+        put?: never;
+        /** Create Folder */
+        post: operations["create_folder_api_v1_chat_folders_post"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/v1/chat/folders/{folder_id}": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        post?: never;
+        /** Delete Folder */
+        delete: operations["delete_folder_api_v1_chat_folders__folder_id__delete"];
+        options?: never;
+        head?: never;
+        /** Update Folder */
+        patch: operations["update_folder_api_v1_chat_folders__folder_id__patch"];
+        trace?: never;
+    };
+    "/api/v1/chat/messages/{message_id}/bookmark": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        /** Upsert Bookmark */
+        put: operations["upsert_bookmark_api_v1_chat_messages__message_id__bookmark_put"];
+        post?: never;
+        /** Remove Bookmark */
+        delete: operations["remove_bookmark_api_v1_chat_messages__message_id__bookmark_delete"];
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/v1/chat/bookmarks": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /** List Bookmarks */
+        get: operations["list_bookmarks_api_v1_chat_bookmarks_get"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/v1/chat/messages/{message_id}/feedback": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        /** Upsert Feedback */
+        put: operations["upsert_feedback_api_v1_chat_messages__message_id__feedback_put"];
+        post?: never;
+        /** Remove Feedback */
+        delete: operations["remove_feedback_api_v1_chat_messages__message_id__feedback_delete"];
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/v1/audit/events": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /** List Events */
+        get: operations["list_events_api_v1_audit_events_get"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
     "/api/v1/knowledge/documents": {
         parameters: {
             query?: never;
@@ -590,12 +696,89 @@ export interface paths {
 export type webhooks = Record<string, never>;
 export interface components {
     schemas: {
+        /** AuditEventListResponse */
+        AuditEventListResponse: {
+            /** Events */
+            events: components["schemas"]["AuditEventResponse"][];
+            /** Next Cursor */
+            next_cursor: string | null;
+        };
+        /** AuditEventResponse */
+        AuditEventResponse: {
+            /** Id */
+            id: string;
+            /** Actor Id */
+            actor_id: string | null;
+            /**
+             * Actor Kind
+             * @enum {string}
+             */
+            actor_kind: "user" | "api_key" | "system";
+            /** Action */
+            action: string;
+            /** Resource Kind */
+            resource_kind: string;
+            /** Resource Id */
+            resource_id: string | null;
+            /**
+             * Outcome
+             * @enum {string}
+             */
+            outcome: "allow" | "deny";
+            /** Reason */
+            reason: string | null;
+            /** Request Id */
+            request_id: string | null;
+            /** Ip Address */
+            ip_address: string | null;
+            /** User Agent */
+            user_agent: string | null;
+            /** Occurred At */
+            occurred_at: string;
+        };
         /** Body_upload_document_api_v1_knowledge_documents_post */
         Body_upload_document_api_v1_knowledge_documents_post: {
             /** File */
             file: string;
             /** Title */
             title?: string | null;
+        };
+        /** BookmarkListResponse */
+        BookmarkListResponse: {
+            /** Bookmarks */
+            bookmarks: components["schemas"]["BookmarkedMessageResponse"][];
+            /** Next Cursor */
+            next_cursor: string | null;
+        };
+        /** BookmarkResponse */
+        BookmarkResponse: {
+            /** Id */
+            id: string;
+            /** Message Id */
+            message_id: string;
+            /** Note */
+            note: string | null;
+            /** Created At */
+            created_at: string;
+        };
+        /** BookmarkedMessageResponse */
+        BookmarkedMessageResponse: {
+            /** Id */
+            id: string;
+            /** Message Id */
+            message_id: string;
+            /** Session Id */
+            session_id: string;
+            /** Session Title */
+            session_title: string;
+            /** Message Role */
+            message_role: string;
+            /** Message Content */
+            message_content: string;
+            /** Note */
+            note: string | null;
+            /** Created At */
+            created_at: string;
         };
         /** BundleItemResponse */
         BundleItemResponse: {
@@ -663,6 +846,10 @@ export interface components {
             finish_reason: string | null;
             /** Created At */
             created_at: string;
+            /** Bookmarked */
+            bookmarked: boolean;
+            /** Feedback */
+            feedback: ("up" | "down") | null;
         };
         /** ChatSessionDetailResponse */
         ChatSessionDetailResponse: {
@@ -687,12 +874,16 @@ export interface components {
             title: string;
             /** Is Archived */
             is_archived: boolean;
+            /** Folder Id */
+            folder_id: string | null;
             /** Last Message At */
             last_message_at: string | null;
             /** Created At */
             created_at: string;
             /** Updated At */
             updated_at: string;
+            /** Snippet */
+            snippet?: string | null;
         };
         /** CitationResponse */
         CitationResponse: {
@@ -748,6 +939,11 @@ export interface components {
             /** Created At */
             created_at: string;
         };
+        /** CreateFolderRequest */
+        CreateFolderRequest: {
+            /** Name */
+            name: string;
+        };
         /** CreateSessionRequest */
         CreateSessionRequest: {
             /** Title */
@@ -771,6 +967,42 @@ export interface components {
             chunk_count: number;
             /** Created At */
             created_at: string;
+        };
+        /** FeedbackResponse */
+        FeedbackResponse: {
+            /** Id */
+            id: string;
+            /** Message Id */
+            message_id: string;
+            /**
+             * Rating
+             * @enum {string}
+             */
+            rating: "up" | "down";
+            /** Comment */
+            comment: string | null;
+            /** Created At */
+            created_at: string;
+        };
+        /** FolderListResponse */
+        FolderListResponse: {
+            /** Folders */
+            folders: components["schemas"]["FolderResponse"][];
+        };
+        /** FolderResponse */
+        FolderResponse: {
+            /** Id */
+            id: string;
+            /** Name */
+            name: string;
+            /** Position */
+            position: number;
+            /** Session Count */
+            session_count: number;
+            /** Created At */
+            created_at: string;
+            /** Updated At */
+            updated_at: string;
         };
         /** GrantResponse */
         GrantResponse: {
@@ -1154,7 +1386,9 @@ export interface components {
         /** RenameSessionRequest */
         RenameSessionRequest: {
             /** Title */
-            title: string;
+            title?: string | null;
+            /** Folder Id */
+            folder_id?: string | null;
         };
         /** RevokeRequest */
         RevokeRequest: {
@@ -1312,6 +1546,28 @@ export interface components {
          * @enum {integer}
          */
         TrustTier: 40 | 30 | 20 | 10;
+        /** UpdateFolderRequest */
+        UpdateFolderRequest: {
+            /** Name */
+            name?: string | null;
+            /** Position */
+            position?: number | null;
+        };
+        /** UpsertBookmarkRequest */
+        UpsertBookmarkRequest: {
+            /** Note */
+            note?: string | null;
+        };
+        /** UpsertFeedbackRequest */
+        UpsertFeedbackRequest: {
+            /**
+             * Rating
+             * @enum {string}
+             */
+            rating: "up" | "down";
+            /** Comment */
+            comment?: string | null;
+        };
         /** ValidationError */
         ValidationError: {
             /** Location */
@@ -1550,6 +1806,7 @@ export interface operations {
             query?: {
                 limit?: number;
                 cursor?: string | null;
+                q?: string | null;
             };
             header?: never;
             path?: never;
@@ -1727,6 +1984,321 @@ export interface operations {
                 };
                 content: {
                     "application/json": unknown;
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
+    list_folders_api_v1_chat_folders_get: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["FolderListResponse"];
+                };
+            };
+        };
+    };
+    create_folder_api_v1_chat_folders_post: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["CreateFolderRequest"];
+            };
+        };
+        responses: {
+            /** @description Successful Response */
+            201: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["FolderResponse"];
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
+    delete_folder_api_v1_chat_folders__folder_id__delete: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                folder_id: string;
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Successful Response */
+            204: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content?: never;
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
+    update_folder_api_v1_chat_folders__folder_id__patch: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                folder_id: string;
+            };
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["UpdateFolderRequest"];
+            };
+        };
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["FolderResponse"];
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
+    upsert_bookmark_api_v1_chat_messages__message_id__bookmark_put: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                message_id: string;
+            };
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["UpsertBookmarkRequest"];
+            };
+        };
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["BookmarkResponse"];
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
+    remove_bookmark_api_v1_chat_messages__message_id__bookmark_delete: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                message_id: string;
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Successful Response */
+            204: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content?: never;
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
+    list_bookmarks_api_v1_chat_bookmarks_get: {
+        parameters: {
+            query?: {
+                limit?: number;
+                cursor?: string | null;
+            };
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["BookmarkListResponse"];
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
+    upsert_feedback_api_v1_chat_messages__message_id__feedback_put: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                message_id: string;
+            };
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["UpsertFeedbackRequest"];
+            };
+        };
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["FeedbackResponse"];
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
+    remove_feedback_api_v1_chat_messages__message_id__feedback_delete: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                message_id: string;
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Successful Response */
+            204: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content?: never;
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
+    list_events_api_v1_audit_events_get: {
+        parameters: {
+            query?: {
+                actor_id?: string | null;
+                action?: string | null;
+                resource_kind?: string | null;
+                outcome?: ("allow" | "deny") | null;
+                since?: string | null;
+                until?: string | null;
+                limit?: number;
+                cursor?: string | null;
+            };
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["AuditEventListResponse"];
                 };
             };
             /** @description Validation Error */

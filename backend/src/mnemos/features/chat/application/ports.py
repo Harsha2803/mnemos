@@ -8,15 +8,35 @@ from collections.abc import Sequence
 from datetime import datetime
 from typing import Protocol
 
+from mnemos.core.types import FeedbackRating
 from mnemos.features.chat.domain import (
+    BookmarkedMessage,
+    BookmarkId,
+    BookmarkRecord,
     ChatMessageId,
     ChatMessageRecord,
     ChatSessionId,
     ChatSessionSummary,
     CitationInput,
     CitationRecord,
+    FeedbackRecord,
+    FolderId,
+    FolderRecord,
 )
 from mnemos.features.identity.domain import OrgId, UserId
+
+
+class _UnsetType:
+    """Distinguishes "the caller did not mention `folder_id`" (leave it alone)
+    from "the caller sent `folder_id: null`" (move to no folder) — a plain
+    `None` default cannot carry that distinction because `None` is also the
+    valid value meaning "no folder" (TRACKER §5 deliverable 1)."""
+
+    def __repr__(self) -> str:
+        return "UNSET"
+
+
+UNSET = _UnsetType()
 
 
 class ChatRepository(Protocol):
@@ -42,14 +62,38 @@ class ChatRepository(Protocol):
     ) -> ChatSessionSummary | None: ...
 
     async def rename_session(
-        self, *, org_id: OrgId, session_id: ChatSessionId, title: str
-    ) -> ChatSessionSummary | None: ...
+        self,
+        *,
+        org_id: OrgId,
+        session_id: ChatSessionId,
+        title: str | None = None,
+        folder_id: FolderId | _UnsetType | None = UNSET,
+    ) -> ChatSessionSummary | None:
+        """`title=None` leaves the title untouched (every stored title is a
+        non-null string, so `None` cannot be a real value to set). `folder_id`
+        needs the three-state `UNSET` sentinel instead, because `None` *is* a
+        real value there — "no folder" — distinct from "don't touch this
+        field" (see `_UnsetType`)."""
+        ...
 
     async def delete_session(self, *, org_id: OrgId, session_id: ChatSessionId) -> bool: ...
 
     async def list_messages(
         self, *, org_id: OrgId, session_id: ChatSessionId
     ) -> Sequence[ChatMessageRecord]: ...
+
+    async def list_messages_with_state(
+        self, *, org_id: OrgId, session_id: ChatSessionId, user_id: UserId
+    ) -> Sequence[ChatMessageRecord]:
+        """Same as `list_messages`, plus `bookmarked` and `feedback` populated
+        via joins filtered to `user_id` — one query, not a per-message lookup.
+        Only `ChatService.get_session_detail` needs this; `stream_reply`'s
+        history-for-the-model-prompt load and `ContextService`'s history read
+        (`features/context/`, a caller outside this feature) go through the
+        plain `list_messages` instead, because neither renders a bookmark or
+        rating control and neither should have to know a caller's identity
+        just to read message content for a prompt."""
+        ...
 
     async def append_user_message(
         self, *, org_id: OrgId, session_id: ChatSessionId, content: str
@@ -86,5 +130,83 @@ class ChatRepository(Protocol):
         self, *, org_id: OrgId, session_id: ChatSessionId
     ) -> Sequence[CitationRecord]: ...
 
+    async def create_folder(self, *, org_id: OrgId, user_id: UserId, name: str) -> FolderRecord: ...
 
-__all__ = ["ChatMessageId", "ChatRepository"]
+    async def list_folders(self, *, org_id: OrgId, user_id: UserId) -> Sequence[FolderRecord]:
+        """Ordered `position ASC, id ASC` — the explicit `id` tiebreak matches
+        the fix TRACKER's 2026-08-22 notes made to `SqlToolRepository` after a
+        non-unique sort caused an intermittent, hard-to-reproduce bug; every
+        new list query in this milestone repeats that fix rather than the
+        still-unfixed shape in `features/knowledge`'s `list_documents`."""
+        ...
+
+    async def get_folder(
+        self, *, org_id: OrgId, user_id: UserId, folder_id: FolderId
+    ) -> FolderRecord | None: ...
+
+    async def rename_folder(
+        self, *, org_id: OrgId, folder_id: FolderId, name: str | None, position: int | None
+    ) -> FolderRecord | None: ...
+
+    async def delete_folder(self, *, org_id: OrgId, folder_id: FolderId) -> bool:
+        """The FK (`chat_session.folder_id`) is `ondelete=SET NULL`, so
+        deleting the row already un-files its sessions at the database level —
+        no service-side cleanup query is needed here."""
+        ...
+
+    async def upsert_bookmark(
+        self, *, org_id: OrgId, user_id: UserId, message_id: ChatMessageId, note: str | None
+    ) -> BookmarkRecord | None:
+        """`None` means the message does not exist, or belongs to a session
+        this `user_id` does not own — checked inside the same statement so a
+        caller cannot bookmark a message it could not otherwise read, rather
+        than trusting the URL's `message_id` on its own."""
+        ...
+
+    async def remove_bookmark(
+        self, *, org_id: OrgId, user_id: UserId, message_id: ChatMessageId
+    ) -> bool: ...
+
+    async def list_bookmarks(
+        self,
+        *,
+        org_id: OrgId,
+        user_id: UserId,
+        limit: int,
+        before: tuple[datetime, BookmarkId] | None,
+    ) -> Sequence[BookmarkedMessage]:
+        """Newest first by `(created_at, id)` — the same explicit tiebreak
+        every new list query in this milestone uses."""
+        ...
+
+    async def search_sessions(
+        self, *, org_id: OrgId, user_id: UserId, query: str, limit: int
+    ) -> Sequence[ChatSessionSummary]:
+        """Ranked, not chronological: title matches first (a session whose
+        own title matches ranks ahead of one only its content matches), then
+        content matches by `ts_rank`, explicit `id` tiebreak throughout.
+        `ChatSessionSummary.snippet` is set only for a content match, `None`
+        for a title match, so the caller can tell the difference. No cursor:
+        a search result set is small enough at this scope that a second
+        page is optional surface, not correctness (TRACKER §5 deliverable 4)."""
+        ...
+
+    async def upsert_feedback(
+        self,
+        *,
+        org_id: OrgId,
+        user_id: UserId,
+        message_id: ChatMessageId,
+        rating: FeedbackRating,
+        comment: str | None,
+    ) -> FeedbackRecord | None:
+        """Same ownership-checked-in-statement shape as `upsert_bookmark`;
+        `None` means the message does not exist or is not this `user_id`'s."""
+        ...
+
+    async def remove_feedback(
+        self, *, org_id: OrgId, user_id: UserId, message_id: ChatMessageId
+    ) -> bool: ...
+
+
+__all__ = ["UNSET", "ChatMessageId", "ChatRepository", "_UnsetType"]

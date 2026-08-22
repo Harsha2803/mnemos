@@ -1,4 +1,4 @@
-import { Check, Copy, Search } from "lucide-react";
+import { Bookmark, BookmarkCheck, Check, Copy, Search, ThumbsDown, ThumbsUp } from "lucide-react";
 import Link from "next/link";
 import { useState } from "react";
 
@@ -35,12 +35,25 @@ export type DisplayMessage = {
   nl2sql?: Nl2SqlResult;
   /** The one MCP proposal/result attached to a live tool-routed turn. */
   tool?: ToolResult;
+  /** `C3` deliverable 2 — set from `GET /chat/sessions/{id}`'s per-message
+   * state, absent (never `false`) on a message still streaming in, since a
+   * message cannot be bookmarked before it exists. */
+  bookmarked?: boolean;
+  /** `C3` deliverable 3 — same absent-while-streaming reasoning as `bookmarked`. */
+  feedback?: "up" | "down" | null;
 };
 
 export type MessageBubbleProps = {
   message: DisplayMessage;
   onCitationClick?: (citation: Citation) => void;
   onMessageSelect?: () => void;
+  onToggleBookmark?: () => void;
+  /**
+   * `rating: null` clears an existing rating (clicking the already-selected
+   * thumb toggles it off). `comment` is attached only when the caller typed
+   * one into the optional follow-up field after rating a message down.
+   */
+  onRate?: (rating: "up" | "down" | null, comment?: string) => void;
   selectedCitationId?: string;
 };
 
@@ -60,10 +73,14 @@ export function MessageBubble({
   message,
   onCitationClick,
   onMessageSelect,
+  onToggleBookmark,
+  onRate,
   selectedCitationId,
 }: MessageBubbleProps) {
   const isUser = message.role === "user";
   const [copied, setCopied] = useState(false);
+  const [showCommentBox, setShowCommentBox] = useState(false);
+  const [comment, setComment] = useState("");
 
   async function copyAnswer(): Promise<void> {
     await navigator.clipboard.writeText(message.content);
@@ -71,8 +88,31 @@ export function MessageBubble({
     window.setTimeout(() => setCopied(false), 1500);
   }
 
+  function handleThumbsUp(): void {
+    setShowCommentBox(false);
+    onRate?.(message.feedback === "up" ? null : "up");
+  }
+
+  function handleThumbsDown(): void {
+    if (message.feedback === "down") {
+      setShowCommentBox(false);
+      onRate?.(null);
+      return;
+    }
+    onRate?.("down");
+    setShowCommentBox(true);
+  }
+
+  function submitComment(): void {
+    const trimmed = comment.trim();
+    setShowCommentBox(false);
+    setComment("");
+    if (trimmed.length > 0) onRate?.("down", trimmed);
+  }
+
   return (
     <div
+      id={`message-${message.id}`}
       className={[
         "flex flex-col gap-1",
         isUser ? "items-end" : "items-start",
@@ -127,7 +167,74 @@ export function MessageBubble({
             {copied ? <Check className="size-4" aria-hidden="true" /> : <Copy className="size-4" aria-hidden="true" />}
             {copied ? "Copied" : "Copy"}
           </Button>
+          {onToggleBookmark && (
+            <Button
+              rank="plain"
+              className="!px-2 text-footnote"
+              aria-label={message.bookmarked === true ? "Remove bookmark" : "Bookmark this answer"}
+              aria-pressed={message.bookmarked === true}
+              onClick={onToggleBookmark}
+            >
+              {message.bookmarked === true ? (
+                <BookmarkCheck className="size-4" aria-hidden="true" />
+              ) : (
+                <Bookmark className="size-4" strokeWidth={1.5} aria-hidden="true" />
+              )}
+              {message.bookmarked === true ? "Bookmarked" : "Bookmark"}
+            </Button>
+          )}
+          {onRate && (
+            <>
+              <Button
+                rank="plain"
+                className="!px-2 text-footnote"
+                aria-label={message.feedback === "up" ? "Remove rating" : "Good answer"}
+                aria-pressed={message.feedback === "up"}
+                onClick={handleThumbsUp}
+              >
+                <ThumbsUp
+                  className="size-4"
+                  strokeWidth={1.5}
+                  fill={message.feedback === "up" ? "currentColor" : "none"}
+                  aria-hidden="true"
+                />
+              </Button>
+              <Button
+                rank="plain"
+                className="!px-2 text-footnote"
+                aria-label={message.feedback === "down" ? "Remove rating" : "Bad answer"}
+                aria-pressed={message.feedback === "down"}
+                onClick={handleThumbsDown}
+              >
+                <ThumbsDown
+                  className="size-4"
+                  strokeWidth={1.5}
+                  fill={message.feedback === "down" ? "currentColor" : "none"}
+                  aria-hidden="true"
+                />
+              </Button>
+            </>
+          )}
         </div>
+      )}
+      {showCommentBox && (
+        <label className="mx-1 block">
+          <span className="sr-only">What went wrong? (optional)</span>
+          <input
+            autoFocus
+            value={comment}
+            onChange={(event) => setComment(event.target.value)}
+            onKeyDown={(event) => {
+              if (event.key === "Enter") {
+                event.preventDefault();
+                submitComment();
+              }
+            }}
+            onBlur={submitComment}
+            placeholder="What went wrong? (optional)"
+            className="hit-target w-full max-w-xs rounded-md border border-separator bg-bg px-3 text-footnote text-label"
+          />
+        </label>
       )}
       {!isUser && (message.citations?.length ?? 0) >= 2 && (
         <div className="flex flex-wrap gap-2 px-1" aria-label="Evidence used by this answer">

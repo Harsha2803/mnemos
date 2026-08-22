@@ -11,9 +11,27 @@ from dataclasses import dataclass
 from datetime import datetime
 from uuid import UUID
 
-from mnemos.core.types import MessageRole
-from mnemos.features.chat.domain.ids import ChatMessageId, ChatSessionId
+from mnemos.core.types import FeedbackRating, MessageRole
+from mnemos.features.chat.domain.ids import (
+    BookmarkId,
+    ChatMessageId,
+    ChatSessionId,
+    FeedbackId,
+    FolderId,
+)
 from mnemos.features.identity.domain import OrgId, UserId
+
+
+@dataclass(frozen=True, slots=True)
+class FolderRecord:
+    id: FolderId
+    org_id: OrgId
+    user_id: UserId
+    name: str
+    position: int
+    session_count: int
+    created_at: datetime
+    updated_at: datetime
 
 
 @dataclass(frozen=True, slots=True)
@@ -23,9 +41,14 @@ class ChatSessionSummary:
     user_id: UserId
     title: str
     is_archived: bool
+    folder_id: FolderId | None
     last_message_at: datetime | None
     created_at: datetime
     updated_at: datetime
+    # `C3` deliverable 4: a snippet of the matching passage, present only
+    # when this row came from `search_sessions` matching *message content*
+    # rather than the session's own title — `None` everywhere else.
+    snippet: str | None = None
 
 
 @dataclass(frozen=True, slots=True)
@@ -45,6 +68,54 @@ class ChatMessageRecord:
     finish_reason: str | None
     error_code: str | None
     created_at: datetime
+    # Caller-relative state, populated only by `list_messages_with_state` (a
+    # message freshly appended by `stream_reply` cannot be bookmarked or
+    # rated before it exists, so the defaults are correct there without a
+    # join).
+    bookmarked: bool = False
+    feedback: FeedbackRating | None = None
+
+
+@dataclass(frozen=True, slots=True)
+class FeedbackRecord:
+    id: FeedbackId
+    org_id: OrgId
+    user_id: UserId
+    message_id: ChatMessageId
+    rating: FeedbackRating
+    comment: str | None
+    created_at: datetime
+    updated_at: datetime
+
+
+@dataclass(frozen=True, slots=True)
+class BookmarkRecord:
+    id: BookmarkId
+    org_id: OrgId
+    user_id: UserId
+    message_id: ChatMessageId
+    note: str | None
+    created_at: datetime
+    updated_at: datetime
+
+
+@dataclass(frozen=True, slots=True)
+class BookmarkedMessage:
+    """A bookmark joined to the message it points at and the session that
+    owns it — the shape `GET /chat/bookmarks` answers with, so a bookmarks
+    screen never has to make a second call per row to show what was saved."""
+
+    bookmark: BookmarkRecord
+    message_content: str
+    message_role: MessageRole
+    session_id: ChatSessionId
+    session_title: str
+
+
+@dataclass(frozen=True, slots=True)
+class BookmarkPage:
+    items: tuple[BookmarkedMessage, ...]
+    next_cursor: str | None
 
 
 @dataclass(frozen=True, slots=True)

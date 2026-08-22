@@ -22,7 +22,7 @@ from datetime import datetime
 from mnemos.core.errors import NotFoundError, UpstreamError, ValidationError
 from mnemos.core.logging import get_logger
 from mnemos.core.types import MessageRole
-from mnemos.features.chat.application.ports import ChatRepository
+from mnemos.features.chat.application.ports import UNSET, ChatRepository, _UnsetType
 from mnemos.features.chat.application.titles import (
     DEFAULT_SESSION_TITLE,
     title_session_from_first_message,
@@ -37,6 +37,7 @@ from mnemos.features.chat.domain import (
     ChatSessionPage,
     ChatSessionSummary,
     ChatStreamEvent,
+    FolderId,
 )
 from mnemos.features.context.application import ContextService
 from mnemos.features.identity.domain import OrgId, UserId
@@ -87,7 +88,16 @@ class ChatService:
         user_id: UserId,
         limit: int = DEFAULT_PAGE_SIZE,
         cursor: str | None = None,
+        query: str | None = None,
     ) -> ChatSessionPage:
+        if query is not None:
+            # Search-ranked, not recency-ordered, and no cursor — TRACKER §5
+            # deliverable 4 scopes this to one page; the result set at this
+            # scope is small enough that a second page is optional surface.
+            rows = await self._repository.search_sessions(
+                org_id=org_id, user_id=user_id, query=query, limit=limit
+            )
+            return ChatSessionPage(sessions=tuple(rows), next_cursor=None)
         before = decode_cursor(cursor) if cursor is not None else None
         # One extra row, never shown, to answer "is there a next page" without
         # a second COUNT query.
@@ -103,18 +113,36 @@ class ChatService:
         self, *, org_id: OrgId, user_id: UserId, session_id: ChatSessionId
     ) -> ChatSessionDetail:
         session = await self._owned_session(org_id=org_id, user_id=user_id, session_id=session_id)
-        messages = await self._repository.list_messages(org_id=org_id, session_id=session_id)
+        messages = await self._repository.list_messages_with_state(
+            org_id=org_id, session_id=session_id, user_id=user_id
+        )
         citations = await self._repository.list_citations(org_id=org_id, session_id=session_id)
         return ChatSessionDetail(
             session=session, messages=tuple(messages), citations=tuple(citations)
         )
 
     async def rename_session(
-        self, *, org_id: OrgId, user_id: UserId, session_id: ChatSessionId, title: str
+        self,
+        *,
+        org_id: OrgId,
+        user_id: UserId,
+        session_id: ChatSessionId,
+        title: str | None = None,
+        folder_id: FolderId | _UnsetType | None = UNSET,
     ) -> ChatSessionSummary:
         await self._owned_session(org_id=org_id, user_id=user_id, session_id=session_id)
+        if folder_id is not None and not isinstance(folder_id, _UnsetType):
+            # A folder id from another user (even in the same org, where RLS
+            # alone would not catch it) must not silently file a session under
+            # someone else's folder — 404, the same "not yours" convention
+            # `_owned_session` uses for sessions themselves.
+            folder = await self._repository.get_folder(
+                org_id=org_id, user_id=user_id, folder_id=folder_id
+            )
+            if folder is None:
+                raise NotFoundError(f"folder {folder_id} not found")
         renamed = await self._repository.rename_session(
-            org_id=org_id, session_id=session_id, title=title
+            org_id=org_id, session_id=session_id, title=title, folder_id=folder_id
         )
         if renamed is None:  # pragma: no cover - vanished between the two calls
             raise NotFoundError(f"chat session {session_id} not found")

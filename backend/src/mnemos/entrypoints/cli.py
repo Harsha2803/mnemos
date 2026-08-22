@@ -70,6 +70,7 @@ from mnemos.features.identity.domain import OrgId
 from mnemos.features.knowledge.adapters.jobs_repository import IngestJobRepository
 from mnemos.features.knowledge.domain import CONNECTOR_INGEST_KIND
 from mnemos.features.llm.adapters.ollama import OllamaChatModel
+from mnemos.features.observability.adapters.repository import SqlAuditRepository
 from mnemos.platform.db import Database
 
 #: The one warehouse this build ships. A datasource registry UI is out of
@@ -506,6 +507,35 @@ async def _connector_register(args: argparse.Namespace) -> int:
     return 0
 
 
+async def _audit_tail(args: argparse.Namespace) -> int:
+    """Read-only, ops-facing reporting — the same shape as `db doctor` — over
+    direct DB access via `--org-slug`, not a caller principal. Bypasses the
+    HTTP permission layer (`audit:read`) the same way `db doctor` bypasses
+    every other route's guard: this is an operator tool, not an end-user one.
+    """
+    db = Database(get_settings())
+    try:
+        org_id = await _resolve_org_id(db, args.org_slug)
+        repository = SqlAuditRepository(db, DEFAULT_ID_GENERATOR)
+        events = await repository.list_events(org_id=org_id, action=args.action, limit=args.limit)
+    finally:
+        await db.dispose()
+
+    if not events:
+        print("no audit events")
+        return 0
+    print(f"{'occurred_at':<26} {'action':<18} {'outcome':<7} {'actor_id':<38} resource")
+    print(f"{'-' * 26} {'-' * 18} {'-' * 7} {'-' * 38} {'-' * 8}")
+    for event in events:
+        actor = str(event.actor_id) if event.actor_id is not None else "(system)"
+        resource = f"{event.resource_kind}:{event.resource_id or '-'}"
+        print(
+            f"{event.occurred_at.isoformat():<26} {event.action:<18} "
+            f"{event.outcome:<7} {actor:<38} {resource}"
+        )
+    return 0
+
+
 async def _connector_list_items(args: argparse.Namespace) -> int:
     settings = get_settings()
     db = Database(settings)
@@ -716,6 +746,17 @@ def main() -> int:
     conn_ingest.add_argument("--slug", required=True, help="Source slug")
     conn_ingest.add_argument("--uri", required=True, help="Item uri, as shown by list-items")
 
+    audit_parser = sub.add_parser("audit", help="audit log operations")
+    audit_sub = audit_parser.add_subparsers(dest="command", required=True)
+    audit_tail = audit_sub.add_parser(
+        "tail", help="print an org's most recent audit events, newest first"
+    )
+    audit_tail.add_argument("--org-slug", required=True, help="Org whose audit log to read")
+    audit_tail.add_argument(
+        "--action", default=None, help="Filter to one action, e.g. 'auth.sign_in'"
+    )
+    audit_tail.add_argument("--limit", type=int, default=50, help="Max rows to print (default 50)")
+
     args = parser.parse_args()
 
     if args.group == "bootstrap":
@@ -784,6 +825,13 @@ def main() -> int:
         except (MnemosError, LookupError) as exc:
             message = exc.message if isinstance(exc, MnemosError) else str(exc)
             print(f"connector ingest failed: {message}", file=sys.stderr)
+            return 2
+
+    if args.group == "audit" and args.command == "tail":
+        try:
+            return asyncio.run(_audit_tail(args))
+        except MnemosError as exc:
+            print(f"audit tail failed: {exc.message}", file=sys.stderr)
             return 2
 
     parser.print_help()

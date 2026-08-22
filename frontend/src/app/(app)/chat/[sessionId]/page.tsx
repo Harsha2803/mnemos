@@ -9,7 +9,7 @@ import { Composer } from "@/components/chat/Composer";
 import type { DisplayMessage } from "@/components/chat/MessageBubble";
 import { MessageList } from "@/components/chat/MessageList";
 import { Skeleton } from "@/components/ui/Skeleton";
-import { fetchSession } from "@/lib/chat/api";
+import { fetchSession, removeBookmark, removeFeedback, upsertBookmark, upsertFeedback } from "@/lib/chat/api";
 import { streamChatReply } from "@/lib/chat/stream";
 import { useInspectorSelection } from "@/lib/inspector/SelectionProvider";
 import type { Citation } from "@/lib/knowledge/api";
@@ -41,9 +41,30 @@ export default function ChatSessionPage() {
   const [streaming, setStreaming] = useState(false);
   const abortRef = useRef<AbortController | null>(null);
   const loadedFor = useRef<string | null>(null);
+  // True once the user has sent a message in this session before the initial
+  // `GET /v1/chat/sessions/{id}` resolved — a brand-new session's first send
+  // races that request, and if it wins, its response describes the session
+  // as it was *before* the send (no messages yet). Without this guard the
+  // seeding effect below would still fire once that stale response arrives,
+  // silently wiping the just-sent turn back to empty even though it is
+  // already durable server-side (found via `organize.spec.ts`, which creates
+  // enough concurrent load right before sending that the race reliably lost).
+  const sentBeforeLoad = useRef(false);
+
+  // Reset per session, in the same effect and in this order, so a session
+  // switch cannot run the seeding effect below against the *previous*
+  // session's leftover `sentBeforeLoad`/`loadedFor` state.
+  useEffect(() => {
+    loadedFor.current = null;
+    sentBeforeLoad.current = false;
+    // Abandon an in-flight stream when the user navigates to a different
+    // session, so tokens for a conversation nobody is looking at do not keep
+    // arriving and do not leave the composer stuck disabled.
+    return () => abortRef.current?.abort();
+  }, [sessionId]);
 
   useEffect(() => {
-    if (data === undefined || loadedFor.current === sessionId) return;
+    if (data === undefined || loadedFor.current === sessionId || sentBeforeLoad.current) return;
     loadedFor.current = sessionId;
     const citations = data.citations ?? [];
     setMessages(
@@ -54,18 +75,14 @@ export default function ChatSessionPage() {
         flow: message.flow,
         routeReason: message.router_rationale,
         citations: citations.filter((c) => c.message_id === message.id),
+        bookmarked: message.bookmarked,
+        feedback: message.feedback,
       })),
     );
   }, [data, sessionId]);
 
-  // Abandon an in-flight stream when the user navigates to a different
-  // session, so tokens for a conversation nobody is looking at do not keep
-  // arriving and do not leave the composer stuck disabled.
-  useEffect(() => {
-    return () => abortRef.current?.abort();
-  }, [sessionId]);
-
   function handleSend(content: string): void {
+    sentBeforeLoad.current = true;
     const userMessageId = `pending-user-${crypto.randomUUID()}`;
     const assistantMessageId = `pending-assistant-${crypto.randomUUID()}`;
 
@@ -191,6 +208,39 @@ export default function ChatSessionPage() {
     });
   }
 
+  function handleToggleBookmark(message: DisplayMessage): void {
+    const nextBookmarked = message.bookmarked !== true;
+    // Optimistic: the toggle should feel instant, and a failed request is
+    // rare enough that reverting on catch is simpler than a pending state.
+    setMessages((prev) =>
+      prev.map((m) => (m.id === message.id ? { ...m, bookmarked: nextBookmarked } : m)),
+    );
+    const request = nextBookmarked ? upsertBookmark(message.id) : removeBookmark(message.id);
+    request.catch(() => {
+      setMessages((prev) =>
+        prev.map((m) => (m.id === message.id ? { ...m, bookmarked: !nextBookmarked } : m)),
+      );
+    });
+  }
+
+  function handleRate(
+    message: DisplayMessage,
+    rating: "up" | "down" | null,
+    comment?: string,
+  ): void {
+    const previous = message.feedback;
+    setMessages((prev) =>
+      prev.map((m) => (m.id === message.id ? { ...m, feedback: rating } : m)),
+    );
+    const request =
+      rating === null ? removeFeedback(message.id) : upsertFeedback(message.id, rating, comment);
+    request.catch(() => {
+      setMessages((prev) =>
+        prev.map((m) => (m.id === message.id ? { ...m, feedback: previous } : m)),
+      );
+    });
+  }
+
   function handleMessageSelect(message: DisplayMessage): void {
     select({
       kind: "message",
@@ -217,6 +267,8 @@ export default function ChatSessionPage() {
             messages={messages}
             onCitationClick={handleCitationClick}
             onMessageSelect={handleMessageSelect}
+            onToggleBookmark={handleToggleBookmark}
+            onRate={handleRate}
             selectedCitationId={selection?.kind === "citation" ? selection.citation.id : undefined}
           />
         )}

@@ -129,7 +129,7 @@ class Nl2SqlFlow:
             repository=self._chat, org_id=org_id, session=session, content=content
         )
 
-        record = await self._generate_with_repair(org_id=org_id, question=content)
+        record = await self._generate_with_repair(org_id=org_id, user_id=user_id, question=content)
 
         if record.verdict != SqlVerdict.ALLOWED:
             narration = denial_narration(
@@ -251,7 +251,9 @@ class Nl2SqlFlow:
             yield AssistantError(message="the model is unavailable right now")
             return
 
-    async def _generate_with_repair(self, *, org_id: OrgId, question: str) -> SqlRunRecord:
+    async def _generate_with_repair(
+        self, *, org_id: OrgId, user_id: UserId, question: str
+    ) -> SqlRunRecord:
         """Attempt 1, then up to `self._repair_attempts` more — each one
         independently guarded, each one its own `sql_run` row. Stops the
         moment a verdict is `ALLOWED`, or once the bound is spent, whichever
@@ -260,7 +262,7 @@ class Nl2SqlFlow:
         the same discipline applied to attempt count).
         """
         record = await self._generation.generate(
-            org_id=org_id, slug=self._datasource_slug, question=question
+            org_id=org_id, slug=self._datasource_slug, question=question, user_id=user_id
         )
         attempt = 1
         while record.verdict in _REPAIRABLE and attempt <= self._repair_attempts:
@@ -273,6 +275,7 @@ class Nl2SqlFlow:
                 repair=RepairContext(
                     previous_sql=record.generated_sql, detail=record.verdict_detail
                 ),
+                user_id=user_id,
             )
         return record
 

@@ -127,6 +127,7 @@ async def retract_memory(
 ) -> None:
     await service.retract(
         org_id=caller.principal.org_id,
+        user_id=caller.principal.principal_id,
         memory_id=_memory_id(memory_id),
     )
 

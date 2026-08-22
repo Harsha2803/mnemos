@@ -17,18 +17,34 @@ from __future__ import annotations
 from collections.abc import Sequence
 from datetime import datetime
 
-from sqlalchemy import func, literal, select, tuple_, update
+from sqlalchemy import delete, exists, func, literal, select, text, tuple_, update
+from sqlalchemy.dialects.postgresql import insert
 
 from mnemos.core.ids import IdGenerator
-from mnemos.core.types import MessageRole
-from mnemos.features.chat.adapters.models import ChatMessage, ChatSession, MessageCitation
+from mnemos.core.types import FeedbackRating, MessageRole
+from mnemos.features.chat.adapters.models import (
+    Bookmark,
+    ChatMessage,
+    ChatSession,
+    Feedback,
+    Folder,
+    MessageCitation,
+)
+from mnemos.features.chat.application.ports import UNSET, _UnsetType
 from mnemos.features.chat.domain import (
+    BookmarkedMessage,
+    BookmarkId,
+    BookmarkRecord,
     ChatMessageId,
     ChatMessageRecord,
     ChatSessionId,
     ChatSessionSummary,
     CitationInput,
     CitationRecord,
+    FeedbackId,
+    FeedbackRecord,
+    FolderId,
+    FolderRecord,
 )
 from mnemos.features.identity.domain import OrgId, UserId
 from mnemos.platform.db import Database
@@ -80,6 +96,77 @@ class SqlChatRepository:
             rows = (await session.scalars(query)).all()
         return [_session_summary(r) for r in rows]
 
+    async def search_sessions(
+        self, *, org_id: OrgId, user_id: UserId, query: str, limit: int
+    ) -> Sequence[ChatSessionSummary]:
+        # Raw SQL rather than SQLAlchemy Core: this is a ranked UNION of a
+        # title-match branch and a full-text content-match branch, deduped
+        # to one row per session — the same `text()`-with-bound-params shape
+        # `features/knowledge/adapters/jobs_repository.py` already uses for
+        # a query this awkward to express through the query builder.
+        statement = text(
+            """
+            WITH title_matches AS (
+                SELECT id, org_id, user_id, title, is_archived, folder_id,
+                       last_message_at, created_at, updated_at,
+                       2.0::float8 AS rank, NULL::text AS snippet
+                  FROM chat_session
+                 WHERE org_id = :org_id AND user_id = :user_id AND deleted_at IS NULL
+                   AND title ILIKE '%' || :query || '%'
+            ),
+            content_matches AS (
+                SELECT DISTINCT ON (s.id)
+                       s.id, s.org_id, s.user_id, s.title, s.is_archived, s.folder_id,
+                       s.last_message_at, s.created_at, s.updated_at,
+                       ts_rank(m.content_tsv, websearch_to_tsquery('english', :query)) AS rank,
+                       ts_headline(
+                           'english', m.content, websearch_to_tsquery('english', :query),
+                           'MaxFragments=1, MaxWords=20'
+                       ) AS snippet
+                  FROM chat_session s
+                  JOIN chat_message m ON m.session_id = s.id
+                 WHERE s.org_id = :org_id AND s.user_id = :user_id AND s.deleted_at IS NULL
+                   AND m.content_tsv @@ websearch_to_tsquery('english', :query)
+                 ORDER BY s.id,
+                          ts_rank(m.content_tsv, websearch_to_tsquery('english', :query)) DESC
+            ),
+            combined AS (
+                SELECT DISTINCT ON (id)
+                       id, org_id, user_id, title, is_archived, folder_id,
+                       last_message_at, created_at, updated_at, rank, snippet
+                  FROM (
+                      SELECT * FROM title_matches
+                      UNION ALL
+                      SELECT * FROM content_matches
+                  ) u
+                 ORDER BY id, rank DESC
+            )
+            SELECT * FROM combined
+             ORDER BY rank DESC, id DESC
+             LIMIT :limit
+            """
+        )
+        async with self._db.session(org_id=org_id) as session:
+            result = await session.execute(
+                statement, {"org_id": org_id, "user_id": user_id, "query": query, "limit": limit}
+            )
+            rows = result.mappings().all()
+        return [
+            ChatSessionSummary(
+                id=ChatSessionId(row["id"]),
+                org_id=OrgId(row["org_id"]),
+                user_id=UserId(row["user_id"]),
+                title=row["title"],
+                is_archived=row["is_archived"],
+                folder_id=FolderId(row["folder_id"]) if row["folder_id"] is not None else None,
+                last_message_at=row["last_message_at"],
+                created_at=row["created_at"],
+                updated_at=row["updated_at"],
+                snippet=_plain_snippet(row["snippet"]),
+            )
+            for row in rows
+        ]
+
     async def get_session(
         self, *, org_id: OrgId, session_id: ChatSessionId
     ) -> ChatSessionSummary | None:
@@ -94,15 +181,32 @@ class SqlChatRepository:
         return _session_summary(row) if row is not None else None
 
     async def rename_session(
-        self, *, org_id: OrgId, session_id: ChatSessionId, title: str
+        self,
+        *,
+        org_id: OrgId,
+        session_id: ChatSessionId,
+        title: str | None = None,
+        folder_id: FolderId | _UnsetType | None = UNSET,
     ) -> ChatSessionSummary | None:
+        values: dict[str, object] = {}
+        if title is not None:
+            values["title"] = title
+        if not isinstance(folder_id, _UnsetType):
+            values["folder_id"] = folder_id
         async with self._db.session(org_id=org_id) as session:
-            row = await session.scalar(
-                update(ChatSession)
-                .where(ChatSession.org_id == org_id, ChatSession.id == session_id)
-                .values(title=title)
-                .returning(ChatSession)
-            )
+            if values:
+                row = await session.scalar(
+                    update(ChatSession)
+                    .where(ChatSession.org_id == org_id, ChatSession.id == session_id)
+                    .values(**values)
+                    .returning(ChatSession)
+                )
+            else:
+                row = await session.scalar(
+                    select(ChatSession).where(
+                        ChatSession.org_id == org_id, ChatSession.id == session_id
+                    )
+                )
         return _session_summary(row) if row is not None else None
 
     async def delete_session(self, *, org_id: OrgId, session_id: ChatSessionId) -> bool:
@@ -131,6 +235,34 @@ class SqlChatRepository:
                 )
             ).all()
         return [_message_record(r) for r in rows]
+
+    async def list_messages_with_state(
+        self, *, org_id: OrgId, session_id: ChatSessionId, user_id: UserId
+    ) -> Sequence[ChatMessageRecord]:
+        bookmarked_expr = exists(
+            select(Bookmark.id).where(
+                Bookmark.message_id == ChatMessage.id, Bookmark.user_id == user_id
+            )
+        )
+        query = (
+            select(ChatMessage, bookmarked_expr, Feedback.rating)
+            .outerjoin(
+                Feedback,
+                (Feedback.message_id == ChatMessage.id) & (Feedback.user_id == user_id),
+            )
+            .where(ChatMessage.org_id == org_id, ChatMessage.session_id == session_id)
+            .order_by(ChatMessage.ordinal.asc())
+        )
+        async with self._db.session(org_id=org_id) as session:
+            rows = (await session.execute(query)).all()
+        return [
+            _message_record(
+                message,
+                bookmarked=bookmarked,
+                feedback=FeedbackRating(rating) if rating is not None else None,
+            )
+            for message, bookmarked, rating in rows
+        ]
 
     async def append_user_message(
         self, *, org_id: OrgId, session_id: ChatSessionId, content: str
@@ -202,6 +334,235 @@ class SqlChatRepository:
             ).all()
         return [_citation_record(r) for r in rows]
 
+    async def create_folder(self, *, org_id: OrgId, user_id: UserId, name: str) -> FolderRecord:
+        new_id = self._ids.new()
+        async with self._db.session(org_id=org_id) as session:
+            row = Folder(id=new_id, org_id=org_id, user_id=user_id, name=name)
+            session.add(row)
+            await session.flush()
+            await session.refresh(row)
+            return _folder_record(row, session_count=0)
+
+    async def list_folders(self, *, org_id: OrgId, user_id: UserId) -> Sequence[FolderRecord]:
+        session_count = (
+            select(func.count(ChatSession.id))
+            .where(
+                ChatSession.folder_id == Folder.id,
+                ChatSession.org_id == org_id,
+                ChatSession.deleted_at.is_(None),
+            )
+            .scalar_subquery()
+        )
+        query = (
+            select(Folder, session_count)
+            .where(Folder.org_id == org_id, Folder.user_id == user_id)
+            .order_by(Folder.position.asc(), Folder.id.asc())
+        )
+        async with self._db.session(org_id=org_id) as session:
+            rows = (await session.execute(query)).all()
+        return [_folder_record(folder, session_count=count) for folder, count in rows]
+
+    async def get_folder(
+        self, *, org_id: OrgId, user_id: UserId, folder_id: FolderId
+    ) -> FolderRecord | None:
+        session_count = (
+            select(func.count(ChatSession.id))
+            .where(
+                ChatSession.folder_id == folder_id,
+                ChatSession.org_id == org_id,
+                ChatSession.deleted_at.is_(None),
+            )
+            .scalar_subquery()
+        )
+        async with self._db.session(org_id=org_id) as session:
+            row = (
+                await session.execute(
+                    select(Folder, session_count).where(
+                        Folder.org_id == org_id,
+                        Folder.user_id == user_id,
+                        Folder.id == folder_id,
+                    )
+                )
+            ).first()
+        return _folder_record(row[0], session_count=row[1]) if row is not None else None
+
+    async def rename_folder(
+        self, *, org_id: OrgId, folder_id: FolderId, name: str | None, position: int | None
+    ) -> FolderRecord | None:
+        values: dict[str, object] = {}
+        if name is not None:
+            values["name"] = name
+        if position is not None:
+            values["position"] = position
+        session_count_query = select(func.count(ChatSession.id)).where(
+            ChatSession.folder_id == folder_id,
+            ChatSession.org_id == org_id,
+            ChatSession.deleted_at.is_(None),
+        )
+        async with self._db.session(org_id=org_id) as session:
+            if values:
+                row = await session.scalar(
+                    update(Folder)
+                    .where(Folder.org_id == org_id, Folder.id == folder_id)
+                    .values(**values)
+                    .returning(Folder)
+                )
+            else:
+                row = await session.scalar(
+                    select(Folder).where(Folder.org_id == org_id, Folder.id == folder_id)
+                )
+            if row is None:
+                return None
+            count = await session.scalar(session_count_query)
+        return _folder_record(row, session_count=count or 0)
+
+    async def delete_folder(self, *, org_id: OrgId, folder_id: FolderId) -> bool:
+        # `chat_session.folder_id` is `ondelete=SET NULL`, so this un-files the
+        # folder's sessions at the database level with no extra query.
+        async with self._db.session(org_id=org_id) as session:
+            deleted = await session.scalar(
+                delete(Folder)
+                .where(Folder.org_id == org_id, Folder.id == folder_id)
+                .returning(Folder.id)
+            )
+        return deleted is not None
+
+    async def upsert_bookmark(
+        self, *, org_id: OrgId, user_id: UserId, message_id: ChatMessageId, note: str | None
+    ) -> BookmarkRecord | None:
+        async with self._db.session(org_id=org_id) as session:
+            owned = await session.scalar(
+                select(ChatMessage.id)
+                .join(ChatSession, ChatSession.id == ChatMessage.session_id)
+                .where(
+                    ChatMessage.id == message_id,
+                    ChatMessage.org_id == org_id,
+                    ChatSession.user_id == user_id,
+                )
+            )
+            if owned is None:
+                return None
+            statement = insert(Bookmark).values(
+                id=self._ids.new(),
+                org_id=org_id,
+                user_id=user_id,
+                message_id=message_id,
+                note=note,
+            )
+            row = await session.scalar(
+                statement.on_conflict_do_update(
+                    constraint="uq_bookmark_user_id_message_id",
+                    set_={"note": statement.excluded.note, "updated_at": func.now()},
+                ).returning(Bookmark)
+            )
+        return _bookmark_record(row) if row is not None else None
+
+    async def remove_bookmark(
+        self, *, org_id: OrgId, user_id: UserId, message_id: ChatMessageId
+    ) -> bool:
+        async with self._db.session(org_id=org_id) as session:
+            deleted = await session.scalar(
+                delete(Bookmark)
+                .where(
+                    Bookmark.org_id == org_id,
+                    Bookmark.user_id == user_id,
+                    Bookmark.message_id == message_id,
+                )
+                .returning(Bookmark.id)
+            )
+        return deleted is not None
+
+    async def list_bookmarks(
+        self,
+        *,
+        org_id: OrgId,
+        user_id: UserId,
+        limit: int,
+        before: tuple[datetime, BookmarkId] | None,
+    ) -> Sequence[BookmarkedMessage]:
+        query = (
+            select(Bookmark, ChatMessage, ChatSession)
+            .join(ChatMessage, ChatMessage.id == Bookmark.message_id)
+            .join(ChatSession, ChatSession.id == ChatMessage.session_id)
+            .where(Bookmark.org_id == org_id, Bookmark.user_id == user_id)
+            .order_by(Bookmark.created_at.desc(), Bookmark.id.desc())
+            .limit(limit)
+        )
+        if before is not None:
+            before_ts, before_id = before
+            query = query.where(
+                tuple_(Bookmark.created_at, Bookmark.id)
+                < tuple_(literal(before_ts), literal(before_id))
+            )
+        async with self._db.session(org_id=org_id) as session:
+            rows = (await session.execute(query)).all()
+        return [
+            BookmarkedMessage(
+                bookmark=_bookmark_record(bookmark),
+                message_content=message.content,
+                message_role=MessageRole(message.role),
+                session_id=ChatSessionId(session_row.id),
+                session_title=session_row.title,
+            )
+            for bookmark, message, session_row in rows
+        ]
+
+    async def upsert_feedback(
+        self,
+        *,
+        org_id: OrgId,
+        user_id: UserId,
+        message_id: ChatMessageId,
+        rating: FeedbackRating,
+        comment: str | None,
+    ) -> FeedbackRecord | None:
+        async with self._db.session(org_id=org_id) as session:
+            owned = await session.scalar(
+                select(ChatMessage.id)
+                .join(ChatSession, ChatSession.id == ChatMessage.session_id)
+                .where(
+                    ChatMessage.id == message_id,
+                    ChatMessage.org_id == org_id,
+                    ChatSession.user_id == user_id,
+                )
+            )
+            if owned is None:
+                return None
+            statement = insert(Feedback).values(
+                id=self._ids.new(),
+                org_id=org_id,
+                user_id=user_id,
+                message_id=message_id,
+                rating=rating.value,
+                comment=comment,
+            )
+            row = await session.scalar(
+                statement.on_conflict_do_update(
+                    constraint="uq_feedback_user_id_message_id",
+                    set_={
+                        "rating": statement.excluded.rating,
+                        "comment": statement.excluded.comment,
+                        "updated_at": func.now(),
+                    },
+                ).returning(Feedback)
+            )
+        return _feedback_record(row) if row is not None else None
+
+    async def remove_feedback(
+        self, *, org_id: OrgId, user_id: UserId, message_id: ChatMessageId
+    ) -> bool:
+        async with self._db.session(org_id=org_id) as session:
+            deleted = await session.scalar(
+                delete(Feedback)
+                .where(
+                    Feedback.org_id == org_id,
+                    Feedback.user_id == user_id,
+                    Feedback.message_id == message_id,
+                )
+                .returning(Feedback.id)
+            )
+        return deleted is not None
+
     async def _append_message(
         self,
         *,
@@ -250,6 +611,16 @@ class SqlChatRepository:
             return _message_record(row)
 
 
+def _plain_snippet(headline: str | None) -> str | None:
+    """`ts_headline` wraps its matched terms in `<b>...</b>` by default — an
+    empty `StartSel`/`StopSel` in the options string is a Postgres syntax
+    error, not a way to suppress them, so the tags are stripped here instead.
+    Plain text only reaches the frontend; nothing renders it as HTML."""
+    if headline is None:
+        return None
+    return headline.replace("<b>", "").replace("</b>", "")
+
+
 def _session_summary(row: ChatSession) -> ChatSessionSummary:
     return ChatSessionSummary(
         id=ChatSessionId(row.id),
@@ -257,13 +628,29 @@ def _session_summary(row: ChatSession) -> ChatSessionSummary:
         user_id=UserId(row.user_id),
         title=row.title,
         is_archived=row.is_archived,
+        folder_id=FolderId(row.folder_id) if row.folder_id is not None else None,
         last_message_at=row.last_message_at,
         created_at=row.created_at,
         updated_at=row.updated_at,
     )
 
 
-def _message_record(row: ChatMessage) -> ChatMessageRecord:
+def _folder_record(row: Folder, *, session_count: int) -> FolderRecord:
+    return FolderRecord(
+        id=FolderId(row.id),
+        org_id=OrgId(row.org_id),
+        user_id=UserId(row.user_id),
+        name=row.name,
+        position=row.position,
+        session_count=session_count,
+        created_at=row.created_at,
+        updated_at=row.updated_at,
+    )
+
+
+def _message_record(
+    row: ChatMessage, *, bookmarked: bool = False, feedback: FeedbackRating | None = None
+) -> ChatMessageRecord:
     return ChatMessageRecord(
         id=ChatMessageId(row.id),
         session_id=ChatSessionId(row.session_id),
@@ -280,6 +667,33 @@ def _message_record(row: ChatMessage) -> ChatMessageRecord:
         finish_reason=row.finish_reason,
         error_code=row.error_code,
         created_at=row.created_at,
+        bookmarked=bookmarked,
+        feedback=feedback,
+    )
+
+
+def _bookmark_record(row: Bookmark) -> BookmarkRecord:
+    return BookmarkRecord(
+        id=BookmarkId(row.id),
+        org_id=OrgId(row.org_id),
+        user_id=UserId(row.user_id),
+        message_id=ChatMessageId(row.message_id),
+        note=row.note,
+        created_at=row.created_at,
+        updated_at=row.updated_at,
+    )
+
+
+def _feedback_record(row: Feedback) -> FeedbackRecord:
+    return FeedbackRecord(
+        id=FeedbackId(row.id),
+        org_id=OrgId(row.org_id),
+        user_id=UserId(row.user_id),
+        message_id=ChatMessageId(row.message_id),
+        rating=FeedbackRating(row.rating),
+        comment=row.comment,
+        created_at=row.created_at,
+        updated_at=row.updated_at,
     )
 
 

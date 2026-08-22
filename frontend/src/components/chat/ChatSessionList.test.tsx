@@ -15,12 +15,15 @@ function aSession(overrides: Record<string, unknown> = {}) {
     id: "019fe000-0000-7000-8000-00000000000a",
     title: "What is the capital of France?",
     is_archived: false,
+    folder_id: null,
     last_message_at: "2026-08-16T12:00:00Z",
     created_at: "2026-08-16T12:00:00Z",
     updated_at: "2026-08-16T12:00:00Z",
     ...overrides,
   };
 }
+
+const FOLDERS_PATH = "/api/v1/chat/folders";
 
 beforeEach(() => {
   resetNavigation();
@@ -29,6 +32,9 @@ beforeEach(() => {
 describe("the conversation list", () => {
   it("test_a_conversation_shows_its_backend_assigned_title", async () => {
     stubRouter((call) => {
+      if (call.method === "GET" && call.path === FOLDERS_PATH) {
+        return jsonResponse(200, { folders: [] });
+      }
       if (call.method === "GET" && call.path === SESSIONS_PATH) {
         return jsonResponse(200, { sessions: [aSession()], next_cursor: null });
       }
@@ -45,6 +51,9 @@ describe("the conversation list", () => {
   it("test_renaming_a_conversation_sends_the_new_title_and_shows_it", async () => {
     let title = aSession().title;
     const router = stubRouter((call) => {
+      if (call.method === "GET" && call.path === FOLDERS_PATH) {
+        return jsonResponse(200, { folders: [] });
+      }
       if (call.method === "GET" && call.path === SESSIONS_PATH) {
         return jsonResponse(200, { sessions: [aSession({ title })], next_cursor: null });
       }
@@ -73,6 +82,9 @@ describe("the conversation list", () => {
 
   it("test_escape_cancels_a_rename_without_sending_anything", async () => {
     const router = stubRouter((call) => {
+      if (call.method === "GET" && call.path === FOLDERS_PATH) {
+        return jsonResponse(200, { folders: [] });
+      }
       if (call.method === "GET" && call.path === SESSIONS_PATH) {
         return jsonResponse(200, { sessions: [aSession()], next_cursor: null });
       }
@@ -95,6 +107,9 @@ describe("the conversation list", () => {
 
   it("test_deleting_a_conversation_names_it_in_the_confirmation", async () => {
     const router = stubRouter((call) => {
+      if (call.method === "GET" && call.path === FOLDERS_PATH) {
+        return jsonResponse(200, { folders: [] });
+      }
       if (call.method === "GET" && call.path === SESSIONS_PATH) {
         return jsonResponse(200, { sessions: [aSession()], next_cursor: null });
       }
@@ -119,6 +134,9 @@ describe("the conversation list", () => {
   it("test_deleting_the_open_conversation_navigates_away_from_it", async () => {
     visit(`/chat/${aSession().id}`);
     stubRouter((call) => {
+      if (call.method === "GET" && call.path === FOLDERS_PATH) {
+        return jsonResponse(200, { folders: [] });
+      }
       if (call.method === "GET" && call.path === SESSIONS_PATH) {
         return jsonResponse(200, { sessions: [aSession()], next_cursor: null });
       }

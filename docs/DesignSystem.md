@@ -475,7 +475,7 @@ exists.
 | The Tailwind theme mapping (`@theme inline`, and the `--color-*: initial` reset) | same file, lower half |
 | `.hit-target`, `.material-chrome`, `.measure`, `.list-group` / `.list-row` | same file, `@layer components` |
 | Theme preference, the pre-paint script, the store | `frontend/src/lib/theme.ts` |
-| `Button`, `List`, `EmptyState`, `Skeleton` | `frontend/src/components/ui/` |
+| `Button`, `List`, `EmptyState`, `Skeleton`, `Table` | `frontend/src/components/ui/` |
 | `ThemeToggle` | `frontend/src/components/theme/` |
 | The three-column shell and the breakpoint sheets | `frontend/src/components/shell/AppShell.tsx` |
 | Generated API types (never hand-edited; `npm run generate:api`) | `frontend/src/lib/api/schema.ts` |

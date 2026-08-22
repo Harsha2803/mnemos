@@ -40,6 +40,7 @@ from mnemos.features.knowledge.adapters.retrieval import SqlRetriever
 from mnemos.features.knowledge.application.service import KnowledgeService
 from mnemos.features.knowledge.domain import DocumentId, HashingEmbedder, HeuristicTokenizer
 from mnemos.features.llm.domain.model import ChatCompletion, ChatDone, ChatStreamEvent, ChatTurn
+from mnemos.features.observability.adapters.repository import SqlAuditRepository
 from mnemos.flows.rag.application import RagFlow
 from mnemos.platform.db import Database
 
@@ -194,7 +195,9 @@ class ScriptedChatModel:
         return None
 
 
-def build_knowledge(db: Database, objects: InMemoryObjectStore) -> KnowledgeService:
+def build_knowledge(
+    db: Database, objects: InMemoryObjectStore, *, audit: SqlAuditRepository | None = None
+) -> KnowledgeService:
     return KnowledgeService(
         repository=KnowledgeRepository(db, Uuid7Generator()),
         retriever=SqlRetriever(db),
@@ -203,12 +206,18 @@ def build_knowledge(db: Database, objects: InMemoryObjectStore) -> KnowledgeServ
         tokenizer=HeuristicTokenizer(),
         rrf_k=60,
         near_duplicate_threshold=0.86,
+        audit=audit,
     )
 
 
 @pytest.fixture
 def objects() -> InMemoryObjectStore:
     return InMemoryObjectStore()
+
+
+@pytest.fixture
+def audit_repository(db: Database) -> SqlAuditRepository:
+    return SqlAuditRepository(db, Uuid7Generator())
 
 
 @pytest.fixture
@@ -223,13 +232,14 @@ def client(
     db: Database,
     objects: InMemoryObjectStore,
     model: ScriptedChatModel,
+    audit_repository: SqlAuditRepository,
 ) -> Iterator[TestClient]:
     app = create_app()
     with TestClient(app, base_url="http://testserver") as test_client:
         app.state.principals = PrincipalResolver(
             codec=codec, repository=SqlPrincipalRepository(db), clock=clock
         )
-        knowledge = build_knowledge(db, objects)
+        knowledge = build_knowledge(db, objects, audit=audit_repository)
         app.state.knowledge_service = knowledge
         app.state.chat_service = ChatService(
             repository=SqlChatRepository(db, Uuid7Generator()), model=model, history_turns=12
@@ -332,6 +342,7 @@ def test_deleting_a_document_removes_its_chunks_and_its_bytes(
     codec: PlatformTokenCodec,
     seeded: Seed,
     objects: InMemoryObjectStore,
+    postgres: Postgres,
 ) -> None:
     headers = _headers(codec, seeded)
     document = upload(client, headers, "temp.txt", "some content to be deleted later on")
@@ -347,6 +358,27 @@ def test_deleting_a_document_removes_its_chunks_and_its_bytes(
         == 404
     )
     assert not objects.objects
+
+    # `C3` deliverable 5: the delete is also a durable audit row. A raw
+    # connection, not `SqlAuditRepository` against the shared `db` fixture —
+    # `TestClient` above already drove that engine through its own event
+    # loop, and a second `asyncio.run` reusing it collides over loop affinity.
+    async def fetch_audit_row() -> asyncpg.Record | None:
+        conn = await asyncpg.connect(postgres.owner_dsn)
+        try:
+            return await conn.fetchrow(
+                "SELECT actor_id, action, resource_id, outcome FROM audit_log WHERE org_id = $1",
+                seeded.org_a,
+            )
+        finally:
+            await conn.close()
+
+    event = asyncio.run(fetch_audit_row())
+    assert event is not None
+    assert event["action"] == "document.delete"
+    assert event["outcome"] == "allow"
+    assert event["resource_id"] == document["id"]
+    assert str(event["actor_id"]) == str(seeded.user_a)
 
 
 # ---------------------------------------------------------------- retrieval
