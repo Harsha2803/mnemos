@@ -39,6 +39,7 @@ from mnemos.entrypoints.api.routers import auth as auth_router
 from mnemos.entrypoints.api.routers import chat as chat_router
 from mnemos.entrypoints.api.routers import connectors as connectors_router
 from mnemos.entrypoints.api.routers import context as context_router
+from mnemos.entrypoints.api.routers import folders as folders_router
 from mnemos.entrypoints.api.routers import knowledge as knowledge_router
 from mnemos.entrypoints.api.routers import memory as memory_router
 from mnemos.entrypoints.api.routers import tools as tools_router
@@ -49,6 +50,7 @@ from mnemos.entrypoints.api.security import (
     reset_caller_context,
 )
 from mnemos.features.chat.adapters.repository import SqlChatRepository
+from mnemos.features.chat.application.folders import FolderService
 from mnemos.features.chat.application.service import ChatService
 from mnemos.features.connectors.adapters.crypto import SourceConfigCipher
 from mnemos.features.connectors.adapters.repository import ContentSourceRepository
@@ -183,6 +185,7 @@ async def lifespan(app: FastAPI) -> AsyncIterator[None]:
         timeout_s=float(settings.ollama_timeout_s),
     )
     chat_repository = SqlChatRepository(app.state.db, DEFAULT_ID_GENERATOR)
+    app.state.folder_service = FolderService(repository=chat_repository)
     app.state.memory_service = MemoryService(
         repository=SqlMemoryRepository(app.state.db, DEFAULT_ID_GENERATOR),
         clock=SYSTEM_CLOCK,
@@ -469,6 +472,7 @@ def create_app() -> FastAPI:
 
     app.include_router(auth_router.router, prefix=settings.api_prefix)
     app.include_router(chat_router.router, prefix=settings.api_prefix)
+    app.include_router(folders_router.router, prefix=settings.api_prefix)
     app.include_router(knowledge_router.router, prefix=settings.api_prefix)
     app.include_router(connectors_router.router, prefix=settings.api_prefix)
     app.include_router(tools_router.router, prefix=settings.api_prefix)

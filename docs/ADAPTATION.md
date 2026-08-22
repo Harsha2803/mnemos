@@ -4,13 +4,13 @@
 > self-contained: architecture, the capability inventory, schema, milestones, and current
 > state. [`TRACKER.md`](../TRACKER.md) holds live task status; this holds the design.
 
-**Last updated:** 2026-08-22 — reduced `D1` is **complete** (PR #25): a genuinely clean
-clone comes up ready, all 14 critical-path Playwright tests pass (three real bugs found and
-fixed along the way — see below), `make demo-seed` + `docs/Demo.md` give a live-verified
-scripted walkthrough, and the README is rewritten on exact final numbers (465 backend / 114
-frontend / 14 Playwright tests, 42 tables with 41 under `FORCE` RLS) with an added
-Known-limitations section. **No committed milestone remains.** `B4` and `C1`–`C3` stay
-deliberately deferred; full detail is in `TRACKER.md`'s 2026-08-22 dated notes.
+**Last updated:** 2026-08-22 — `D1` shipped (PR #25); `C3` — conversation product depth —
+was then reopened by explicit project-owner decision (docs/Roadmap.md §2) and its
+deliverable 1 (folders) is done: backend vertical slice, 7 new tests plus 0 regressions
+across 260 backend tests, frontend grouping/create/rename/delete/move UI with 0 regressions
+across 114 frontend tests, and a live browser walkthrough against rebuilt containers. `B4`,
+`C1`, `C2` stay deliberately deferred; full detail is in `TRACKER.md`'s 2026-08-22 dated
+notes.
 
 ---
 
@@ -110,10 +110,10 @@ rows are marked and are not promises in the portfolio plan.
 | **A tool runtime with a trust boundary** | `features/tools/`: MCP registry, per-user encrypted credentials, live-role grants, trust tiers, durable approval, invocation records, and a Tool console. A denial names the offending source on screen | `B3` ✅ |
 | **Multi-step work that can be inspected mid-flight** | Optional future `flows/agent/`: a bounded state machine over tools with checkpoints and a step trace | `B4` deferred |
 | **Conversation persistence** — sessions, messages, streaming | `features/chat/`: `chat_session` + `chat_message`, SSE token streaming | `A1` |
-| **Conversation *management*** — the part that makes it usable past the first week | Optional folders, bookmarks, feedback, and history search | `C3` deferred |
+| **Conversation *management*** — the part that makes it usable past the first week | Folders (built), bookmarks/feedback/history search (in progress) | `C3` in progress |
 | **Prompts as data, not as string literals in a handler** | Optional DB-backed versioned prompts with diff and activation | `C2` deferred |
 | **Cost and token accounting** | Optional `inference_call` ledger and cost dashboard | `C2` deferred |
-| **An audit trail** | Optional expanded `audit_log` product surface | `C3` deferred |
+| **An audit trail** | Expanded `audit_log` product surface | `C3` deliverable 5, not started |
 | **Governed context** — the deep claim | `features/memory/` (bitemporal claims, supersession, lifecycle) + `features/context/` (the six-phase compiler) + the context inspector + the benchmark re-run on Postgres | `C4` |
 | **Deletion that reaches everything a document touched** | Cascade delete of document → chunks → embeddings → citations; memory erase lands with the memory layer | `A2` documents · `C4` memory |
 | **Realtime push** — a separate service, because a WebSocket gateway and a request/response API have different lifecycles | `entrypoints/realtime/`: authenticated ingestion updates over Redis, its own container since `M1` | `M1` ✅ container · `B1` ✅ authenticated flow |
@@ -217,9 +217,9 @@ Every tenant-scoped table: `org_id` + RLS `FORCE` on `app.current_org` GUC.
 
 Re-cut on 2026-08-02 into product milestones, then narrowed on 2026-08-18 to a
 resume-focused finish. The old `M1`–`M14` numbering is superseded and mapped at the end of
-this section for historical translation. The only remaining committed milestone is
-reduced `D1`; `B4` and `C1`–`C3` are deliberately deferred. The authoritative
-live copy is [TRACKER §3.0](../TRACKER.md#30-the-plan--completed-foundation-and-the-resume-focused-finish).
+this section for historical translation. `D1` shipped; `C3` was then reopened 2026-08-22 and
+is in progress (deliverable 1 done). `B4` and `C1`–`C2` remain deliberately deferred. The
+authoritative live copy is [TRACKER §3.0](../TRACKER.md#30-the-plan--completed-foundation-and-the-resume-focused-finish).
 
 Two rules govern every row.
 
@@ -263,7 +263,7 @@ authoritative for sequencing, not these tables' phase grouping.
 |---|---|---|---|
 | **C1** | API keys · full RBAC permission matrix + tag-scoped document ACLs · keys UI + real 403 states | **issue an API key, call the API with it, and watch a user without the permission be refused** — in the UI and at the wire | ⏸ deferred — existing OIDC/JWT/RLS carries the core security signal |
 | **C2** | Versioned prompt store (diff, activate) · cost + token ledger · prompt manager + cost dashboard | **change the prompt behind a flow, activate the new version, and see what every answer cost** | ⏸ deferred — operations breadth, not a finish-line differentiator |
-| **C3** | Chat history depth: folders, bookmarks, feedback · audit log · search over history | **organise, bookmark, rate and search your conversations, and read the audit trail of who did what** | ⏸ deferred — conventional product depth |
+| **C3** | Chat history depth: folders, bookmarks, feedback · audit log · search over history | **organise, bookmark, rate and search your conversations, and read the audit trail of who did what** | 🟡 in progress — reopened 2026-08-22; deliverable 1 (folders) done, 2-5 remain |
 | **C4** | **The context layer.** Bitemporal memory + supersession · the budgeted context compiler · the context inspector · re-run the benchmark on Postgres | **open any answer and see its compiled context** — what was admitted, what was excluded and why, and the token spend against budget | ✅ 2026-08-18 (PR #24) — Postgres, Compose and Chromium verified |
 
 **Phase D — ship it.**
@@ -315,8 +315,8 @@ Apple assets are off-limits (SF Pro as a webfont, SF Symbols) and what is used i
 (PR #15), `B1` (PR #16), the per-session log files (PR #17), the out-of-band frontend
 polish work (PR #18), `B2` plus its final UI/correctness review (PR #19), and `A4`
 (PR #20). The documentation-only scope reset merged in PR #21, `B3` is complete on PR #23,
-`C4` on PR #24, and reduced `D1` — the last committed milestone — on PR #25. No committed
-milestone remains; `B4` and `C1`–`C3` stay deliberately deferred pending an explicit owner
+`C4` on PR #24, and reduced `D1` on PR #25. `C3` was reopened 2026-08-22 (PR #26, in
+progress); `B4` and `C1`–`C2` stay deliberately deferred pending a separate explicit owner
 decision.
 
 `M3`'s exit criterion "RLS blocks cross-org" turned out to be unmet by `M2` rather than
@@ -1413,11 +1413,18 @@ here on signs in as `analyst@mnemos.local` instead.
 
 ### Committed work not started
 
-**No milestone remains.** Phase A, `B1`–`B3`, `C4`, and reduced `D1` are all complete.
-`B4` and `C1`–`C3` are deliberately deferred, so architecture/schema seams for
+Phase A, `B1`–`B3`, `C4`, and reduced `D1` are all complete. `C3` is **in progress**
+(reopened 2026-08-22; deliverable 1 done, 2-5 remain — TRACKER §5 has the full brief).
+`B4` and `C1`–`C2` are deliberately deferred, so architecture/schema seams for
 them must not be reported as unfinished committed work. Concretely, and stated plainly
 because the gap between what `docs/` describes and what runs is the thing this file exists
 to keep honest:
+
+- ~~**There is no conversation *organization* — no folders, bookmarks, feedback, or
+  history search.**~~ **`C3` deliverable 1 (folders) built 2026-08-22.** Sessions can be
+  grouped into folders, created/renamed/deleted from the sidebar, with a session movable
+  in and out. Bookmarks, feedback, history search and the audit log (deliverables 2-5)
+  remain not started — full evidence in TRACKER's 2026-08-22 `C3` dated note.
 
 - **`B1` is done.** There is a source connector abstraction, an event bus, an authenticated
   realtime channel, a worker that actually processes ingestion jobs, and a browser-verified
@@ -1467,10 +1474,9 @@ a green critical-path Playwright suite, a scripted demo (`docs/Demo.md`), and a 
 rewritten on exactly these measured numbers. Evidence for each is above.
 
 **Explicitly deferred, unchanged since the 2026-08-18 scope reset:** `B4` multi-step agent
-planning, `C1` API keys/full RBAC/tag ACLs, `C2` prompt and cost management, and `C3`
-conversation organization/expanded audit UI. They remain coherent future extensions but are
-outside the resume-focused finish line unless the project owner explicitly reopens scope —
-there is no next committed milestone that would do so automatically.
+planning, `C1` API keys/full RBAC/tag ACLs, and `C2` prompt and cost management. They remain
+coherent future extensions but are outside the finish line unless the project owner
+explicitly reopens scope — as happened for `C3` on 2026-08-22 (TRACKER §5).
 
 ---
 
@@ -1505,9 +1511,10 @@ there is no next committed milestone that would do so automatically.
 - **Milestone IDs are `A0`–`D1` now, not `M4`–`M14`.** If you find an old ID in a document,
   a docstring or a commit message, §7's mapping table is the translation — do not guess,
   and do not leave a reader holding a number that no longer names anything.
-- **`D1` is done; no committed milestone remains.** Do not resume the old phase sequence
-  or invent new scope; `B4` and `C1`–`C3` were deliberately deferred on 2026-08-18 and stay
-  deferred pending an explicit owner decision, not an agent's judgment call.
+- **`D1` is done; `C3` is the one committed milestone, reopened 2026-08-22.** Do not resume
+  the old phase sequence or invent new scope beyond what TRACKER §5's `C3` brief specifies;
+  `B4` and `C1`–`C2` were deliberately deferred on 2026-08-18 and stay deferred pending a
+  separate explicit owner decision, not an agent's judgment call.
 - **Read §7's two rules before scoping any work** (C12 and C14). A milestone that cannot
   end in a sentence a stranger could perform at `http://localhost:3000` is infrastructure,
   and infrastructure folds into the milestone it serves. That rule exists because the plan

@@ -12,8 +12,20 @@ from datetime import datetime
 from uuid import UUID
 
 from mnemos.core.types import MessageRole
-from mnemos.features.chat.domain.ids import ChatMessageId, ChatSessionId
+from mnemos.features.chat.domain.ids import ChatMessageId, ChatSessionId, FolderId
 from mnemos.features.identity.domain import OrgId, UserId
+
+
+@dataclass(frozen=True, slots=True)
+class FolderRecord:
+    id: FolderId
+    org_id: OrgId
+    user_id: UserId
+    name: str
+    position: int
+    session_count: int
+    created_at: datetime
+    updated_at: datetime
 
 
 @dataclass(frozen=True, slots=True)
@@ -23,6 +35,7 @@ class ChatSessionSummary:
     user_id: UserId
     title: str
     is_archived: bool
+    folder_id: FolderId | None
     last_message_at: datetime | None
     created_at: datetime
     updated_at: datetime

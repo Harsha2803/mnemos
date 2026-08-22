@@ -10,3 +10,6 @@ from uuid import UUID
 
 ChatSessionId = NewType("ChatSessionId", UUID)
 ChatMessageId = NewType("ChatMessageId", UUID)
+FolderId = NewType("FolderId", UUID)
+BookmarkId = NewType("BookmarkId", UUID)
+FeedbackId = NewType("FeedbackId", UUID)

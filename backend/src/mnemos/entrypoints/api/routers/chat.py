@@ -27,6 +27,7 @@ from pydantic import BaseModel, ConfigDict, Field
 
 from mnemos.core.errors import NotFoundError
 from mnemos.entrypoints.api.security import require_caller
+from mnemos.features.chat.application.ports import UNSET, _UnsetType
 from mnemos.features.chat.application.service import ChatService
 from mnemos.features.chat.domain import (
     AssistantDone,
@@ -36,6 +37,7 @@ from mnemos.features.chat.domain import (
     ChatSessionId,
     ChatSessionSummary,
     CitationRecord,
+    FolderId,
 )
 from mnemos.features.identity.application.principals import AuthenticatedCaller
 from mnemos.flows.nl2sql.application import Nl2SqlFlow
@@ -54,6 +56,7 @@ class ChatSessionResponse(BaseModel):
     id: str
     title: str
     is_archived: bool
+    folder_id: str | None
     last_message_at: str | None
     created_at: str
     updated_at: str
@@ -104,7 +107,14 @@ class CreateSessionRequest(BaseModel):
 
 
 class RenameSessionRequest(BaseModel):
-    title: str = Field(min_length=1, max_length=200)
+    model_config = ConfigDict(extra="forbid")
+
+    title: str | None = Field(default=None, min_length=1, max_length=200)
+    # `None` is a real value here ("move to no folder"), distinct from the key
+    # being absent ("don't touch the folder") — the endpoint below reads
+    # `"folder_id" in body.model_fields_set` to tell the two apart, since a
+    # plain default cannot (TRACKER §5 deliverable 1).
+    folder_id: str | None = None
 
 
 class SendMessageRequest(BaseModel):
@@ -118,6 +128,7 @@ def _session_response(summary: ChatSessionSummary) -> ChatSessionResponse:
         id=str(summary.id),
         title=summary.title,
         is_archived=summary.is_archived,
+        folder_id=str(summary.folder_id) if summary.folder_id is not None else None,
         last_message_at=summary.last_message_at.isoformat()
         if summary.last_message_at is not None
         else None,
@@ -256,11 +267,15 @@ async def rename_session(
     caller: Annotated[AuthenticatedCaller, Depends(require_caller)],
     service: Annotated[ChatService, Depends(_service)],
 ) -> ChatSessionResponse:
+    folder_id: FolderId | _UnsetType | None = UNSET
+    if "folder_id" in body.model_fields_set:
+        folder_id = _parse_folder_id(body.folder_id) if body.folder_id is not None else None
     summary = await service.rename_session(
         org_id=caller.principal.org_id,
         user_id=caller.principal.principal_id,
         session_id=_parse_session_id(session_id),
         title=body.title,
+        folder_id=folder_id,
     )
     return _session_response(summary)
 
@@ -386,3 +401,10 @@ def _parse_session_id(raw: str) -> ChatSessionId:
         return ChatSessionId(uuid.UUID(raw))
     except ValueError as exc:
         raise NotFoundError(f"chat session {raw} not found") from exc
+
+
+def _parse_folder_id(raw: str) -> FolderId:
+    try:
+        return FolderId(uuid.UUID(raw))
+    except ValueError as exc:
+        raise NotFoundError(f"folder {raw} not found") from exc

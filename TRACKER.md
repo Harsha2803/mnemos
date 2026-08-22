@@ -6,17 +6,17 @@
 > **and [`docs/ADAPTATION.md`](docs/ADAPTATION.md)** *in the same commit* — a stale
 > tracker is worse than none.
 
-**Last updated:** 2026-08-22 — reduced `D1` is **complete**: a genuinely clean clone comes
-up ready, all 14 critical-path Playwright tests pass (three real bugs found and fixed along
-the way), `make demo-seed` + `docs/Demo.md` give a live-verified scripted walkthrough, and
-the README is rewritten on exactly these measured numbers with a new Known-limitations
-section. Full evidence is in this file's 2026-08-22 dated notes.
+**Last updated:** 2026-08-22 — `C3` deliverable 1 (folders) is **done**: backend vertical
+slice, 7 new backend tests plus 0 regressions across 260, frontend grouping/create/rename/
+delete/move UI, 0 regressions across 114 frontend tests, and a live browser walkthrough
+against rebuilt `api`/`web` containers. Full evidence is in this file's 2026-08-22 dated
+notes. Deliverables 2-5 (bookmarks, feedback, history search, audit log) remain.
 **Phase:** **`C3` — conversation product depth.** Committed 2026-08-22 by explicit
 project-owner decision, reopening scope the 2026-08-18 reset had deferred. `B4`, `C1`, `C2`
 stay deliberately deferred; do not start any of them without a separate explicit decision.
-**Next task:** `C3` deliverables 1-5 (folders, bookmarks, feedback, history search, audit
-log) — full brief in §5.
-**Branch right now:** `agent/c3-conversation-depth`, not yet pushed.
+**Next task:** `C3` deliverable 2 (bookmarks) — full brief in §5.
+**Branch right now:** `agent/c3-conversation-depth`, PR #26 (draft) — pushed after
+deliverable 1's commit.
 
 > ### 2026-08-22 — `D1` deliverable 1 done: a genuinely clean clone comes up ready
 >
@@ -3161,6 +3161,84 @@ Recorded so they are not rediscovered as surprises:
     missing. Fixed with one import in `entrypoints/api/main.py`'s composition root, which is
     also the answer for `worker` and `realtime` if either ever gains an ORM path that
     crosses a feature boundary before something else has imported the registry first.
+
+---
+
+> ### 2026-08-22 — `C3` deliverable 1 done: folders
+>
+> **Backend.** `features/chat/domain/ids.py` gained `FolderId` (plus `BookmarkId`/
+> `FeedbackId`, declared now since they share the file, unused until deliverables 2-3).
+> `domain/models.py` gained `FolderRecord` and `ChatSessionSummary.folder_id`.
+> `application/ports.py`'s `ChatRepository` gained `create_folder`/`list_folders`/
+> `get_folder`/`rename_folder`/`delete_folder`, plus the `UNSET`/`_UnsetType` sentinel that
+> lets `rename_session` distinguish "the caller didn't mention `folder_id`" from "the caller
+> sent `folder_id: null`" — a plain `None` default couldn't carry that distinction because
+> `None` is also the valid "no folder" value. `SqlChatRepository` implements all five against
+> the `folder` table that has existed, unused, since `M2`; `list_folders` orders
+> `position ASC, id ASC` — the explicit `id` tiebreak the 2026-08-22 `D1` notes above describe
+> fixing for `SqlToolRepository`, applied here from the start rather than discovered as a bug
+> later. New `application/folders.py`'s `FolderService` mirrors `features/tools/`'s
+> two-services-one-repository shape. New router `entrypoints/api/routers/folders.py`:
+> `POST/GET /chat/folders`, `PATCH/DELETE /chat/folders/{id}`. `PATCH /chat/sessions/{id}`
+> now also accepts an optional `folder_id`, read via Pydantic's `model_fields_set` so
+> "omitted" and "explicitly null" stay distinguishable on the wire. Folder ownership is
+> checked before a session can be filed into one — a folder id from a different user in the
+> same org (RLS alone would not catch this, same org) is a 404, matching the "not yours" 404
+> `_owned_session` already established for sessions.
+>
+> **Tests.** `backend/tests/test_folders_endpoints.py` (7 tests, real Postgres via
+> testcontainers, same shape as `test_chat_endpoints.py`): full CRUD round trip; a
+> tied-position determinism test (every new folder defaults `position=0`, so more than one
+> un-reordered folder is exactly the tied-sort shape the tiebreak exists for — two listings
+> of five same-position folders return the identical order); moving a session into/out of a
+> folder; renaming a session while filed does not un-file it; deleting a folder un-files its
+> sessions without deleting them; cross-org 404; cross-user-same-org 404 (RLS cannot produce
+> this one, the service's `user_id` check has to); moving a session into another user's
+> folder is refused. All 14 pre-existing `test_chat_endpoints.py` tests still pass unchanged.
+> Full suite: `pytest tests/ -q` — 260 passed, 0 regressions. `ruff`/`ruff format`/
+> `mypy --strict` clean on every changed file.
+>
+> **Frontend.** `lib/chat/api.ts` gained `Folder`/`FolderList` types and
+> `fetchFolders`/`createFolder`/`renameFolder`/`reorderFolder`/`deleteFolder`/
+> `moveSessionToFolder`, plus `CHAT_FOLDERS_QUERY_KEY`; `renameSession` grew an optional third
+> `folderId` argument using the same omit-vs-null distinction as the backend (`JSON.stringify`
+> drops an `undefined` property, which is what makes "omitted" reach the wire as "omitted").
+> `ChatSessionList.tsx` now groups sessions by folder first (every folder shown even when
+> empty, so a just-created folder does not vanish until something is filed into it), then
+> falls back to the existing Today/Yesterday/Previous 7 days/Older buckets for whatever is
+> unfiled. New folder create (a `FolderPlus` icon button, inline naming input, the same
+> `RenameField` component session rename already used, now shared and given a `label` prop),
+> per-folder rename/delete (same icon-button and confirmation-dialog pattern as sessions,
+> generalized `pendingDelete` to a `{kind: "session"|"folder"}` union so one dialog serves
+> both), and a per-session "move to folder" control — deliberately a native `<select>` rather
+> than adding `@radix-ui/react-dropdown-menu` as a new dependency the project did not already
+> have, per DesignSystem §6's "check what already exists first."
+>
+> **Frontend tests.** `ChatSessionList.test.tsx`'s `aSession()` fixture gained
+> `folder_id: null` (the field is now non-optional on the wire; without it, sessions matched
+> neither a folder group nor the unfiled bucket and vanished from the render entirely — this
+> is exactly why the test fixture needed fixing, not the production equality check loosened
+> to tolerate a stale fixture) and every `stubRouter` gained a `GET /chat/folders` branch.
+> Full suite: `npm test` — 114 passed, 0 regressions. `npm run typecheck` and `npm run lint`
+> clean.
+>
+> **Live-verified in a real browser**, not just tests: rebuilt the `api` and `web` containers
+> in the existing dev-stack (`docker compose build api web && docker compose up -d api web`),
+> regenerated `frontend/src/lib/api/schema.ts` via `npm run generate:api` against the live
+> rebuilt API, then drove a real signed-in Chromium session (Playwright, ad hoc — no
+> `chromium-cli` available in this environment) through: create two folders, create a session,
+> move it into one, confirm the sidebar regroups it under that folder's heading, rename it
+> while filed (stays filed), reload the page (grouping survives), delete the folder (session
+> reappears unfiled under Today, not deleted; the still-empty second folder remains listed).
+> Screenshots confirmed the delete-confirmation dialog names the specific folder and states
+> conversations move back to unfiled rather than being destroyed, matching DesignSystem §4.
+> Zero console errors on the clean run. Test folders/sessions created during this manual
+> verification were deleted from the dev database afterward so they do not pollute
+> `make demo-seed`'s deterministic state.
+>
+> **Not done yet, by design — deliverables 2-5** (bookmarks, feedback, history search, audit
+> log) remain. `BookmarkId`/`FeedbackId` exist as unused domain ids; nothing else for those
+> three deliverables has been built yet.
 
 ---
 

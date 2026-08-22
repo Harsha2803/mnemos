@@ -17,11 +17,17 @@ from __future__ import annotations
 from collections.abc import Sequence
 from datetime import datetime
 
-from sqlalchemy import func, literal, select, tuple_, update
+from sqlalchemy import delete, func, literal, select, tuple_, update
 
 from mnemos.core.ids import IdGenerator
 from mnemos.core.types import MessageRole
-from mnemos.features.chat.adapters.models import ChatMessage, ChatSession, MessageCitation
+from mnemos.features.chat.adapters.models import (
+    ChatMessage,
+    ChatSession,
+    Folder,
+    MessageCitation,
+)
+from mnemos.features.chat.application.ports import UNSET, _UnsetType
 from mnemos.features.chat.domain import (
     ChatMessageId,
     ChatMessageRecord,
@@ -29,6 +35,8 @@ from mnemos.features.chat.domain import (
     ChatSessionSummary,
     CitationInput,
     CitationRecord,
+    FolderId,
+    FolderRecord,
 )
 from mnemos.features.identity.domain import OrgId, UserId
 from mnemos.platform.db import Database
@@ -94,15 +102,32 @@ class SqlChatRepository:
         return _session_summary(row) if row is not None else None
 
     async def rename_session(
-        self, *, org_id: OrgId, session_id: ChatSessionId, title: str
+        self,
+        *,
+        org_id: OrgId,
+        session_id: ChatSessionId,
+        title: str | None = None,
+        folder_id: FolderId | _UnsetType | None = UNSET,
     ) -> ChatSessionSummary | None:
+        values: dict[str, object] = {}
+        if title is not None:
+            values["title"] = title
+        if not isinstance(folder_id, _UnsetType):
+            values["folder_id"] = folder_id
         async with self._db.session(org_id=org_id) as session:
-            row = await session.scalar(
-                update(ChatSession)
-                .where(ChatSession.org_id == org_id, ChatSession.id == session_id)
-                .values(title=title)
-                .returning(ChatSession)
-            )
+            if values:
+                row = await session.scalar(
+                    update(ChatSession)
+                    .where(ChatSession.org_id == org_id, ChatSession.id == session_id)
+                    .values(**values)
+                    .returning(ChatSession)
+                )
+            else:
+                row = await session.scalar(
+                    select(ChatSession).where(
+                        ChatSession.org_id == org_id, ChatSession.id == session_id
+                    )
+                )
         return _session_summary(row) if row is not None else None
 
     async def delete_session(self, *, org_id: OrgId, session_id: ChatSessionId) -> bool:
@@ -202,6 +227,99 @@ class SqlChatRepository:
             ).all()
         return [_citation_record(r) for r in rows]
 
+    async def create_folder(self, *, org_id: OrgId, user_id: UserId, name: str) -> FolderRecord:
+        new_id = self._ids.new()
+        async with self._db.session(org_id=org_id) as session:
+            row = Folder(id=new_id, org_id=org_id, user_id=user_id, name=name)
+            session.add(row)
+            await session.flush()
+            await session.refresh(row)
+            return _folder_record(row, session_count=0)
+
+    async def list_folders(self, *, org_id: OrgId, user_id: UserId) -> Sequence[FolderRecord]:
+        session_count = (
+            select(func.count(ChatSession.id))
+            .where(
+                ChatSession.folder_id == Folder.id,
+                ChatSession.org_id == org_id,
+                ChatSession.deleted_at.is_(None),
+            )
+            .scalar_subquery()
+        )
+        query = (
+            select(Folder, session_count)
+            .where(Folder.org_id == org_id, Folder.user_id == user_id)
+            .order_by(Folder.position.asc(), Folder.id.asc())
+        )
+        async with self._db.session(org_id=org_id) as session:
+            rows = (await session.execute(query)).all()
+        return [_folder_record(folder, session_count=count) for folder, count in rows]
+
+    async def get_folder(
+        self, *, org_id: OrgId, user_id: UserId, folder_id: FolderId
+    ) -> FolderRecord | None:
+        session_count = (
+            select(func.count(ChatSession.id))
+            .where(
+                ChatSession.folder_id == folder_id,
+                ChatSession.org_id == org_id,
+                ChatSession.deleted_at.is_(None),
+            )
+            .scalar_subquery()
+        )
+        async with self._db.session(org_id=org_id) as session:
+            row = (
+                await session.execute(
+                    select(Folder, session_count).where(
+                        Folder.org_id == org_id,
+                        Folder.user_id == user_id,
+                        Folder.id == folder_id,
+                    )
+                )
+            ).first()
+        return _folder_record(row[0], session_count=row[1]) if row is not None else None
+
+    async def rename_folder(
+        self, *, org_id: OrgId, folder_id: FolderId, name: str | None, position: int | None
+    ) -> FolderRecord | None:
+        values: dict[str, object] = {}
+        if name is not None:
+            values["name"] = name
+        if position is not None:
+            values["position"] = position
+        session_count_query = select(func.count(ChatSession.id)).where(
+            ChatSession.folder_id == folder_id,
+            ChatSession.org_id == org_id,
+            ChatSession.deleted_at.is_(None),
+        )
+        async with self._db.session(org_id=org_id) as session:
+            if values:
+                row = await session.scalar(
+                    update(Folder)
+                    .where(Folder.org_id == org_id, Folder.id == folder_id)
+                    .values(**values)
+                    .returning(Folder)
+                )
+            else:
+                row = await session.scalar(
+                    select(Folder).where(Folder.org_id == org_id, Folder.id == folder_id)
+                )
+            if row is None:
+                return None
+            count = await session.scalar(session_count_query)
+        return _folder_record(row, session_count=count or 0)
+
+    async def delete_folder(self, *, org_id: OrgId, folder_id: FolderId) -> bool:
+        # `chat_session.folder_id` is `ondelete=SET NULL`, so this un-files the
+        # folder's sessions at the database level with no extra query.
+        async with self._db.session(org_id=org_id) as session:
+            deleted = await session.scalar(
+                delete(Folder)
+                .where(Folder.org_id == org_id, Folder.id == folder_id)
+                .returning(Folder.id)
+            )
+        return deleted is not None
+
     async def _append_message(
         self,
         *,
@@ -257,7 +375,21 @@ def _session_summary(row: ChatSession) -> ChatSessionSummary:
         user_id=UserId(row.user_id),
         title=row.title,
         is_archived=row.is_archived,
+        folder_id=FolderId(row.folder_id) if row.folder_id is not None else None,
         last_message_at=row.last_message_at,
+        created_at=row.created_at,
+        updated_at=row.updated_at,
+    )
+
+
+def _folder_record(row: Folder, *, session_count: int) -> FolderRecord:
+    return FolderRecord(
+        id=FolderId(row.id),
+        org_id=OrgId(row.org_id),
+        user_id=UserId(row.user_id),
+        name=row.name,
+        position=row.position,
+        session_count=session_count,
         created_at=row.created_at,
         updated_at=row.updated_at,
     )
