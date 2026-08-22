@@ -254,6 +254,46 @@ async def test_every_attempt_writes_a_sql_run_row_with_its_verdict(
 
 
 @pytest.mark.asyncio
+async def test_a_rejected_write_is_a_durable_audit_row_but_an_allowed_read_is_not(
+    datasource_service: DatasourceService, db: Database, org_id: OrgId, registered: None
+) -> None:
+    """`C3` deliverable 5 — the AST guard rejecting a write is the exact
+    "watch a user be refused, and see why" moment the audit log exists for.
+    An allowed read is not audited here: it is not a security decision."""
+    from mnemos.features.identity.domain import UserId
+    from mnemos.features.observability.adapters.repository import SqlAuditRepository
+
+    user_id = UserId(uuid7())
+    audit_repository = SqlAuditRepository(db, Uuid7Generator())
+
+    def audited_service(model: FakeChatModel) -> SqlGenerationService:
+        return SqlGenerationService(
+            datasources=datasource_service,
+            model=model,
+            sql_runs=SqlRunRepository(db, Uuid7Generator()),
+            audit=audit_repository,
+        )
+
+    allowed_model = FakeChatModel("```sql\nSELECT customer_id FROM analytics.customer\n```")
+    await audited_service(allowed_model).generate(
+        org_id=org_id, slug=SLUG, question="which customers exist?", user_id=user_id
+    )
+
+    rejected_model = FakeChatModel("```sql\nDELETE FROM analytics.region\n```")
+    await audited_service(rejected_model).generate(
+        org_id=org_id, slug=SLUG, question="delete the western region", user_id=user_id
+    )
+
+    events = await audit_repository.list_events(org_id=org_id, limit=10)
+    [event] = events
+    assert event.action == "datasource.query"
+    assert event.outcome == "deny"
+    assert event.actor_id == user_id
+    assert event.reason is not None
+    assert "not a read statement" in event.reason
+
+
+@pytest.mark.asyncio
 async def test_a_query_against_another_orgs_datasource_is_a_404(
     datasource_service: DatasourceService,
     db: Database,

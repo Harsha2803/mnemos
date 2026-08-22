@@ -63,6 +63,8 @@ from mnemos.features.identity.providers import (
     PlatformTokenCodec,
     denied,
 )
+from mnemos.features.observability.application.ports import AuditRepository
+from mnemos.features.observability.domain import Outcome
 
 logger = get_logger(__name__)
 
@@ -199,6 +201,7 @@ class TokenService:
         codec: PlatformTokenCodec,
         clock: Clock,
         refresh_ttl_s: int,
+        audit: AuditRepository | None = None,
     ) -> None:
         self._orgs = orgs
         self._users = users
@@ -206,6 +209,11 @@ class TokenService:
         self._codec = codec
         self._clock = clock
         self._refresh_ttl_s = refresh_ttl_s
+        # Optional so every existing test construction of this service keeps
+        # working unchanged; `None` just means sign-in/sign-out events are not
+        # recorded, which is also what a unit test that fakes the other four
+        # collaborators should get for free (TRACKER §5 deliverable 5).
+        self._audit = audit
 
     async def issue_for_subject(
         self,
@@ -224,13 +232,27 @@ class TokenService:
         """
         org = await self._orgs.find_org(org_slug.strip())
         if org is None or not org.is_active:
+            # No tenant to attribute this to — `audit_log.org_id` is NOT NULL,
+            # so a failure this early cannot become a row in anyone's audit
+            # trail. Every failure from here on has a resolved org and is
+            # recorded.
             raise denied(f"no active org with slug {org_slug!r}")
-        if org.org_id != subject.org_id:
-            raise denied(
-                f"subject belongs to org {subject.org_id} but the login named {org.slug!r}"
+        try:
+            if org.org_id != subject.org_id:
+                raise denied(
+                    f"subject belongs to org {subject.org_id} but the login named {org.slug!r}"
+                )
+            user = await self._resolve_user(subject)
+        except AuthenticationError as exc:
+            # `exc.details["reason"]` is the diagnostic truth `denied()` carries
+            # for the log (`providers/base.py`); `str(exc)`/`exc.message` is the
+            # one constant string a caller is allowed to see. An audit row is
+            # for the admin reading it afterward, not the caller, so it gets
+            # the real reason.
+            await self._audit_signin(
+                org_id=org.org_id, outcome="deny", reason=exc.details.get("reason", exc.message)
             )
-
-        user = await self._resolve_user(subject)
+            raise
         now = self._clock.now()
         # The canonical slug from the row, never the one the caller typed: `slug`
         # is CITEXT, so "Acme" and "acme" are the same tenant, and hashing the
@@ -254,6 +276,7 @@ class TokenService:
             user_id=str(user.user_id),
             session_id=str(session_id),
         )
+        await self._audit_signin(org_id=user.org_id, actor_id=user.user_id, outcome="allow")
         return self._pair(credential, org.slug, user, session_id, expires_at)
 
     async def refresh(
@@ -331,8 +354,43 @@ class TokenService:
             logger.info("identity.revoke_ignored")
             return
         await self._kill_family(org.org_id, row.session_id, REVOKED_BY_SIGN_OUT, self._clock.now())
+        await self._audit_signout(org_id=org.org_id, actor_id=row.user_id)
 
     # ------------------------------------------------------------------ internals
+
+    async def _audit_signin(
+        self,
+        *,
+        org_id: OrgId,
+        outcome: Outcome,
+        actor_id: UserId | None = None,
+        reason: str | None = None,
+    ) -> None:
+        if self._audit is None:
+            return
+        await self._audit.record(
+            org_id=org_id,
+            actor_id=actor_id,
+            actor_kind="user",
+            action="auth.sign_in",
+            resource_kind="session",
+            resource_id=None,
+            outcome=outcome,
+            reason=reason,
+        )
+
+    async def _audit_signout(self, *, org_id: OrgId, actor_id: UserId) -> None:
+        if self._audit is None:
+            return
+        await self._audit.record(
+            org_id=org_id,
+            actor_id=actor_id,
+            actor_kind="user",
+            action="auth.sign_out",
+            resource_kind="session",
+            resource_id=None,
+            outcome="allow",
+        )
 
     async def _locate(self, presented: str) -> tuple[RefreshCredential, OrgRecord, SessionRecord]:
         """Presented string -> (credential, org, row), or the standard denial."""

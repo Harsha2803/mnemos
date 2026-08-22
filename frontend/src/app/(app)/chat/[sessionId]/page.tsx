@@ -41,9 +41,30 @@ export default function ChatSessionPage() {
   const [streaming, setStreaming] = useState(false);
   const abortRef = useRef<AbortController | null>(null);
   const loadedFor = useRef<string | null>(null);
+  // True once the user has sent a message in this session before the initial
+  // `GET /v1/chat/sessions/{id}` resolved — a brand-new session's first send
+  // races that request, and if it wins, its response describes the session
+  // as it was *before* the send (no messages yet). Without this guard the
+  // seeding effect below would still fire once that stale response arrives,
+  // silently wiping the just-sent turn back to empty even though it is
+  // already durable server-side (found via `organize.spec.ts`, which creates
+  // enough concurrent load right before sending that the race reliably lost).
+  const sentBeforeLoad = useRef(false);
+
+  // Reset per session, in the same effect and in this order, so a session
+  // switch cannot run the seeding effect below against the *previous*
+  // session's leftover `sentBeforeLoad`/`loadedFor` state.
+  useEffect(() => {
+    loadedFor.current = null;
+    sentBeforeLoad.current = false;
+    // Abandon an in-flight stream when the user navigates to a different
+    // session, so tokens for a conversation nobody is looking at do not keep
+    // arriving and do not leave the composer stuck disabled.
+    return () => abortRef.current?.abort();
+  }, [sessionId]);
 
   useEffect(() => {
-    if (data === undefined || loadedFor.current === sessionId) return;
+    if (data === undefined || loadedFor.current === sessionId || sentBeforeLoad.current) return;
     loadedFor.current = sessionId;
     const citations = data.citations ?? [];
     setMessages(
@@ -60,14 +81,8 @@ export default function ChatSessionPage() {
     );
   }, [data, sessionId]);
 
-  // Abandon an in-flight stream when the user navigates to a different
-  // session, so tokens for a conversation nobody is looking at do not keep
-  // arriving and do not leave the composer stuck disabled.
-  useEffect(() => {
-    return () => abortRef.current?.abort();
-  }, [sessionId]);
-
   function handleSend(content: string): void {
+    sentBeforeLoad.current = true;
     const userMessageId = `pending-user-${crypto.randomUUID()}`;
     const assistantMessageId = `pending-assistant-${crypto.randomUUID()}`;
 

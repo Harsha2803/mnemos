@@ -77,10 +77,16 @@ async def seeded(postgres: Postgres) -> AsyncIterator[Seed]:
     conn = await asyncpg.connect(postgres.owner_dsn)
     try:
         await conn.execute(
-            "INSERT INTO org (id, slug, name) VALUES ($1, $2, $3)", ids.org_a, ORG_A_SLUG, ORG_A_SLUG
+            "INSERT INTO org (id, slug, name) VALUES ($1, $2, $3)",
+            ids.org_a,
+            ORG_A_SLUG,
+            ORG_A_SLUG,
         )
         await conn.execute(
-            "INSERT INTO org (id, slug, name) VALUES ($1, $2, $3)", ids.org_b, ORG_B_SLUG, ORG_B_SLUG
+            "INSERT INTO org (id, slug, name) VALUES ($1, $2, $3)",
+            ids.org_b,
+            ORG_B_SLUG,
+            ORG_B_SLUG,
         )
         for org_id, user_id, session_id, email in (
             (ids.org_a, ids.user_a, ids.session_a, "ada@folders.test"),
@@ -152,7 +158,9 @@ def client(codec: PlatformTokenCodec, clock: FrozenClock, db: Database) -> Itera
         )
         chat_repository = SqlChatRepository(db, Uuid7Generator())
         app.state.chat_service = ChatService(
-            repository=chat_repository, model=None, history_turns=12  # type: ignore[arg-type]
+            repository=chat_repository,
+            model=None,
+            history_turns=12,  # type: ignore[arg-type]
         )
         app.state.folder_service = FolderService(repository=chat_repository)
         yield test_client
@@ -219,7 +227,9 @@ def test_folders_with_tied_position_list_deterministically(
     ]
 
     first = [f["id"] for f in client.get("/api/v1/chat/folders", headers=headers).json()["folders"]]
-    second = [f["id"] for f in client.get("/api/v1/chat/folders", headers=headers).json()["folders"]]
+    second = [
+        f["id"] for f in client.get("/api/v1/chat/folders", headers=headers).json()["folders"]
+    ]
 
     assert first == second == created_ids
 
@@ -228,9 +238,9 @@ def test_a_session_can_be_moved_into_and_out_of_a_folder(
     client: TestClient, codec: PlatformTokenCodec, seeded: Seed
 ) -> None:
     headers = _headers(codec, seeded)
-    folder_id = client.post(
-        "/api/v1/chat/folders", json={"name": "Inbox"}, headers=headers
-    ).json()["id"]
+    folder_id = client.post("/api/v1/chat/folders", json={"name": "Inbox"}, headers=headers).json()[
+        "id"
+    ]
     session_id = client.post("/api/v1/chat/sessions", json={}, headers=headers).json()["id"]
 
     moved = client.patch(
@@ -305,9 +315,7 @@ def test_another_users_folder_in_the_same_org_is_a_404_and_not_a_403(
         "/api/v1/chat/folders", json={"name": "Ada's folder"}, headers=_headers(codec, seeded)
     ).json()["id"]
 
-    other_headers = bearer(
-        codec, user=seeded.user_a2, org=seeded.org_a, session=seeded.session_a2
-    )
+    other_headers = bearer(codec, user=seeded.user_a2, org=seeded.org_a, session=seeded.session_a2)
     response = client.delete(f"/api/v1/chat/folders/{folder_id}", headers=other_headers)
 
     assert response.status_code == 404
@@ -319,9 +327,7 @@ def test_moving_a_session_into_another_users_folder_is_refused(
     """A folder id from a different user in the same org must not silently
     file a session under it — even though the session itself belongs to the
     caller, the folder does not."""
-    other_headers = bearer(
-        codec, user=seeded.user_a2, org=seeded.org_a, session=seeded.session_a2
-    )
+    other_headers = bearer(codec, user=seeded.user_a2, org=seeded.org_a, session=seeded.session_a2)
     other_folder_id = client.post(
         "/api/v1/chat/folders", json={"name": "Amir's folder"}, headers=other_headers
     ).json()["id"]

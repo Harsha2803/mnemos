@@ -26,6 +26,7 @@ from mnemos.features.identity.domain import (
     TagSet,
     UserId,
 )
+from mnemos.features.observability.adapters.repository import SqlAuditRepository
 from mnemos.features.tools.adapters.crypto import ToolCredentialCipher
 from mnemos.features.tools.adapters.repository import SqlToolRepository
 from mnemos.features.tools.application.invocations import ToolInvocationService
@@ -186,6 +187,7 @@ async def test_mcp_state_is_tenant_scoped_per_user_durable_and_explainable(
     org_a, org_b, user_a, user_a_peer, user_b = await _seed_identity(postgres)
     database = Database(Settings(database_url=postgres.app_url, env="test"))
     repository = SqlToolRepository(database, DEFAULT_ID_GENERATOR)
+    audit_repository = SqlAuditRepository(database, DEFAULT_ID_GENERATOR)
     cipher = ToolCredentialCipher(DEV_TOOL_ENCRYPTION_KEY)
     client = RecordingMcpClient()
     clock = FrozenClock()
@@ -256,6 +258,7 @@ async def test_mcp_state_is_tenant_scoped_per_user_durable_and_explainable(
             client=client,
             cipher=cipher,
             clock=clock,  # type: ignore[arg-type]
+            audit=audit_repository,
         )
         await first_service.grant_to_self(caller=caller, tool_id=tool.id, auto_approve=False)
         pending = await first_service.propose(
@@ -278,6 +281,7 @@ async def test_mcp_state_is_tenant_scoped_per_user_durable_and_explainable(
             client=client,
             cipher=cipher,
             clock=clock,  # type: ignore[arg-type]
+            audit=audit_repository,
         )
         succeeded = await restarted_service.approve(caller=caller, invocation_id=pending.id)
         assert succeeded.status is InvocationStatus.SUCCEEDED
@@ -311,6 +315,19 @@ async def test_mcp_state_is_tenant_scoped_per_user_durable_and_explainable(
             InvocationStatus.SUCCEEDED,
         ]
         assert history[0].offending_source == "Employee Handbook 2024"
+
+        # `C3` deliverable 5: the grant, the approved-and-executed call, and the
+        # trust-tier denial above are each a durable audit row, not just an
+        # `mcp_invocation` one — this is the cross-feature "who did what" ledger
+        # entry the invocation table alone does not provide.
+        audit_events = await audit_repository.list_events(org_id=org_a, limit=10)
+        actions_and_outcomes = {(e.action, e.outcome) for e in audit_events}
+        assert ("tool.grant", "allow") in actions_and_outcomes
+        assert ("tool.invoke", "allow") in actions_and_outcomes
+        assert ("tool.invoke", "deny") in actions_and_outcomes
+        deny_event = next(e for e in audit_events if e.outcome == "deny")
+        assert deny_event.reason == TRUST_DENIED
+        assert all(e.actor_id == user_a for e in audit_events)
     finally:
         await database.dispose()
         conn = await asyncpg.connect(postgres.owner_dsn)

@@ -6,20 +6,28 @@
 > **and [`docs/ADAPTATION.md`](docs/ADAPTATION.md)** *in the same commit* — a stale
 > tracker is worse than none.
 
-**Last updated:** 2026-08-22 — `C3` deliverables 1-4 (folders, bookmarks, feedback, history
-search) are **done**: backend vertical slices including a real migration (`0008`,
-full-text search column + GIN index), 26 new backend tests plus 0 regressions across 279,
-frontend UI for all four plus a new `/bookmarks` screen and a search-results view, 0
-regressions across 124 frontend tests, and live browser walkthroughs against rebuilt
-`api`/`migrate`/`web` containers for each — two real bugs found and fixed closing deliverable
-4 (a `ts_headline` options-string syntax error, and a migrate/api separate-image rebuild gap).
-Full evidence is in this file's 2026-08-22 dated notes. Deliverable 5 (audit log) remains.
-**Phase:** **`C3` — conversation product depth.** Committed 2026-08-22 by explicit
-project-owner decision, reopening scope the 2026-08-18 reset had deferred. `B4`, `C1`, `C2`
+**Last updated:** 2026-08-23 — `C3` — conversation product depth — is **complete**, all five
+deliverables (folders, bookmarks, feedback, history search, audit log): backend vertical
+slices including a real migration (`0008`, full-text search column + GIN index) and a new
+`observability` feature (audit write path + 8 named call sites), 515 backend tests (0
+regressions), frontend UI for all five plus `/bookmarks` and `/audit` screens, 128 frontend
+Vitest tests (0 regressions), a new `organize.spec.ts` Playwright spec, and all 16 tests
+across all 8 Playwright specs green against a freshly rebuilt `api`/`web` stack. Four real
+bugs found and fixed across the milestone (a `ts_headline` options-string syntax error and a
+migrate/api separate-image rebuild gap, both deliverable 4; an audited-deny reason using the
+sanitized public message instead of the real diagnostic one, deliverable 5; a frontend race
+where a slow initial session fetch could silently wipe a just-sent first message, found by the
+new Playwright spec and fixed in `app/(app)/chat/[sessionId]/page.tsx`). Full evidence is in
+this file's 2026-08-22 and 2026-08-23 dated notes.
+**Phase:** **`C3` — conversation product depth — done.** Committed 2026-08-22 by explicit
+project-owner decision, reopening scope the 2026-08-18 reset had deferred; all five
+deliverables and every cross-cutting requirement in §5's brief are verified. `B4`, `C1`, `C2`
 stay deliberately deferred; do not start any of them without a separate explicit decision.
-**Next task:** `C3` deliverable 5 (audit log) — full brief in §5.
-**Branch right now:** `agent/c3-conversation-depth`, PR #26 (draft) — pushed after
-deliverable 1's commit.
+**Next task:** none committed. Per §0/§7, the next milestone (`B4`, `C1`, or `C2`) needs a
+fresh explicit project-owner decision before any brief is written or any code changes —
+do not assume which one from this file alone.
+**Branch right now:** `agent/c3-conversation-depth`, PR #26 — ready to leave draft and merge
+once this update lands.
 
 > ### 2026-08-22 — `D1` deliverable 1 done: a genuinely clean clone comes up ready
 >
@@ -3435,355 +3443,251 @@ Recorded so they are not rediscovered as surprises:
 
 ---
 
+> ### 2026-08-23 — `C3` deliverable 5 done: audit log, and `C3` is complete
+>
+> **The write path is a new vertical slice inside `features/observability/`**, which held
+> only the `AuditLog`/`InferenceCall` ORM models before this — `domain/{ids,models}.py`
+> (`AuditEventRecord`, `AuditEventPage`), `application/{ports,service}.py` (`AuditRepository`
+> protocol, thin `AuditService`), `adapters/repository.py` (`SqlAuditRepository`, the same
+> `self._db.session(org_id=...)` idiom every other repository uses). New router
+> `entrypoints/api/routers/audit.py`: `GET /audit/events` with `actor_id`/`action`/
+> `resource_kind`/`outcome`/`since`/`until`/`limit`/`cursor` filters, explicit `id` tiebreak
+> on `occurred_at DESC, id DESC`.
+>
+> **Permission.** New resource `audit`, one action `read` — added to
+> `features/identity/domain/roles.py`'s resource vocabulary docstring, **deliberately not**
+> added to `analyst`'s or `user`'s `SYSTEM_ROLES` grants. Only `admin`'s `*:*` covers it. A
+> non-admin caller gets a real `AuthorizationError` (403), checked explicitly in the router
+> rather than relying on a route-level dependency, so the message can name the capability
+> ("only administrators can view the audit log") instead of a generic denial.
+>
+> **The eight bounded call sites, exactly as scoped, no more:**
+> `TokenService.issue_for_subject` (`auth.sign_in`, allow after a session opens, deny on any
+> `AuthenticationError` raised *after* the org itself resolves — a failure before that has no
+> org to attribute a row to, since `audit_log.org_id` is `NOT NULL`) and `.revoke`
+> (`auth.sign_out`, allow only — RFC 7009's silence for an unrecognized token extends to the
+> audit trail, since there is no session to attribute it to either);
+> `ToolInvocationService.grant_to_self` (`tool.grant`, allow) and its three invocation
+> transitions (`tool.invoke`: allow on `_dispatch`'s `SUCCEEDED` transition, deny on both
+> `propose`'s immediate authorization refusal and `approve`'s re-authorization refusal — the
+> user's own manual `deny()` click is deliberately not audited, since declining your own
+> pending approval is not the security boundary refusing you);
+> `MemoryService.create` when called with a `supersede_id` (`memory.supersede`, allow only —
+> a plain create with no `supersede_id` is routine authoring, not audited) and `.retract`
+> (`memory.retract`, allow — gained a new required `user_id` parameter for this, threaded from
+> the router's caller); `KnowledgeService.delete_document` (`document.delete`, allow — same
+> new-required-`user_id` shape); `SqlGenerationService.generate` (`datasource.query`, deny
+> only, and only on `SqlVerdict.REJECTED_WRITE` specifically — not unauthorized-table,
+> unparseable, or too-complex, which are real rejections but outside this brief's named
+> scope — gained an optional `user_id` threaded from `Nl2SqlFlow.stream_reply` down through
+> `_generate_with_repair`). Every one of these took an optional `audit: AuditRepository |
+> None = None` constructor/method parameter, so every existing test construction of every
+> touched service kept working unchanged — this is the same optional-collaborator shape
+> throughout, not five different patterns.
+>
+> **A real design tradeoff, stated rather than hidden:** an audit write is not transactionally
+> atomic with the mutation it records — it runs in its own short transaction immediately
+> after the primary action's own commit, because coupling it would mean passing a shared
+> session across a feature boundary those features do not otherwise know about. A crash in
+> that narrow window loses exactly one audit row. Accepted at this scope; two-phase-commit-
+> grade audit durability is a different, larger piece of work.
+>
+> **Two real things found while building this, not just verified:**
+>
+> 1. **A backend bug, caught by a test, not by inspection.** The original design called for
+>    `denied()`'s diagnostic reason (`AuthenticationError.details["reason"]`) to reach the
+>    audit row for a denied sign-in. The first implementation used `str(exc)` instead, which
+>    is `exc.message` — the one constant string (`"authentication failed"`) a caller is
+>    allowed to see, not the diagnostic truth. `test_a_denied_sign_in_is_audited_with_the_
+>    real_reason` (`test_refresh_rotation.py`) caught this immediately: the assertion expected
+>    the collision reason and got the generic message instead. Fixed by reading
+>    `exc.details.get("reason", exc.message)`, matching exactly what `auth.py`'s own
+>    `_signin_failed` already does when it logs the same exception. Filed under: an audit
+>    trail that repeats the sanitized public message back to the admin reading it is not
+>    telling them anything a user-facing error screen didn't already say.
+> 2. **§4 item 40's already-known gap, re-encountered here with a new practical
+>    consequence, not rediscovered.** Item 40 already documents that `admin@mnemos.local`
+>    cannot complete a Keycloak sign-in — bootstrap creates it as an internal-provider
+>    `app_user` with `external_subject` NULL, so the realm's identically-named user
+>    correctly collides against M3.4's JIT-provisioning guard — and that its own recorded
+>    workaround is to sign in as `analyst@mnemos.local` or `user@mnemos.local` instead, both
+>    of which bootstrap never shadows. That workaround is exactly what this milestone's own
+>    live verification already relies on throughout (same as `chat.spec.ts`/`auth.spec.ts`).
+>    **Deliverable 5 hits a narrower version item 40 did not need to name**: verifying
+>    `/audit`'s *admin-sees-the-table* path needs an account that can both complete an OIDC
+>    sign-in *and* hold the `admin` role, and today no seeded identity satisfies both —
+>    `analyst`/`user` can sign in but are not admin; `admin@mnemos.local` is admin but cannot
+>    sign in at all. Confirmed the collision is still exactly item 40's mechanism (not a new
+>    one) by re-running its own diagnostic: `external_subject` empty for that Postgres row,
+>    live sign-in failing with the identical `"email 'admin@mnemos.local' already belongs to
+>    a different subject in this org"` message. **Not fixed here** — item 40 already scoped
+>    the three real fixes (a different bootstrap-admin email, a different realm-seed email, or
+>    a password-login route for `InternalProvider`) as a deliberate, separate decision, and
+>    this milestone adds no new option to that list, only a second reason it matters (nothing
+>    can currently demo the admin-only audit view via a real sign-in, only via a workaround).
+>    Worked around for this one verification, with the project owner's explicit sign-off
+>    first: a temporary `role_binding` granting `analyst@mnemos.local` the `admin` role, used
+>    only long enough to screenshot the `/audit` table, then deleted immediately afterward —
+>    `analyst`'s bindings were confirmed back to exactly `b3-demo` alone before moving on.
+>    `docs/Demo.md`'s "`admin@mnemos.local` also works" line is item 40's documentation gap,
+>    not a new one either; still worth a future session actually correcting the sentence,
+>    which nothing has done yet.
+>
+> **CLI.** `mnemosctl audit tail --org-slug <slug> [--action <action>] [--limit N]` — the same
+> nested-subparser registration and `db doctor`-precedent shape (direct DB access via
+> `--org-slug`, bypassing the HTTP permission layer the same way `db doctor` bypasses every
+> route's guard, because this is an operator tool, not an end-user one). Verified against the
+> rebuilt dev-stack after the CLI command existed: correctly printed "no audit events" before
+> any of the eight call sites had fired in this Postgres, matching the fact that all of this
+> milestone's earlier live-verification sessions (deliverables 1-4) predate these hooks and
+> therefore never wrote any.
+>
+> **Tests.** `backend/tests/test_audit_endpoints.py` (4 tests, real Postgres, seeds the actual
+> production `SYSTEM_ROLES` rather than inventing test-only grants): an admin sees a seeded
+> event; a plain `user`-role caller gets a real 403 naming the capability; an admin from
+> another org is refused before RLS gets a chance to just return an empty list that would
+> look identical to "no events"; filtering by action and outcome. Each of the eight call sites
+> also gained a direct assertion in its own feature's existing test file (not a separate
+> "audit" test suite trying to re-exercise flows those files already cover): `test_refresh_
+> rotation.py` gained a `FakeAudit` and three new tests (sign-in allow, sign-in deny with the
+> real reason, sign-out, plus a fourth confirming a *silent* revoke of an unknown token is not
+> audited at all); `test_tools_repository.py`'s existing end-to-end grant→propose→approve→
+> deny scenario gained audit assertions on the same real Postgres run rather than a new test;
+> `test_memory_context_repository.py` gained a dedicated supersede+retract test asserting a
+> plain create is *not* audited; `test_knowledge_endpoints.py`'s existing delete test gained an
+> audit assertion via a raw `asyncpg` connection rather than the shared `Database` fixture —
+> `TestClient` already drives that engine through its own event loop, and a second `asyncio.
+> run` reusing it collided over loop affinity, a real (if narrow) gotcha worth naming for the
+> next test that needs to check both an HTTP response and a DB side effect in one test;
+> `test_datasources_generation.py` gained a test asserting a rejected write is audited and an
+> allowed read is not. Full backend suite, run once more from a clean tree right before this
+> note: 515 passed, 0 failed, 0 regressions. `ruff`/`ruff format`/`mypy --strict` clean.
+>
+> **Frontend.** New primitive `components/ui/Table.tsx` — the first real `<table>` in the
+> app (`<th scope="col">`, a `<caption>`, a horizontal scroller so a wide table never widens
+> the page) — added to `DesignSystem.md §6`'s component table; no new tokens needed, so no
+> §2 changes. New `lib/audit/api.ts`: the backend's `{error: {code, message}}` envelope is not
+> part of the generated OpenAPI schema (it comes from a global exception handler, not a
+> per-route `response_model`), so the 403 case is recognised at runtime via a small
+> `AuditApiError`/`isForbidden` pair rather than through generated typing. New page
+> `app/(app)/audit/page.tsx`: a plain filter bar (action/resource kind/outcome — no new
+> primitive needed for that part) above the `Table`, the same `Skeleton`/`EmptyState`/
+> `role="alert"` loading-empty-error shape `tools/page.tsx` already established, and a
+> specific "Only administrators can view the audit log" message on a 403 rather than the
+> generic error state — the UI half of the "real 403 states" `C1`'s description names,
+> landing here because this is the first non-admin-gated route in the product. Added
+> `{ href: "/audit", label: "Audit log", Icon: ScrollText }` to `destinations.tsx` — visible
+> to every caller regardless of role, per the existing no-client-side-permission-gating
+> precedent (nothing in the app hides nav by permission today); the refusal is real and lives
+> at the API.
+>
+> **Frontend tests.** New `app/(app)/audit/page.test.tsx` (4 tests): an admin sees the events
+> table; a 403 shows the specific message, not a generic error (this one needed a 3000ms
+> `findByText` timeout — the app's real `QueryClient` config, `retry: 1`, is reused rather
+> than a test-only one, so one retry's backoff delay genuinely elapses before the error
+> settles, and the test says so rather than silently padding a timeout); no events shows the
+> empty state, not a blank table; typing an action filter refetches with it. Full suite: 128
+> passed (124 + 4), 0 regressions. `npm run typecheck` and `npm run lint` clean.
+>
+> **Live-verified in a real, unrehearsed browser session** — this is where both findings
+> above actually surfaced, not in a unit test: rebuilt `api`/`web`, regenerated `schema.ts`,
+> confirmed `analyst@mnemos.local` (its ordinary `b3-demo` role, no `audit:read`) gets the
+> specific admin-only message at `/audit`; hit the `admin@mnemos.local` OIDC bug while trying
+> to verify the positive case, diagnosed it against Postgres directly, asked the project owner
+> before mutating any role data, then — with explicit sign-off — granted `analyst` a temporary
+> `admin` role_binding, reloaded `/audit`, and got a real table showing two genuine
+> `auth.sign_in allow` rows (its own two sign-ins this session) and one genuine `auth.sign_in
+> deny` row carrying the *exact* real collision message from the earlier failed admin
+> attempt — an authentic deny-path proof neither a fabricated fixture nor a synthetic test
+> could have produced. Filtering by action worked live against that same data. The temporary
+> role_binding was deleted immediately after the screenshot, confirmed by re-querying
+> `analyst`'s bindings back to exactly `b3-demo`; the three test-generated `audit_log` rows
+> were deleted afterward too, so they do not pollute `make demo-seed`'s deterministic state.
+> Zero console errors on the final runs.
+>
+> **New Playwright coverage, and a real bug it found.** `frontend/e2e/organize.spec.ts`
+> covers folders, bookmarks, feedback and search end to end in one authenticated
+> `analyst@mnemos.local` session (create two folders, send a real message, bookmark and
+> down-rate the reply with a comment, file the session into a folder, rename it while filed,
+> reload and confirm both survive, confirm the bookmark links back to the exact message on
+> `/bookmarks`, find the session by content through the sidebar search, delete the folder and
+> confirm the session reappears unfiled while the other, still-empty folder stays listed) plus
+> a second small test for `/audit`'s non-admin 403 (the admin-sees-the-table path is exactly
+> item 40's gap above — no seeded identity can both sign in and hold `admin`, so that path
+> stays a manual, documented verification, not an automated one). First run of the new spec
+> failed twice, for two different reasons, both worth recording:
+> - **A genuine, previously-unknown frontend race**, not a test bug: creating two folders
+>   right before starting a brand-new chat session widened a pre-existing race in
+>   `app/(app)/chat/[sessionId]/page.tsx` enough to lose every message. That page seeds its
+>   local `messages` state from `GET /v1/chat/sessions/{id}` exactly once per session id
+>   (`loadedFor`), specifically so a background refetch mid-stream cannot clobber a reply
+>   still arriving — but the guard only checked *which* session the response was for, not
+>   *whether the local state had already moved on* from what that response describes. A
+>   brand-new session's initial fetch starts with zero messages; if it is still in flight when
+>   the user sends the first message and only resolves after that message and its reply are
+>   already showing, the seeding effect still fires — since it is, in a narrow but real sense,
+>   the *first* time `data` arrived for this `sessionId` — and silently overwrites the live
+>   conversation back to empty with the stale zero-message snapshot. Both messages were
+>   confirmed safely persisted in Postgres throughout; only the browser's own state was ever
+>   wrong, and it stayed wrong indefinitely (not a one-frame flicker) since nothing re-seeds it
+>   after that point. `chat.spec.ts`'s own existing send-and-persist test does the identical
+>   "new chat, then send immediately" sequence and had never hit this, because nothing before
+>   it fired two extra sidebar mutations that could delay the competing fetch. Fixed with one
+>   additional ref (`sentBeforeLoad`, set the instant `handleSend` runs) that the seeding
+>   effect now also checks, and by moving the per-session reset of both refs into the same
+>   effect as the existing session-switch cleanup so a session change cannot run the seeding
+>   effect against the *previous* session's leftover flag. Verified fixed by rebuilding `web`
+>   and re-running both `organize.spec.ts` and `chat.spec.ts`, plus the file's own existing
+>   Vitest unit tests, all green.
+> - **A real bug in the new test itself**, not the product: `sessionRow`, my locator for "the
+>   `<li>` containing this session's link," was built by filtering on that link's `href` — but
+>   both the move-to-folder control and the rename control replace that same `<a href>` with a
+>   `<select>` or a text input the instant they activate, so the locator stopped matching its
+>   own row at exactly the moment each interaction needed it most. Fixed by using the
+>   unscoped, sidebar-wide `combobox`/`"Conversation name"` locators instead once each control
+>   is open, since only one row can be in either mode at a time — worth naming here because the
+>   next Playwright spec written against a stateful list row will hit the identical trap.
+>
+> **`C3` — conversation product depth — is complete.** All five deliverables (folders,
+> bookmarks, feedback, history search, audit log) are done: 515 backend tests, 128 frontend
+> Vitest tests, 0 regressions across either suite, `ruff`/`ruff format`/`mypy --strict` clean,
+> and all 16 tests across all 8 Playwright spec files pass against a freshly rebuilt `api`/`web`
+> Compose stack — the full suite, not just this milestone's own specs, since the
+> `page.tsx` fix above touches code every chat-adjacent spec exercises. One incidental flake
+> on the first full-suite run (`knowledge.spec.ts`'s citation-click test, timing out waiting
+> for a citation marker) passed cleanly both in isolation and on an immediate full-suite
+> rerun — an order-dependent flake under sixteen tests' worth of accumulated Ollama load, not
+> a regression from this milestone's changes, and not pursued further as it is unrelated to
+> `C3`. This file's and `docs/ADAPTATION.md`'s sync below is the last step before the PR
+> leaves draft.
+
+---
+
 ## 5. NEXT TASK
 
-**`C3` — conversation product depth — committed 2026-08-22 by explicit project-owner
-decision.** The 2026-08-18 scope reset deferred this milestone (`docs/Roadmap.md` §2); the
-project owner has now explicitly reopened it, scoped to exactly this brief. `B4`, `C1`, `C2`
-remain deliberately deferred — do not start any of them without a separate explicit decision.
-This brief is written at the same level of detail C4's and D1's were, per §0/§7, before any
-code is written.
+**Nothing is committed.** `C3` — conversation product depth, the last item on the committed
+plan — is done (all five deliverables: folders, bookmarks, feedback, history search, audit
+log; this file's 2026-08-22 and 2026-08-23 dated notes have the full evidence, including the
+four real bugs the milestone found and fixed).
 
-**What you can do when this is done, that you cannot do today:** organize conversations into
-folders, bookmark a specific message with a note, rate an assistant answer up or down, search
-across the *content* of past conversations (not just session titles), and — as an admin —
-read an audit trail of the security-relevant actions taken in the org, with a real 403 for
-anyone else who tries.
+**Do not start any of the following without an explicit decision from the project owner:**
+`B4` (multi-step agent plans, loops, checkpoints, crash recovery, replay), `C1` (API keys,
+full RBAC permission matrix, tag-scoped document ACL UI), `C2` (versioned prompt management,
+cost dashboard), any deployment breadth (Kubernetes, nginx, multi-node), or any new scope not
+already named in `docs/Roadmap.md` §2. All three remain valid future extensions with
+schema/architecture seams already preserved for them — see ADAPTATION §3 — but none is a
+promise.
 
-**Why this is smaller than it looks.** `M2`'s original migration already created `folder`,
-`bookmark`, `feedback`, and `audit_log` as real tables with FKs, indexes and `FORCE` RLS
-(`backend/migrations/versions/0001_initial_schema.py`, RLS in `0004`), and
-`chat_session.folder_id` already exists as a nullable FK. `Folder`, `Bookmark`, and
-`Feedback` SQLAlchemy ORM classes already exist in
-`backend/src/mnemos/features/chat/adapters/models.py` (confirmed 2026-08-22 — the ORM layer
-is not just `Folder`, contrary to how ADAPTATION §3 undersells it). `audit_log`'s ORM class
-(`AuditLog`) already exists in `features/observability/adapters/models.py` too. **None of
-these four have a domain model, a repository method, an application service, an API route,
-or a frontend surface.** This milestone is the domain → application → adapters → API →
-frontend vertical slice on top of a schema seam that has been sitting there since `M2`, not
-a schema design exercise.
+**If a future session is asked to add something not on this list:** read TRACKER §0-§4 and
+ADAPTATION in full first, exactly as this file has always instructed, then write a fresh
+brief in this section following the same level of detail C4's, D1's and C3's briefs were
+written at — do not silently resume an old, superseded plan.
 
-**Deliberately out of scope, so this milestone stays bounded:** wiring `audit_log` to every
-mutating endpoint in the app (deliverable 5 names an exact, bounded call-site list instead);
-a feedback dashboard/aggregation view (feedback is captured and stored, not yet reported on
-— a natural `C2`-adjacent extension); folder nesting (one flat level, matching the schema —
-`folder` has no `parent_id` column); real-time collaborative folder reordering. None of these
-are promised by this brief.
-
----
-
-### Deliverable 1 — Folders
-
-**Backend.** `features/chat/domain/ids.py`: add `FolderId = NewType("FolderId", UUID)`.
-`features/chat/domain/models.py`: add `FolderRecord(id: FolderId, org_id: OrgId,
-user_id: UserId, name: str, position: int, session_count: int, created_at: datetime,
-updated_at: datetime)` — `session_count` is computed (`COUNT(chat_session.id) WHERE
-folder_id = folder.id`), not stored, so it can never drift from the sessions actually in it.
-`features/chat/application/ports.py`: extend `ChatRepository` (do not create a second
-protocol — folders are chat-adjacent and already share `SqlChatRepository`'s
-`self._db.session(org_id=...)` idiom) with `create_folder`, `list_folders` (ordered
-`position ASC, id ASC` — **explicit `id` tiebreak, matching the fix TRACKER's 2026-08-22
-notes made to `SqlToolRepository`, not the still-unfixed shape in
-`features/knowledge/adapters/repository.py`'s `list_documents`**), `rename_folder`,
-`reorder_folder` (set `position`), `delete_folder` (the FK is `ondelete="SET NULL"`, so
-deleting a folder already un-files its sessions at the database level — no service-side
-cleanup query needed, just delete the row and return whether it existed). `application/
-service.py`: either extend `ChatService` or add a sibling `FolderService` in a new
-`application/folders.py` (the `features/tools/` precedent of `application/catalog.py` +
-`application/invocations.py` as two services sharing one `ToolRepository` is the model —
-follow it: one `FolderService`, matching the pattern rather than growing `ChatService`
-further). Reuse `_owned_session`'s "404, never 403" shape for folder ownership.
-
-Extend `PATCH /chat/sessions/{id}`'s `RenameSessionRequest` with an optional
-`folder_id: str | None = None` sentinel-free field — **use a separate optional-with-explicit-
-presence pattern** (Pydantic `folder_id: str | None = Field(default=UNSET_SENTINEL)` or a
-`set()`-based "was this key present" check) so "move to no folder" (`null`) is distinguishable
-from "don't touch the folder" (key omitted); reusing plain `None` as the default for an
-already-nullable field would make it impossible to rename a session without also un-filing
-it. New router `entrypoints/api/routers/folders.py`: `POST /chat/folders` `{name}` → 201,
-`GET /chat/folders` → list ordered by `position`, `PATCH /chat/folders/{id}` `{name?,
-position?}`, `DELETE /chat/folders/{id}` → 204. Wire `folder_service` onto `app.state` in
-`main.py`'s `lifespan`, `include_router` alongside the other five. Permission: `chat:write`
-covers create/rename/reorder/delete/move (already granted to `analyst` and `user` — folders
-organize a user's own sessions, the same authority level as renaming one).
-
-**Frontend.** Extend `ChatSessionList.tsx`'s existing `groupSessions()` grouping: when
-folders exist, group by folder first (folder name as the `<li>` heading, sessions sorted by
-recency inside), then fall back to the existing Today/Yesterday/Previous 7 days/Older
-buckets for unfiled sessions. Add folder create (reuse the existing `Plus`-icon-button
-pattern, a small inline naming input, not a dialog — matches `RenameField`'s existing
-inline-edit shape) and a per-session "Move to folder…" action (a small `DropdownMenu` from
-Radix, listing folders + "No folder") next to the existing rename/delete icon pair. Folder
-delete reuses the exact `Dialog.Root` confirmation pattern already in this file (name the
-folder, state that its conversations are not deleted — only un-filed). New `lib/chat/api.ts`
-exports: `fetchFolders`, `createFolder`, `renameFolder`, `reorderFolder`, `deleteFolder`,
-`moveSessionToFolder`, plus a `CHAT_FOLDERS_QUERY_KEY`.
-
-**Acceptance.** Create two folders, file three sessions across them, reload — grouping
-survives. Delete a folder with sessions in it — sessions reappear unfiled, not deleted.
-Rename a session while it is in a folder — it stays in the folder (proves the sentinel-vs-
-omitted fix above actually works, not just compiles). A session from another org/user is a
-404 on every folder-scoped call, mirroring the existing chat-session test style
-(`test_another_users_session_is_a_404_and_not_a_403`).
-
----
-
-### Deliverable 2 — Bookmarks
-
-**Backend.** `domain/ids.py`: `BookmarkId`. `domain/models.py`: `BookmarkRecord(id, org_id,
-user_id, message_id, note: str | None, created_at, updated_at)`. Extend `ChatMessageRecord`
-with `bookmarked: bool` (default `False`) so message-detail responses carry the caller's own
-bookmark state without a second round trip — thread this through `SqlChatRepository`'s
-message-mapping queries as a `LEFT JOIN bookmark ON bookmark.message_id = chat_message.id
-AND bookmark.user_id = :caller_id`, not a per-message N+1 lookup. Ports: `upsert_bookmark`
-(create-or-update-note, respecting `UniqueConstraint(user_id, message_id)` via `ON CONFLICT
-(user_id, message_id) DO UPDATE SET note = excluded.note`), `remove_bookmark` (returns
-whether one existed — 404 if not, matching `delete_session`'s convention), `list_bookmarks`
-(cursor-paginated, newest-first, **explicit `id` tiebreak**, joined to `chat_message` +
-`chat_session` for a content snippet and the parent session's title/id). New router
-`entrypoints/api/routers/bookmarks.py`: `PUT /chat/messages/{message_id}/bookmark` `{note?}`
-→ 200 (idempotent upsert, not `POST`, because bookmarking twice is not a conflict — it is the
-same action twice), `DELETE /chat/messages/{message_id}/bookmark` → 204, `GET
-/chat/bookmarks?limit&cursor` → list. Permission `chat:write` for the mutations,
-`chat:read` for the list — both already granted to `analyst`/`user`.
-
-**Frontend.** In `MessageBubble.tsx`, add a `Bookmark`/`BookmarkCheck` (Lucide) toggle button
-into the existing per-message action row (`flex flex-wrap items-center gap-1 px-1`,
-alongside "Inspect answer"/"Copy") — same `Button rank="plain"` treatment, `aria-pressed`
-reflecting state (this is a toggle, not a navigation or a destructive action, so it does not
-need a confirmation dialog). Add a stable `id={`message-${message.id}`}` to each message
-bubble's root element — needed for the bookmarks list to link back to an exact message, not
-just its session. New page `frontend/src/app/(app)/bookmarks/page.tsx` following the Tool-
-console list-screen pattern (`tools/page.tsx`): header, one `useQuery`-driven list section,
-`Skeleton` while pending, `EmptyState` when empty ("No bookmarks yet" pointing at the
-bookmark icon on any answer), each row showing the message snippet + parent session title +
-a remove button, linking to `/chat/{session_id}#message-{message_id}`. Add `{ href:
-"/bookmarks", label: "Bookmarks", Icon: Bookmark }` to `destinations.tsx`'s `DESTINATIONS`.
-
-**Acceptance.** Bookmark a message, reload the session — the button shows bookmarked state
-(proves the `LEFT JOIN` threading, not just the write path). Open `/bookmarks` — the message
-appears with a working link back to its exact position in the transcript. Un-bookmark from
-either surface — both reflect it after invalidation.
-
----
-
-### Deliverable 3 — Feedback
-
-**Backend.** `domain/ids.py`: `FeedbackId`. `domain/models.py`: `FeedbackRecord(id, org_id,
-user_id, message_id, rating: FeedbackRating, comment: str | None, created_at, updated_at)`
-— `FeedbackRating` already exists (`core/types.py`, `StrEnum` `UP`/`DOWN`); reuse it, do not
-invent a second enum. Extend `ChatMessageRecord` with `feedback: FeedbackRating | None`, same
-`LEFT JOIN ... AND feedback.user_id = :caller_id` approach as bookmarks, in the same query
-(one extra join, not a second round trip). Ports: `upsert_feedback` (`ON CONFLICT
-(user_id, message_id) DO UPDATE SET rating = excluded.rating, comment =
-excluded.comment` — rating flips up→down and back are updates, not new rows),
-`remove_feedback`. Router: `PUT /chat/messages/{message_id}/feedback` `{rating: "up"|"down",
-comment?: str}` → 200, `DELETE /chat/messages/{message_id}/feedback` → 204. No list endpoint
-in this brief — feedback is per-message state surfaced through the message itself; an
-aggregate feedback view is the `C2`-adjacent extension named as out of scope above. Leave
-the schema's `reason` column (a free-text field distinct from `comment`) unused — inventing
-a reason taxonomy nothing asked for is exactly the speculative-abstraction CLAUDE.md rules
-this project already runs on say to avoid; `comment` alone covers "what went wrong."
-
-**Frontend.** Two more buttons in `MessageBubble.tsx`'s action row: `ThumbsUp`/`ThumbsDown`
-(Lucide), mutually exclusive toggle (selecting one clears the other via `DELETE` then `PUT`,
-or a single upsert call — prefer one upsert call over two requests). On selecting thumbs-
-down only, reveal one optional single-line input ("What went wrong? (optional)") that submits
-with the rating; thumbs-up submits immediately with no prompt. Both use `aria-pressed`, not
-color alone, to show selected state (a filled vs. outline icon variant, per DesignSystem
-§3's colour-is-never-the-only-signal rule).
-
-**Acceptance.** Rate a message up, reload — state persists. Switch it to down with a comment,
-reload — both persist and the up-state is gone (proves upsert-not-insert). A rating from one
-user does not appear on another user's view of a shared... — not applicable, sessions are
-single-user in this schema; instead assert cross-user isolation the same way folders/
-bookmarks do: another user's `PUT` against a message in a session they do not own is a 404.
-
----
-
-### Deliverable 4 — History search
-
-**This is the one deliverable that needs a real migration**, not just new application code —
-say so explicitly rather than let it hide inside "backend work." New
-`backend/migrations/versions/0008_chat_message_search.py`: add a generated column
-`chat_message.content_tsv tsvector GENERATED ALWAYS AS (to_tsvector('english', content))
-STORED` and a GIN index on it (`ix_chat_message_content_tsv`). Reversible (`op.drop_column`
-undoes the generated column and its index together). No RLS change needed — the new column
-lives on an already-RLS-covered table.
-
-**Backend.** New repository method `search_sessions(*, org_id, user_id, query: str, limit,
-before)`: one query that matches `chat_session.title ILIKE '%' || :q || '%'` **or**
-`chat_message.content_tsv @@ websearch_to_query('english', :q)`, grouped back to distinct
-sessions, ranked by `ts_rank(content_tsv, ...)` (title matches rank first, as a `UNION`
-branch with a fixed high rank, ahead of content matches), returning each session plus — when
-the match came from a message, not the title — a short snippet (`ts_headline('english',
-content, websearch_to_query(...), 'MaxFragments=1, MaxWords=20')`) so the result explains
-*why* it matched. **Explicit `id` tiebreak** on the final ordering, same reasoning as every
-other list query in this brief. Router: extend `GET /chat/sessions` with an optional
-`q: str | None` query param rather than a new path — same resource, a different filter,
-matching the pattern of every other list endpoint in the codebase; when `q` is present, the
-list is search-ranked instead of recency-ordered, same response shape (`ChatSessionListResponse`)
-plus an optional `snippet: str | None` on each `ChatSessionResponse` row.
-
-**Frontend.** `ChatSessionList.tsx` already has a client-side `query` state and an input
-wired to a pure-title `.includes()` filter — replace that filter with a debounced (~300ms)
-call to the search-augmented `fetchSessions(query)` once `query.trim()` is non-empty, falling
-back to the existing plain (unfiltered, recency-ordered) list when it is empty. Render the
-snippet under a session's title when present, so a content match is visibly different from a
-title match. This is a genuine behavior change (client-side substring → server-side ranked
-full-text) — call it out in the PR description and the dated TRACKER note, not just "added
-search," since a reviewer diffing behavior should be able to see title-only matching stopped
-being the whole story.
-
-**Acceptance.** A session whose title does not contain the query string, but whose message
-content does, is found and shows a snippet. A session's own title match ranks above a
-content-only match for the same query. Search is scoped correctly — another org's/user's
-sessions never appear, verified the same way `list_sessions`' tenant scoping already is.
-
----
-
-### Deliverable 5 — Audit log
-
-**The write path is a new vertical slice inside the existing (currently empty)
-`features/observability/` package** — `domain/models.py`: `AuditEventRecord(id: AuditLogId,
-org_id, actor_id: UserId | None, actor_kind: Literal["user","api_key","system"], action:
-str, resource_kind: str, resource_id: str | None, outcome: Literal["allow","deny"], reason:
-str | None, request_id: str | None, ip_address: str | None, user_agent: str | None,
-detail: dict, occurred_at: datetime)` — mirrors the `AuditLog` ORM columns exactly (already
-defined, see `adapters/models.py`). `application/ports.py`: `AuditRepository(Protocol)` with
-`record(...) -> AuditEventRecord` and `list_events(*, org_id, actor_id=None, action=None,
-resource_kind=None, outcome=None, since=None, until=None, limit, before) ->
-Sequence[AuditEventRecord]` (**explicit `id` tiebreak** on `occurred_at DESC, id DESC`).
-`application/service.py`: `AuditService(repository)` — thin: `record_event(...)` and
-`list_events(...)`, no business logic beyond what the repository already does.
-`adapters/repository.py`: `SqlAuditRepository`, same `self._db.session(org_id=...)` idiom.
-
-**Design choice, stated explicitly because it is a real tradeoff, not an oversight:** an
-audit write is **not** transactionally atomic with the mutation it records — it is issued in
-its own short transaction immediately after the primary action's own transaction commits.
-Coupling `features/memory`'s or `features/tools`' commit to `features/observability`'s would
-require passing a shared session across a feature boundary those features do not otherwise
-know about, which the package layout rule ("`features` must never import `flows`", and by
-the same logic never reach into a sibling feature's persistence) does not support today. The
-residual risk — a crash in the narrow window between the primary commit and the audit write
-loses exactly that one audit row — is accepted at this scope; a system that needed two-phase-
-commit-grade audit durability is a different, larger piece of work than this brief. Say this
-in the PR description, not just here.
-
-**Permission.** New resource `audit` (extends the enumerated vocabulary in
-`features/identity/domain/roles.py`'s module docstring — update that docstring's resource
-list in the same commit, it currently only lists the eight resources that existed before this
-milestone). One action: `audit:read`. **Deliberately not added to `analyst` or `user`'s
-`SYSTEM_ROLES` grants** — only `admin`'s `*:*` covers it. This is a real access-control
-decision, not a placeholder: an audit trail of "who did what" is exactly the kind of surface
-that should default to admin-only, the same reasoning `C1`'s deferred RBAC work would apply
-more broadly. Router `entrypoints/api/routers/audit.py`: `GET /audit/events?actor_id=&
-action=&resource_kind=&outcome=&since=&until=&limit=&cursor=`, guarded by
-`Permission.require("audit", "read")` using the exact `_require`/`caller.principal.
-has_permission(...)` pattern `tools.py` already uses — a non-admin caller gets a real 403
-with the standard `AuthorizationError` body, not a hidden route.
-
-**The bounded call-site list — exactly these eight, no more, stated explicitly so scope
-cannot creep:**
-1. `auth.sign_in` (outcome `allow`) — successful sign-in, wherever `features/identity`
-   currently completes one (JIT-provisioned or existing subject).
-2. `auth.sign_in` (outcome `deny`) — failed sign-in, including the collision-guard case
-   D1's dated note documents (`email already belongs to a different subject`).
-3. `auth.sign_out` (outcome `allow`) — refresh-token revocation.
-4. `tool.grant` (outcome `allow`) — a tool granted to a user's live identity (`features/
-   tools`' `ToolCatalogService`).
-5. `tool.invoke` (outcome `allow` or `deny`) — an MCP call approved-and-executed, or denied
-   (`ToolInvocationService`) — this already has a durable `mcp_invocation` row; the audit row
-   is the cross-feature "who did what" ledger entry, not a replacement for it.
-6. `memory.supersede` (outcome `allow`) and `memory.retract` (outcome `allow`) —
-   `features/memory`'s bitemporal mutations (two actions, one call site pattern).
-7. `document.delete` (outcome `allow`) — `features/knowledge`'s cascade delete.
-8. `datasource.query` (outcome `deny`) — the NL2SQL AST guard rejecting a write, i.e. the
-   exact "watch a user be refused, and see why" moment the project's thesis is built around;
-   this is the one entry that makes the audit viewer demonstrate the product's actual claim
-   rather than just plumbing.
-
-Do not wire folder/bookmark/feedback mutations from deliverables 1-3 into the audit log —
-those are personal conversation organization, not security-relevant events, and adding them
-would blur what the audit trail is for.
-
-**CLI.** `mnemosctl audit tail --org-slug <slug> [--action <action>] [--limit N]`, following
-the existing nested-subparser registration (`sub.add_parser("audit", ...)`, further
-`.add_subparsers(dest="command")`, dispatched via `if args.group == "audit" and args.command
-== "tail":`) and `db doctor`'s precedent as a read-only, ops-facing reporting command — bypasses
-the HTTP permission layer the same way `db doctor` bypasses it (direct DB access via
-`--org-slug`, not a caller principal), since it is an operator tool, not an end-user one.
-
-**Frontend.** New page `frontend/src/app/(app)/audit/page.tsx`, Tool-console pattern: a
-filter bar (action, resource kind, outcome, date range — plain controls, no new primitive
-needed) above a `useQuery`-driven table. **No `Table` primitive exists in `components/ui/`
-today — build one** (`AuditTable` or a generic `Table`/`TableRow` if the shape is reusable
-enough to belong in `components/ui/`; use judgement here, but do not hand-roll ad-hoc
-`<div>` grids when a real `<table>` with proper `<th scope="col">` headers is the correct
-accessible primitive for genuinely tabular data, which this is unlike everything else in the
-app so far). Loading/empty/error states follow the same `Skeleton`/`EmptyState`/`role="alert"`
-conventions as `tools/page.tsx`. **On a 403** (non-admin caller), render a plain, specific
-message — "Only administrators can view the audit log" — not a generic error screen; this is
-the UI half of the "real 403 states" `C1`'s description promises, landing here instead
-because this is the first place in the product a non-admin-gated route actually exists. Add
-`{ href: "/audit", label: "Audit log", Icon: ScrollText }` (or a similarly apt Lucide icon)
-to `destinations.tsx` — visible to everyone per the existing no-client-side-permission-gating
-precedent (nothing in the app hides nav by role today), backed by a real 403 at the API.
-
-**Acceptance.** Sign in, sign out, grant and invoke a tool, supersede a memory claim, delete a
-document, and trigger an NL2SQL guarded-write refusal — each produces exactly one audit row
-with the right `outcome`. `/audit` as the admin user shows all eight kinds of event with
-working filters. `/audit` as `analyst` or `user` shows the specific denial message, and the
-API call underneath returns a real 403, not a redirect or a silently empty list. `mnemosctl
-audit tail` against the same org shows the same rows from the CLI.
-
----
-
-### Cross-cutting requirements, all five deliverables
-
-- **Every new list query gets an explicit trailing `id` tiebreak.** This is not a style
-  preference — it is the exact fix TRACKER's 2026-08-22 notes made to
-  `SqlToolRepository.list_tools`/`list_invocations` after an intermittent, hard-to-reproduce
-  authorization bug, and the exact shape still-unfixed in `features/knowledge/adapters/
-  repository.py`'s `list_documents`. Every list method this brief adds — folders, bookmarks,
-  search results, audit events — must not repeat that bug. Where feasible, add a
-  `test_list_X_orders_same_Y_deterministically`-style regression test that inspects the
-  compiled `ORDER BY` clause the way `test_tools_repository.py` already does, not just
-  behavior, to avoid the same false-confidence trap.
-- **Tests hit real Postgres**, per this codebase's existing convention (`backend/tests/
-  conftest.py`'s `Postgres`/`postgres()` fixture) — no mocked repository tests for the new
-  persistence code. Router-layer tests use `TestClient`, named
-  `test_<snake_case_full_sentence_description>`, matching `test_chat_endpoints.py`.
-- **Every backend capability ships with its usable frontend slice** (an unchanged project
-  rule) — none of the five deliverables is "backend done, UI next milestone."
-- **New Playwright coverage.** `frontend/e2e/` currently has six spec files (not seven —
-  D1's note overcounted; there is no separate MCP-approval file, `tools.spec.ts` covers
-  approval already). Add one new spec, `frontend/e2e/organize.spec.ts`, covering folders,
-  bookmarks, feedback and search in one authenticated session (mirroring `chat.spec.ts`'s
-  structure: `missingServices()` skip guard, role/label-based assertions only, no
-  `data-testid`, and an explicit reload to prove persistence survives it — the existing
-  convention this codebase already holds to). Audit gets its own assertions inside this spec
-  or a second small one, exercising both the admin-sees-it and non-admin-sees-403 paths.
-- **`ruff`/`ruff format`/`mypy --strict`** clean on every changed backend file;
-  **`npm run generate:api`** re-run after every backend schema/route change lands, so
-  `frontend/src/lib/api/schema.ts` is never hand-edited or stale (DesignSystem §5/§6 already
-  mandate this — it is not new for this milestone, just newly relevant to five features at
-  once).
-- **DesignSystem.md updates**, same commit as any new token/component: the new `Table`
-  primitive (deliverable 5) needs an entry; any new color usage (bookmarked/rated states, if
-  they need anything beyond the existing fill/accent tokens) needs a measured contrast row,
-  not an eyeballed one.
-- **TRACKER/ADAPTATION**, per §7, updated in the same commit as each deliverable lands — a
-  dated note per deliverable, the same shape D1's five dated notes took, not one giant note
-  at the end.
-
-**Sequencing:** one deliverable at a time, each its own commit(s) on branch
-`agent/c3-conversation-depth`, one PR for the whole milestone (matching how `D1`'s five
-deliverables shipped as one PR, #25) — ready for review and merged only once all five
-deliverables and the cross-cutting requirements above are verified.
-
-**If a future session picks this brief up mid-way:** check which deliverables already have
-dated TRACKER notes below this section before assuming none of it is done.
+**If a future session is asked to fix a bug or make a small polish change with no new
+milestone attached:** that is fine and does not need a milestone id. Follow §0's rules
+(scoped commits, a PR immediately, full verification, this file and ADAPTATION updated in
+the same commit) exactly as if it were milestone work, because a maintenance change that
+skips verification is exactly how the bugs D1 and C3 each found would have shipped unnoticed.
 
 ---
 

@@ -121,5 +121,7 @@ async def delete_document(
     service: Annotated[KnowledgeService, Depends(_service)],
 ) -> None:
     await service.delete_document(
-        org_id=caller.principal.org_id, document_id=_parse_document_id(document_id)
+        org_id=caller.principal.org_id,
+        user_id=caller.principal.principal_id,
+        document_id=_parse_document_id(document_id),
     )

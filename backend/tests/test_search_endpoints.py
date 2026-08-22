@@ -81,10 +81,16 @@ async def seeded(postgres: Postgres) -> AsyncIterator[Seed]:
     conn = await asyncpg.connect(postgres.owner_dsn)
     try:
         await conn.execute(
-            "INSERT INTO org (id, slug, name) VALUES ($1, $2, $3)", ids.org_a, ORG_A_SLUG, ORG_A_SLUG
+            "INSERT INTO org (id, slug, name) VALUES ($1, $2, $3)",
+            ids.org_a,
+            ORG_A_SLUG,
+            ORG_A_SLUG,
         )
         await conn.execute(
-            "INSERT INTO org (id, slug, name) VALUES ($1, $2, $3)", ids.org_b, ORG_B_SLUG, ORG_B_SLUG
+            "INSERT INTO org (id, slug, name) VALUES ($1, $2, $3)",
+            ids.org_b,
+            ORG_B_SLUG,
+            ORG_B_SLUG,
         )
         for org_id, user_id, session_id, email in (
             (ids.org_a, ids.user_a, ids.session_a, "ada@search.test"),
@@ -121,9 +127,17 @@ async def seeded(postgres: Postgres) -> AsyncIterator[Seed]:
             )
         for session_id, org_id, content in (
             (ids.title_hit_session, ids.org_a, "Ask HR for the leave form."),
-            (ids.content_hit_session, ids.org_a, "Carry-over of unused leave is capped at five days."),
+            (
+                ids.content_hit_session,
+                ids.org_a,
+                "Carry-over of unused leave is capped at five days.",
+            ),
             (ids.no_match_session, ids.org_a, "The weather today is sunny."),
-            (ids.other_org_session, ids.org_b, "Unused leave carries over up to five days here too."),
+            (
+                ids.other_org_session,
+                ids.org_b,
+                "Unused leave carries over up to five days here too.",
+            ),
         ):
             await conn.execute(
                 "INSERT INTO chat_message (id, org_id, session_id, ordinal, role, content) "
@@ -184,7 +198,9 @@ def client(codec: PlatformTokenCodec, clock: FrozenClock, db: Database) -> Itera
         )
         chat_repository = SqlChatRepository(db, Uuid7Generator())
         app.state.chat_service = ChatService(
-            repository=chat_repository, model=None, history_turns=12  # type: ignore[arg-type]
+            repository=chat_repository,
+            model=None,
+            history_turns=12,  # type: ignore[arg-type]
         )
         yield test_client
 
@@ -197,7 +213,9 @@ def test_a_session_is_found_by_message_content_it_does_not_title_match(
     client: TestClient, codec: PlatformTokenCodec, seeded: Seed
 ) -> None:
     response = client.get(
-        "/api/v1/chat/sessions", params={"q": "carry-over unused leave"}, headers=_headers(codec, seeded)
+        "/api/v1/chat/sessions",
+        params={"q": "carry-over unused leave"},
+        headers=_headers(codec, seeded),
     )
     assert response.status_code == 200
     ids = [s["id"] for s in response.json()["sessions"]]
@@ -208,7 +226,8 @@ def test_a_session_is_found_by_message_content_it_does_not_title_match(
     # `ts_headline` wraps its matches in `<b>...</b>` by default — the
     # frontend renders this as plain text, so raw markup reaching the wire
     # would show up as literal "<b>" in the UI, not bold text.
-    assert "<b>" not in hit["snippet"] and "</b>" not in hit["snippet"]
+    assert "<b>" not in hit["snippet"]
+    assert "</b>" not in hit["snippet"]
 
 
 def test_a_session_title_match_ranks_above_a_content_only_match(

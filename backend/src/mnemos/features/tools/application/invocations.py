@@ -13,6 +13,7 @@ from mnemos.core.types import InvocationStatus, JsonValue, TrustTier
 from mnemos.features.chat.domain import ChatMessageId
 from mnemos.features.identity.application.principals import AuthenticatedCaller
 from mnemos.features.identity.domain import Permission
+from mnemos.features.observability.application.ports import AuditRepository
 from mnemos.features.tools.adapters.crypto import ToolCredentialCipher
 from mnemos.features.tools.adapters.mcp_http import StreamableHttpMcpClient, validate_arguments
 from mnemos.features.tools.application.ports import ToolRepository
@@ -43,11 +44,15 @@ class ToolInvocationService:
         client: StreamableHttpMcpClient,
         cipher: ToolCredentialCipher,
         clock: Clock,
+        audit: AuditRepository | None = None,
     ) -> None:
         self._repository = repository
         self._client = client
         self._cipher = cipher
         self._clock = clock
+        # Optional so every existing test construction of this service keeps
+        # working unchanged (TRACKER §5 deliverable 5).
+        self._audit = audit
 
     async def grant_to_self(
         self,
@@ -62,7 +67,7 @@ class ToolInvocationService:
         tool = await self._repository.get_tool(org_id=caller.principal.org_id, tool_id=tool_id)
         if tool is None:
             raise NotFoundError("tool not found")
-        return await self._repository.put_grant(
+        grant = await self._repository.put_grant(
             org_id=caller.principal.org_id,
             tool_id=tool_id,
             user_id=caller.principal.principal_id,
@@ -70,6 +75,13 @@ class ToolInvocationService:
             auto_approve=auto_approve,
             expires_at=expires_at,
         )
+        await self._audit_event(
+            caller=caller,
+            action="tool.grant",
+            resource_id=str(tool_id),
+            outcome="allow",
+        )
+        return grant
 
     async def propose(
         self,
@@ -108,6 +120,13 @@ class ToolInvocationService:
                 invocation_id=str(invocation.id),
                 reason=decision.reason,
                 offending_source=source,
+            )
+            await self._audit_event(
+                caller=caller,
+                action="tool.invoke",
+                resource_id=str(tool.id),
+                outcome="deny",
+                reason=decision.reason,
             )
             return invocation
 
@@ -176,6 +195,13 @@ class ToolInvocationService:
             if denied is None:
                 raise ConflictError("the invocation is no longer awaiting approval")
             await self._sync_message(tool=tool, invocation=denied)
+            await self._audit_event(
+                caller=caller,
+                action="tool.invoke",
+                resource_id=str(tool.id),
+                outcome="deny",
+                reason=decision.reason,
+            )
             return denied
         approved_at = self._clock.now()
         approved = await self._repository.transition_invocation(
@@ -367,6 +393,12 @@ class ToolInvocationService:
             duration_ms=duration_ms,
         )
         await self._sync_message(tool=tool, invocation=succeeded)
+        await self._audit_event(
+            caller=caller,
+            action="tool.invoke",
+            resource_id=str(tool.id),
+            outcome="allow",
+        )
         return succeeded
 
     async def _fail(
@@ -397,6 +429,28 @@ class ToolInvocationService:
             org_id=invocation.org_id,
             invocation_id=invocation.id,
             content=narrate_invocation(tool=tool, invocation=invocation),
+        )
+
+    async def _audit_event(
+        self,
+        *,
+        caller: AuthenticatedCaller,
+        action: str,
+        resource_id: str,
+        outcome: str,
+        reason: str | None = None,
+    ) -> None:
+        if self._audit is None:
+            return
+        await self._audit.record(
+            org_id=caller.principal.org_id,
+            actor_id=caller.principal.principal_id,
+            actor_kind="user",
+            action=action,
+            resource_kind="tool",
+            resource_id=resource_id,
+            outcome=outcome,  # type: ignore[arg-type]
+            reason=reason,
         )
 
 

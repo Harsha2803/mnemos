@@ -7,9 +7,12 @@ duplicated between the writer and the reader is a constant that drifts.
 
 **The vocabulary is deliberate on both axes.** A *resource* is one of the feature
 packages in ADAPTATION §5 (``chat``, ``memory``, ``document``, ``context``,
-``datasource``, ``tool``, ``prompt``, ``cost``, and identity's own ``org`` /
-``user`` / ``role`` / ``api_key``), so a permission can always be traced to the
-code that will enforce it. An *action* is one of exactly four — ``read``,
+``datasource``, ``tool``, ``prompt``, ``cost``, ``audit``, and identity's own
+``org`` / ``user`` / ``role`` / ``api_key``), so a permission can always be
+traced to the code that will enforce it. ``audit`` was added in ``C3``
+deliverable 5 — deliberately not granted to ``analyst`` or ``user`` below, only
+``admin``'s wildcard covers it, because an audit trail of "who did what" is
+exactly the kind of surface that should default to admin-only. An *action* is one of exactly four — ``read``,
 ``write``, ``invoke``, ``manage`` — because an action set that grows per resource
 stops being checkable by set membership. Running a generated SQL statement is
 ``datasource:read``, not a fifth action: the NL2SQL AST guard rejects DML by

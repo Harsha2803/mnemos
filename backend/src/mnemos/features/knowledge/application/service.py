@@ -28,6 +28,7 @@ from mnemos.features.knowledge.domain import (
     deduplicate,
     reciprocal_rank_fusion,
 )
+from mnemos.features.observability.application.ports import AuditRepository
 from mnemos.platform.objectstore.port import ObjectStore
 
 log = get_logger(__name__)
@@ -52,6 +53,7 @@ class KnowledgeService:
         tokenizer: Tokenizer,
         rrf_k: int,
         near_duplicate_threshold: float,
+        audit: AuditRepository | None = None,
     ) -> None:
         self._repository = repository
         self._retriever = retriever
@@ -60,6 +62,9 @@ class KnowledgeService:
         self._tokenizer = tokenizer
         self._rrf_k = rrf_k
         self._near_duplicate_threshold = near_duplicate_threshold
+        # Optional so every existing test construction of this service keeps
+        # working unchanged (TRACKER §5 deliverable 5).
+        self._audit = audit
 
     async def upload_document(
         self,
@@ -208,11 +213,23 @@ class KnowledgeService:
             raise NotFoundError(f"document {document_id} not found")
         return summary
 
-    async def delete_document(self, *, org_id: OrgId, document_id: DocumentId) -> None:
+    async def delete_document(
+        self, *, org_id: OrgId, user_id: UserId, document_id: DocumentId
+    ) -> None:
         object_key = await self._repository.delete_document(org_id=org_id, document_id=document_id)
         if object_key is None:
             raise NotFoundError(f"document {document_id} not found")
         await self._objects.delete(object_key)
+        if self._audit is not None:
+            await self._audit.record(
+                org_id=org_id,
+                actor_id=user_id,
+                actor_kind="user",
+                action="document.delete",
+                resource_kind="document",
+                resource_id=str(document_id),
+                outcome="allow",
+            )
 
     async def mark_superseded(
         self, *, org_id: OrgId, old_document_id: DocumentId, new_document_id: DocumentId

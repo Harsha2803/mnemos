@@ -81,10 +81,16 @@ async def seeded(postgres: Postgres) -> AsyncIterator[Seed]:
     conn = await asyncpg.connect(postgres.owner_dsn)
     try:
         await conn.execute(
-            "INSERT INTO org (id, slug, name) VALUES ($1, $2, $3)", ids.org_a, ORG_A_SLUG, ORG_A_SLUG
+            "INSERT INTO org (id, slug, name) VALUES ($1, $2, $3)",
+            ids.org_a,
+            ORG_A_SLUG,
+            ORG_A_SLUG,
         )
         await conn.execute(
-            "INSERT INTO org (id, slug, name) VALUES ($1, $2, $3)", ids.org_b, ORG_B_SLUG, ORG_B_SLUG
+            "INSERT INTO org (id, slug, name) VALUES ($1, $2, $3)",
+            ids.org_b,
+            ORG_B_SLUG,
+            ORG_B_SLUG,
         )
         for org_id, user_id, session_id, email in (
             (ids.org_a, ids.user_a, ids.session_a, "ada@feedback.test"),
@@ -173,7 +179,9 @@ def client(codec: PlatformTokenCodec, clock: FrozenClock, db: Database) -> Itera
         )
         chat_repository = SqlChatRepository(db, Uuid7Generator())
         app.state.chat_service = ChatService(
-            repository=chat_repository, model=None, history_turns=12  # type: ignore[arg-type]
+            repository=chat_repository,
+            model=None,
+            history_turns=12,  # type: ignore[arg-type]
         )
         app.state.feedback_service = FeedbackService(repository=chat_repository)
         yield test_client
@@ -252,9 +260,7 @@ def test_rating_another_users_message_is_a_404_not_a_403(
 ) -> None:
     """Same org, different user — RLS alone cannot produce this 404; the
     repository's join to `chat_session.user_id` has to."""
-    other_headers = bearer(
-        codec, user=seeded.user_a2, org=seeded.org_a, session=seeded.session_a2
-    )
+    other_headers = bearer(codec, user=seeded.user_a2, org=seeded.org_a, session=seeded.session_a2)
     response = client.put(
         f"/api/v1/chat/messages/{seeded.message_a}/feedback",
         json={"rating": "up"},
@@ -286,9 +292,7 @@ def test_feedback_from_one_user_is_invisible_on_another_users_view_of_the_messag
         f"/api/v1/chat/messages/{seeded.message_a}/feedback", json={"rating": "up"}, headers=headers
     )
 
-    other_headers = bearer(
-        codec, user=seeded.user_a2, org=seeded.org_a, session=seeded.session_a2
-    )
+    other_headers = bearer(codec, user=seeded.user_a2, org=seeded.org_a, session=seeded.session_a2)
     # user_a2 does not own chat_session_a, so even asking about it is a 404 —
     # confirms feedback state cannot be read through another user's session.
     response = client.get(f"/api/v1/chat/sessions/{seeded.chat_session_a}", headers=other_headers)

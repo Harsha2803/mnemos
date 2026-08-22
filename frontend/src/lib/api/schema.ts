@@ -339,6 +339,23 @@ export interface paths {
         patch?: never;
         trace?: never;
     };
+    "/api/v1/audit/events": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /** List Events */
+        get: operations["list_events_api_v1_audit_events_get"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
     "/api/v1/knowledge/documents": {
         parameters: {
             query?: never;
@@ -679,6 +696,46 @@ export interface paths {
 export type webhooks = Record<string, never>;
 export interface components {
     schemas: {
+        /** AuditEventListResponse */
+        AuditEventListResponse: {
+            /** Events */
+            events: components["schemas"]["AuditEventResponse"][];
+            /** Next Cursor */
+            next_cursor: string | null;
+        };
+        /** AuditEventResponse */
+        AuditEventResponse: {
+            /** Id */
+            id: string;
+            /** Actor Id */
+            actor_id: string | null;
+            /**
+             * Actor Kind
+             * @enum {string}
+             */
+            actor_kind: "user" | "api_key" | "system";
+            /** Action */
+            action: string;
+            /** Resource Kind */
+            resource_kind: string;
+            /** Resource Id */
+            resource_id: string | null;
+            /**
+             * Outcome
+             * @enum {string}
+             */
+            outcome: "allow" | "deny";
+            /** Reason */
+            reason: string | null;
+            /** Request Id */
+            request_id: string | null;
+            /** Ip Address */
+            ip_address: string | null;
+            /** User Agent */
+            user_agent: string | null;
+            /** Occurred At */
+            occurred_at: string;
+        };
         /** Body_upload_document_api_v1_knowledge_documents_post */
         Body_upload_document_api_v1_knowledge_documents_post: {
             /** File */
@@ -2205,6 +2262,44 @@ export interface operations {
                     [name: string]: unknown;
                 };
                 content?: never;
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
+    list_events_api_v1_audit_events_get: {
+        parameters: {
+            query?: {
+                actor_id?: string | null;
+                action?: string | null;
+                resource_kind?: string | null;
+                outcome?: ("allow" | "deny") | null;
+                since?: string | null;
+                until?: string | null;
+                limit?: number;
+                cursor?: string | null;
+            };
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["AuditEventListResponse"];
+                };
             };
             /** @description Validation Error */
             422: {

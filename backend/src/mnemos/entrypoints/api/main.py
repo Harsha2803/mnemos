@@ -35,6 +35,7 @@ from mnemos.core.errors import MnemosError
 from mnemos.core.ids import DEFAULT_ID_GENERATOR
 from mnemos.core.logging import configure_logging, get_logger, request_id_var
 from mnemos.core.security import PasswordHasher
+from mnemos.entrypoints.api.routers import audit as audit_router
 from mnemos.entrypoints.api.routers import auth as auth_router
 from mnemos.entrypoints.api.routers import bookmarks as bookmarks_router
 from mnemos.entrypoints.api.routers import chat as chat_router
@@ -95,6 +96,8 @@ from mnemos.features.knowledge.domain import HashingEmbedder, HeuristicTokenizer
 from mnemos.features.llm.adapters.ollama import OllamaChatModel
 from mnemos.features.memory.adapters.repository import SqlMemoryRepository
 from mnemos.features.memory.application import MemoryService
+from mnemos.features.observability.adapters.repository import SqlAuditRepository
+from mnemos.features.observability.application.service import AuditService
 from mnemos.features.tools.adapters.crypto import ToolCredentialCipher
 from mnemos.features.tools.adapters.mcp_http import StreamableHttpMcpClient
 from mnemos.features.tools.adapters.repository import SqlToolRepository
@@ -120,6 +123,11 @@ async def lifespan(app: FastAPI) -> AsyncIterator[None]:
     app.state.settings = settings
     app.state.db = Database(settings)
     app.state.cache = Cache(settings)
+
+    # One repository, handed to every collaborator that writes or reads the
+    # audit trail — `TokenService` writes directly to it (sign-in/sign-out),
+    # `AuditService` below wraps the same instance for `GET /audit/events`.
+    audit_repository = SqlAuditRepository(app.state.db, DEFAULT_ID_GENERATOR)
 
     # --- identity composition root -------------------------------------
     # Built once per process, not per request. The hasher holds the argon2
@@ -166,6 +174,7 @@ async def lifespan(app: FastAPI) -> AsyncIterator[None]:
         codec=codec,
         clock=SYSTEM_CLOCK,
         refresh_ttl_s=settings.refresh_token_ttl_s,
+        audit=audit_repository,
     )
     # The same codec object on both sides. One `PlatformTokenConfig` means the
     # guard cannot end up verifying against a secret, issuer or algorithm the
@@ -192,9 +201,11 @@ async def lifespan(app: FastAPI) -> AsyncIterator[None]:
     app.state.folder_service = FolderService(repository=chat_repository)
     app.state.bookmark_service = BookmarkService(repository=chat_repository)
     app.state.feedback_service = FeedbackService(repository=chat_repository)
+    app.state.audit_service = AuditService(repository=audit_repository)
     app.state.memory_service = MemoryService(
         repository=SqlMemoryRepository(app.state.db, DEFAULT_ID_GENERATOR),
         clock=SYSTEM_CLOCK,
+        audit=audit_repository,
     )
     app.state.context_service = ContextService(
         repository=SqlContextRepository(app.state.db, DEFAULT_ID_GENERATOR),
@@ -232,6 +243,7 @@ async def lifespan(app: FastAPI) -> AsyncIterator[None]:
         tokenizer=HeuristicTokenizer(),
         rrf_k=settings.rrf_k,
         near_duplicate_threshold=settings.near_duplicate_threshold,
+        audit=audit_repository,
     )
     app.state.rag_flow = RagFlow(
         chat_repository=chat_repository,
@@ -259,6 +271,7 @@ async def lifespan(app: FastAPI) -> AsyncIterator[None]:
         datasources=app.state.datasource_service,
         model=app.state.chat_model,
         sql_runs=SqlRunRepository(app.state.db, DEFAULT_ID_GENERATOR),
+        audit=audit_repository,
     )
     app.state.nl2sql_flow = Nl2SqlFlow(
         chat_repository=chat_repository,
@@ -315,6 +328,7 @@ async def lifespan(app: FastAPI) -> AsyncIterator[None]:
         client=tool_client,
         cipher=tool_cipher,
         clock=SYSTEM_CLOCK,
+        audit=audit_repository,
     )
     app.state.tool_flow = ToolFlow(
         chat_repository=chat_repository,
@@ -481,6 +495,7 @@ def create_app() -> FastAPI:
     app.include_router(folders_router.router, prefix=settings.api_prefix)
     app.include_router(bookmarks_router.router, prefix=settings.api_prefix)
     app.include_router(feedback_router.router, prefix=settings.api_prefix)
+    app.include_router(audit_router.router, prefix=settings.api_prefix)
     app.include_router(knowledge_router.router, prefix=settings.api_prefix)
     app.include_router(connectors_router.router, prefix=settings.api_prefix)
     app.include_router(tools_router.router, prefix=settings.api_prefix)

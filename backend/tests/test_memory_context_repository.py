@@ -25,6 +25,7 @@ from mnemos.features.identity.domain import OrgId, UserId
 from mnemos.features.knowledge.domain import HeuristicTokenizer
 from mnemos.features.memory.adapters.repository import SqlMemoryRepository
 from mnemos.features.memory.application import MemoryService
+from mnemos.features.observability.adapters.repository import SqlAuditRepository
 from mnemos.platform.db import Database
 
 from .conftest import Postgres
@@ -167,6 +168,67 @@ async def test_memory_supersession_preserves_both_clocks_acl_and_dag(postgres: P
         assert (await service.history(org_id=org_a, caller_tags=())).claims[0].id == first.claim.id
         authorized = await service.history(org_id=org_a, caller_tags=("finance",))
         assert {claim.id for claim in authorized.claims} == {first.claim.id, second.claim.id}
+    finally:
+        await database.dispose()
+
+
+@pytest.mark.asyncio
+async def test_supersede_and_retract_are_each_a_durable_audit_row(postgres: Postgres) -> None:
+    """`C3` deliverable 5. A plain `create()` (no `supersede_id`) is routine
+    authoring and is deliberately not audited here — only the bitemporal
+    mutations TRACKER §5 names are."""
+    org_a, _, user_a, _ = await _seed_identity(postgres)
+    database = Database(Settings(database_url=postgres.app_url, env="test"))
+    clock = FrozenClock(datetime(2026, 1, 10, 9, tzinfo=UTC))
+    audit_repository = SqlAuditRepository(database, SequentialIdGenerator("audit-c3"))
+    service = MemoryService(
+        repository=SqlMemoryRepository(database, SequentialIdGenerator("memory-c3-audit")),
+        clock=clock,
+        audit=audit_repository,
+    )
+    try:
+        first = await service.create(
+            org_id=org_a,
+            user_id=user_a,
+            subject_kind="person",
+            subject_ref="employee:ada",
+            subject_name="Ada",
+            predicate="home_hub",
+            object_text="London",
+            kind=MemoryKind.FACT,
+            scope={},
+            valid_from=datetime(2026, 1, 1, tzinfo=UTC),
+            valid_to=None,
+            confidence=0.9,
+        )
+        assert list(await audit_repository.list_events(org_id=org_a, limit=10)) == []
+
+        second = await service.create(
+            org_id=org_a,
+            user_id=user_a,
+            subject_kind="person",
+            subject_ref="employee:ada",
+            subject_name="Ada",
+            predicate="home_hub",
+            object_text="Berlin",
+            kind=MemoryKind.FACT,
+            scope={},
+            valid_from=datetime(2026, 1, 1, tzinfo=UTC),
+            valid_to=None,
+            confidence=1.0,
+            supersede_id=first.claim.id,
+        )
+        await service.retract(org_id=org_a, user_id=user_a, memory_id=second.claim.id)
+
+        events = await audit_repository.list_events(org_id=org_a, limit=10)
+        actions = [e.action for e in events]
+        assert actions == ["memory.retract", "memory.supersede"], "newest first"
+        assert all(e.outcome == "allow" for e in events)
+        assert all(e.actor_id == user_a for e in events)
+        supersede_event = next(e for e in events if e.action == "memory.supersede")
+        assert supersede_event.resource_id == str(second.claim.id)
+        retract_event = next(e for e in events if e.action == "memory.retract")
+        assert retract_event.resource_id == str(second.claim.id)
     finally:
         await database.dispose()
 

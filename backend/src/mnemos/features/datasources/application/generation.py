@@ -28,7 +28,7 @@ from __future__ import annotations
 from dataclasses import dataclass
 
 from mnemos.core.logging import get_logger
-from mnemos.core.types import MessageRole
+from mnemos.core.types import MessageRole, SqlVerdict
 from mnemos.features.datasources.application.ports import SqlRunRecord, SqlRunRepository
 from mnemos.features.datasources.application.service import DatasourceService
 from mnemos.features.datasources.domain import (
@@ -37,8 +37,9 @@ from mnemos.features.datasources.domain import (
     extract_sql_statement,
     guard_sql,
 )
-from mnemos.features.identity.domain import OrgId
+from mnemos.features.identity.domain import OrgId, UserId
 from mnemos.features.llm.domain.model import ChatModel, ChatTurn
+from mnemos.features.observability.application.ports import AuditRepository
 
 log = get_logger(__name__)
 
@@ -58,11 +59,19 @@ class RepairContext:
 
 class SqlGenerationService:
     def __init__(
-        self, *, datasources: DatasourceService, model: ChatModel, sql_runs: SqlRunRepository
+        self,
+        *,
+        datasources: DatasourceService,
+        model: ChatModel,
+        sql_runs: SqlRunRepository,
+        audit: AuditRepository | None = None,
     ) -> None:
         self._datasources = datasources
         self._model = model
         self._sql_runs = sql_runs
+        # Optional so every existing test construction of this service keeps
+        # working unchanged (TRACKER §5 deliverable 5).
+        self._audit = audit
 
     async def generate(
         self,
@@ -72,6 +81,7 @@ class SqlGenerationService:
         question: str,
         attempt: int = 1,
         repair: RepairContext | None = None,
+        user_id: UserId | None = None,
     ) -> SqlRunRecord:
         """Generate one candidate statement for `question`, guard it, and
         record the attempt regardless of the verdict.
@@ -133,4 +143,21 @@ class SqlGenerationService:
             attempt=attempt,
             verdict=verdict.verdict.value,
         )
+        # Only the write rejection is audited here — the exact "watch a user
+        # be refused, and see why" moment TRACKER §5 deliverable 5 names.
+        # Unauthorized-table, unparseable and too-complex verdicts are real
+        # rejections too, but this milestone's audit scope is bounded to the
+        # one call site named in the brief, deliberately, not every possible
+        # guard outcome.
+        if verdict.verdict is SqlVerdict.REJECTED_WRITE and self._audit is not None:
+            await self._audit.record(
+                org_id=org_id,
+                actor_id=user_id,
+                actor_kind="user" if user_id is not None else "system",
+                action="datasource.query",
+                resource_kind="datasource",
+                resource_id=str(datasource.id),
+                outcome="deny",
+                reason=verdict.detail,
+            )
         return record
