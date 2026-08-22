@@ -318,9 +318,9 @@ Apple assets are off-limits (SF Pro as a webfont, SF Symbols) and what is used i
 (PR #15), `B1` (PR #16), the per-session log files (PR #17), the out-of-band frontend
 polish work (PR #18), `B2` plus its final UI/correctness review (PR #19), and `A4`
 (PR #20). The documentation-only scope reset merged in PR #21, `B3` is complete on PR #23,
-`C4` on PR #24, and reduced `D1` on PR #25. `C3` was reopened 2026-08-22 (PR #26, in
-progress); `B4` and `C1`–`C2` stay deliberately deferred pending a separate explicit owner
-decision.
+`C4` on PR #24, and reduced `D1` on PR #25. `C3` was reopened 2026-08-22 and shipped complete
+on PR #26 (2026-08-23); `B4` and `C1`–`C2` stay deliberately deferred pending a separate
+explicit owner decision.
 
 `M3`'s exit criterion "RLS blocks cross-org" turned out to be unmet by `M2` rather than
 merely untested; that is written up in §8 and in
