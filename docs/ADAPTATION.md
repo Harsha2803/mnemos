@@ -4,9 +4,13 @@
 > self-contained: architecture, the capability inventory, schema, milestones, and current
 > state. [`TRACKER.md`](../TRACKER.md) holds live task status; this holds the design.
 
-**Last updated:** 2026-08-18 — `C4` is complete on PR #24. The remaining committed roadmap
-is reduced `D1`; `B4` and `C1`–`C3` remain deliberately deferred to finish a strong,
-evaluable portfolio rather than an exhaustive product.
+**Last updated:** 2026-08-22 — reduced `D1` deliverables 1-4 of 5 are done (PR #25, still
+open): a genuinely clean clone comes up ready, all 14 critical-path Playwright tests pass,
+`make demo-seed` + `docs/Demo.md` give a verified scripted walkthrough, and the README is
+rewritten around exact current numbers (464 backend / 114 frontend / 14 Playwright tests,
+42 tables with 41 under `FORCE` RLS) and an added Known-limitations section. Deliverable 5
+(final release verification and repository lifecycle) remains. Full detail is in
+`TRACKER.md`'s 2026-08-22 dated notes. `B4` and `C1`–`C3` remain deliberately deferred.
 
 ---
 
@@ -266,7 +270,7 @@ authoritative for sequencing, not these tables' phase grouping.
 
 | ID | What it builds | You can now… | Status |
 |---|---|---|---|
-| **D1** | Portfolio release: clean-clone Compose proof · critical-path Playwright · deterministic demo · README rewritten on measured numbers | **clone it, run one command, follow one walkthrough, and reproduce every material claim in the README** | ⬜ committed — final milestone |
+| **D1** | Portfolio release: clean-clone Compose proof · critical-path Playwright · deterministic demo · README rewritten on measured numbers | **clone it, run one command, follow one walkthrough, and reproduce every material claim in the README** | 🟡 4/5 deliverables done, PR #25 — final release verification remains |
 
 **Already built — the foundation the above stands on.**
 
@@ -901,6 +905,49 @@ the whole `up`. It does now, so plain `docker compose up -d` brings the frontend
 everything else and `web` has a healthcheck of its own — a stack whose UI needs a
 remembered extra flag is a stack whose UI does not get looked at.
 
+### D1 — portfolio release 🟡 4/5 deliverables done
+
+Full evidence and dated narrative for each deliverable is in `TRACKER.md`'s 2026-08-22
+notes; this is the summary.
+
+**Deliverable 1 — clean-clone Compose proof.** Cloned fresh from GitHub into an isolated
+compose project (its own volumes, not the dev machine's), verified `docker compose up -d
+--build`, migrations, the Ollama model pull, and idempotent `mnemosctl bootstrap` all
+succeed end to end against `/readyz`, in a little over two minutes. Added `make wait`
+(polls `/readyz`, times out with an actionable message) after finding nothing gave a
+first-time user a way to wait out the model pull short of hand-polling `curl`.
+
+**Deliverable 2 — critical-path Playwright.** Found and fixed a real bug, not a flaky test:
+Keycloak's dev-mode storage has no persistent volume, so any container recreation mints
+fresh random subject UUIDs for the three seeded users, permanently breaking every already
+JIT-provisioned login via M3.4's (correct) collision guard. Fixed by pinning explicit `id`
+fields in `deploy/keycloak/mnemos-realm.json`, matching the deterministic-fixture pattern
+already used elsewhere. Once fixed, all 14 tests across the 7 spec files passed in one run,
+2.5 minutes, with no code changes to any spec — every wait was already keyed to a real
+condition, every spec already self-skipped with a named reason.
+
+**Deliverable 3 — deterministic demo.** `make demo-seed` (idempotent) plus `docs/Demo.md`,
+a presenter-facing script covering documents, database, one MCP call, and the Bundle
+inspector. Found and fixed a second real bug while building it: `mnemosctl connector
+register`'s own `--help` promised "idempotent per slug" but crashed with a raw
+`IntegrityError` traceback on a retry; fixed by checking `get_by_slug` first, matching
+`bootstrap`'s own "already present" idiom, with a new regression test against real
+Postgres. The one untested sequence — asking chat about connector-ingested (not
+directly-uploaded) content — was verified live via a throwaway Playwright script before
+being written into the doc as fact.
+
+**Deliverable 4 — measured README.** Rewrote numbers to current measurements (464 backend
+tests, 114 frontend, 14 Playwright, 42 tables / 41 with `FORCE` RLS — the old "41/40" line
+was already stale before this session), added exact reproduction commands for the Playwright
+suite, and added a "Known limitations" section covering small-model NL2SQL/narration
+behaviour, Keycloak's dev-mode posture, the single-secret JWT trust domain, and the
+deferred-scope ledger.
+
+**Deliverable 5 — release verification and lifecycle — not done yet.** Full backend/frontend
+gates, a rebuilt Compose stack, `/readyz`, the Playwright suite, and `make bench` (only if
+the retrieval/compile path moved, which it has not) all need a final combined run before
+PR #25 goes ready and merges.
+
 ### C4 — governed context and bitemporal memory ✅ verified 2026-08-18
 
 The existing M2 tables now have typed domain, repository and application behavior:
@@ -1451,6 +1498,20 @@ resume-focused finish line unless the owner explicitly reopens scope after `D1`.
 - **D1 is proof and handoff, not product expansion.** Start from a genuinely clean clone,
   consolidate the existing critical Playwright journeys, add a deterministic walkthrough,
   and organize the README around exact reproduction commands and honest limitations.
+  4 of 5 deliverables are done (PR #25); only final release verification/lifecycle remains.
+- **Keycloak's seeded users have pinned `id` fields in `deploy/keycloak/mnemos-realm.json`
+  — do not remove them.** Its dev-mode storage has no persistent volume (unlike every other
+  stateful service), so a fresh import on container recreation is normal; the pinned ids are
+  what make that reproducible instead of a silent, permanent JIT-provisioning lockout for
+  every previously-signed-in seeded user. If a new seeded user is ever added, pin its id too.
+- **`make demo-seed` + `docs/Demo.md`** are the reproducible demo path — prefer extending
+  them over inventing a new one-off demo script if a future session needs a different tour.
+- **When testing against an isolated Compose project (e.g. a clean-clone proof), always pass
+  an explicit `-p <name>`.** The compose file hardcodes `name: mnemos`; running from a
+  different directory without `-p` silently attaches to this machine's real dev-stack
+  volumes and, worse, can delete its containers on a bare `down` — exactly what happened
+  once during `D1` before it was caught. Volumes and containers are two different blast
+  radii; `down` without `-v` only protects the first one.
 - **The frontend test suite is offline by construction** (`A0`). `vitest.setup.ts` installs
   a `fetch` that answers 401 before any test runs, which is also what
   `vi.unstubAllGlobals()` restores. A test that reaches the real network will pass on a

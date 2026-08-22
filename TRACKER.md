@@ -6,15 +6,14 @@
 > **and [`docs/ADAPTATION.md`](docs/ADAPTATION.md)** *in the same commit* — a stale
 > tracker is worse than none.
 
-**Last updated:** 2026-08-22 — reduced `D1` deliverables 1-3 done: a genuinely clean clone
-comes up ready (`make wait`), all 14 critical-path Playwright tests pass in one run, and
-`make demo-seed` + `docs/Demo.md` give a scripted, verified walkthrough of documents,
-database, one MCP call and the Bundle inspector. Deliverables 4-5 (README rewrite, release
-verification) remain in this same session.
+**Last updated:** 2026-08-22 — reduced `D1` deliverables 1-4 done: a genuinely clean clone
+comes up ready (`make wait`), all 14 critical-path Playwright tests pass in one run,
+`make demo-seed` + `docs/Demo.md` give a scripted, verified walkthrough, and the README is
+rewritten on exact current numbers with a new Known-limitations section. Deliverable 5
+(release verification and lifecycle) remains in this same session.
 **Phase:** **Portfolio finish.** One committed milestone remains: reduced `D1`.
-**Next task:** reduced `D1` deliverable 4 — rewrite the README around the verified
-walkthrough, exact commands, and honest limitations, then deliverable 5's release
-verification and lifecycle.
+**Next task:** reduced `D1` deliverable 5 — full backend/frontend gates, a rebuilt Compose
+stack, `/readyz`, the Playwright suite, then take PR #25 out of draft and merge.
 **Branch right now:** `agent/d1-portfolio-release`, PR #25 (draft); `C4`/PR #24 already
 merged to `main`.
 
@@ -169,6 +168,39 @@ merged to `main`.
 > **Not done yet, by design — deliverables 4-5.** No README rewrite beyond deliverable 1's
 > two Quickstart lines and the `docs/Demo.md` pointer added alongside them; no final release
 > verification or PR lifecycle.
+
+> ### 2026-08-22 — `D1` deliverable 4 done: the README is rewritten on measured numbers
+>
+> Every count was re-measured, not carried forward from C4's 2026-08-18 evidence: backend
+> `pytest` — **464 passed** (463 + the new CLI regression test), Ruff/`ruff format`/
+> `mypy --strict` clean across 216 source files, `alembic check` clean; frontend
+> `npm run test` — **114 passed**; `mnemosctl db doctor` — **42 tables, 41 with `FORCE`
+> row-level security**. The README's "41 tables, 40 with RLS" line (both occurrences) was
+> already stale before this session — deliverable 1 found the count first; deliverable 4 is
+> where it got fixed in the shipped document. The `Run the gates` section now also states
+> the exact `npx playwright test` command and its current **14 passed**, which the README
+> previously did not mention at all.
+>
+> **Added a `Known limitations` section** (README, between "Design decisions worth
+> defending" and "Layout") — a compact, reviewer-facing distillation, not a duplicate of
+> TRACKER §4's exhaustive dated list, covering: small local-model behaviour in NL2SQL
+> (execution-time failures on semantically-wrong-but-syntactically-valid SQL, occasional
+> narration echoes of a refused instruction after a successful repair — both real, both
+> harmless, both worth seeing rather than hiding), Keycloak's dev-mode posture and why its
+> seeded-user ids are now pinned, the HS256 single-trust-domain JWT decision and what
+> reverses it, and a pointer to the deferred-scope ledger rather than repeating it.
+>
+> `docs/ADAPTATION.md` §7's `D1` row, its new dated `### D1` subsection in §8, and §10 all
+> updated in the same commit — including a `TRACKER.md`-only-hazard: the compose file's
+> hardcoded `name: mnemos` means an isolated Compose test **must** pass explicit `-p`, or it
+> silently attaches to (and, on a bare `down`, can delete the containers of) this machine's
+> real dev stack. Recorded as its own §10 bullet because it is exactly what happened once
+> during deliverable 1, before the isolation bug was caught — see that dated note above.
+>
+> **Not done yet, by design — deliverable 5.** No final combined verification run (backend
+> gates, frontend gates, rebuilt Compose, `/readyz`, the Playwright suite), no `make bench`
+> re-run (not required — the retrieval/compile path did not move), and PR #25 is still
+> draft.
 
 > ### 2026-08-18 — `C4` done: context is governed, persisted, and inspectable
 >

@@ -28,7 +28,7 @@ for you to discover. This is the honest status.
 | | |
 |---|---|
 | **The stack** | Ten containers — postgres (pgvector), redis, minio, keycloak, ollama, api, worker, realtime, web, and a deterministic demo MCP server — plus a one-shot `migrate` that runs `alembic upgrade head` and must exit successfully before the API starts. Healthchecks on eight serving dependencies |
-| **The schema** | 41 tables across identity, memory, knowledge, chat, context, datasources, tools, prompts and observability. **40 with `FORCE` row-level security**, enforced against an unprivileged app role and proven by a test against a real Postgres — not merely declared in the catalogue |
+| **The schema** | 42 tables across identity, memory, knowledge, chat, context, datasources, tools, prompts and observability. **41 with `FORCE` row-level security**, enforced against an unprivileged app role and proven by a test against a real Postgres — not merely declared in the catalogue |
 | **Identity** | Full OIDC round trip against Keycloak (PKCE S256, split-horizon issuers), internal password auth behind the same provider seam, platform JWT with refresh-token rotation and family revocation, and `mnemosctl bootstrap` to create the first org and admin |
 | **CI** | Every PR runs pytest against a real Postgres and a real Keycloak, ruff, `mypy --strict`, `alembic check`, and a frontend gate of lint + `tsc` + tests + a real `next build` |
 | **The app shell** | A themed, accessible three-column Next.js app at `http://localhost:3000`, with a generated API client and one real call end to end |
@@ -301,6 +301,38 @@ and the compiled prompt.
 
 ---
 
+## Known limitations
+
+Stated rather than left for you to discover:
+
+- **The default model is a 3B parameter local model (`qwen2.5:3b-instruct`), and it shows.**
+  NL2SQL's AST guard and read-only database role are both independent of model quality — a
+  syntactically valid but semantically wrong `SELECT` can still fail at execution (a
+  mis-joined subquery, for instance), surfaced as a distinct, labelled outcome rather than
+  hidden. When the repair loop recovers from a refused write, the model occasionally echoes
+  a fragment of the original adversarial instruction back in its narration even though the
+  SQL panel directly below shows the actually-executed, safe statement. Neither is a
+  security issue — the guard already proved what ran — but both are real, small-model
+  behaviour worth seeing rather than a scripted demo would hide.
+- **Every service is dev-mode, single-node, and not defended against operator error.**
+  Keycloak runs `start-dev` with an ephemeral internal database — its own logs say so
+  explicitly. `deploy/keycloak/mnemos-realm.json` pins fixed UUIDs for the three seeded
+  users specifically so a normal `docker compose down && up` stays reproducible (see
+  `TRACKER.md`'s 2026-08-22 note for the failure this fixes), but nothing here is rated
+  for a second tenant, a second node, or a hostile operator.
+- **The platform JWT is HS256 with one shared secret** across `api`/`worker`/`realtime` —
+  correct for one trust domain with no external verifier and no KMS in this stack, and
+  documented as a decision that reverses the moment a verifier outside that domain exists
+  (`docs/ThreatModel.md` §5.1).
+- **`B4` (multi-step agent plans/loops/checkpoints), `C1` (API keys, full RBAC matrix,
+  tag-scoped ACL UI), `C2` (prompt versioning, cost dashboard) and `C3` (folders,
+  bookmarks, feedback, history search) are deliberately not built.** Existing schema and
+  architecture seams remain for all four; none is a promise in the current plan. See
+  [`TRACKER.md`](TRACKER.md) §3.0 for the full committed-vs-deferred ledger and §4 for the
+  exhaustive, dated list of every known gap.
+
+---
+
 ## Layout
 
 ```
@@ -316,15 +348,24 @@ backend/src/mnemos/
 backend/tests/    the suite — identity, tenant isolation, tokens, invariants
 frontend/src/     Next.js app router · components · generated API client
 deploy/           postgres init (extensions + analytics warehouse) · keycloak realm
-docs/             architecture, design system, threat model, 12 ADRs
+docs/             architecture, design system, threat model, 12 ADRs, Demo.md
 bench_results/    the JSON behind the tables above
 ```
 
 Run the gates the way CI does:
 
 ```bash
-cd backend  && ../.venv/bin/python -m pytest      # 463 passed (needs Docker + Keycloak)
+cd backend  && ../.venv/bin/python -m pytest      # 464 passed (needs Docker + Keycloak)
 cd frontend && npm ci && npm run lint && npx tsc --noEmit && npm run test && npm run build
+                                                   # 114 passed
+```
+
+Critical-path browser coverage — auth, routed chat, RAG/citations, guarded NL2SQL, live
+connector ingestion, MCP approval, and the Bundle inspector — runs against the full Compose
+stack:
+
+```bash
+cd frontend && npx playwright test               # 14 passed (needs the full stack up)
 ```
 
 ---
