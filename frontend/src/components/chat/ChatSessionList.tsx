@@ -72,19 +72,32 @@ export function ChatSessionList() {
   const [renameError, setRenameError] = useState<string | null>(null);
   const [pendingDelete, setPendingDelete] = useState<PendingDelete | null>(null);
   const [query, setQuery] = useState("");
+  const [debouncedQuery, setDebouncedQuery] = useState("");
   const [movingId, setMovingId] = useState<string | null>(null);
   const [creatingFolder, setCreatingFolder] = useState(false);
   const [newFolderName, setNewFolderName] = useState("");
   const [editingFolderId, setEditingFolderId] = useState<string | null>(null);
   const [editingFolderValue, setEditingFolderValue] = useState("");
 
+  // Debounced so every keystroke does not fire a full-text search request —
+  // 300ms is short enough to feel live, long enough to skip the query on a
+  // fast typist's intermediate states.
+  useEffect(() => {
+    const timeout = window.setTimeout(() => setDebouncedQuery(query.trim()), 300);
+    return () => window.clearTimeout(timeout);
+  }, [query]);
+
+  const isSearching = debouncedQuery !== "";
+  const { data: searchData, isPending: isSearchPending } = useQuery({
+    queryKey: ["chat", "sessions", "search", debouncedQuery] as const,
+    queryFn: ({ signal }) => fetchSessions(signal, debouncedQuery),
+    enabled: isSearching,
+  });
+
   const sessions = useMemo(() => data?.sessions ?? [], [data?.sessions]);
+  const searchResults = useMemo(() => searchData?.sessions ?? [], [searchData?.sessions]);
   const folders = useMemo(() => folderData?.folders ?? [], [folderData?.folders]);
-  const groups = useMemo(
-    () => groupSessions(sessions, folders, query),
-    [query, sessions, folders],
-  );
-  const anyVisible = groups.some((group) => group.sessions.length > 0);
+  const groups = useMemo(() => groupSessions(sessions, folders), [sessions, folders]);
 
   async function startNewChat(): Promise<void> {
     const session = await createSession();
@@ -224,7 +237,13 @@ export function ChatSessionList() {
         </label>
       )}
 
-      {sessions.length === 0 && folders.length === 0 && !creatingFolder ? (
+      {isSearching ? (
+        <SearchResults
+          results={searchResults}
+          isPending={isSearchPending}
+          pathname={pathname}
+        />
+      ) : sessions.length === 0 && folders.length === 0 && !creatingFolder ? (
         <EmptyState
           icon={MessageCircle}
           title="No conversations yet"
@@ -368,9 +387,6 @@ export function ChatSessionList() {
                   );
                 })),
           ])}
-          {query.trim() !== "" && !anyVisible && (
-            <li className="px-3 py-4 text-footnote text-label-secondary">No conversations match.</li>
-          )}
         </List>
       )}
 
@@ -408,28 +424,72 @@ export function ChatSessionList() {
   );
 }
 
+type SearchResultsProps = {
+  results: ChatSession[];
+  isPending: boolean;
+  pathname: string | null;
+};
+
+/**
+ * Search-ranked results replace the folder/recency-grouped view entirely
+ * while a query is active — a flat list ordered by relevance, not a filter
+ * within the existing groups, since "which folder is this session in" is
+ * not the question a search is answering (TRACKER §5 deliverable 4). A row
+ * with a `snippet` matched by content; one without matched by its own title.
+ */
+function SearchResults({ results, isPending, pathname }: SearchResultsProps) {
+  if (isPending) {
+    return (
+      <div className="flex flex-col gap-2 px-2" aria-hidden="true">
+        <Skeleton className="h-9 w-full" />
+        <Skeleton className="h-9 w-full" />
+      </div>
+    );
+  }
+  if (results.length === 0) {
+    return <p className="px-3 py-4 text-footnote text-label-secondary">No conversations match.</p>;
+  }
+  return (
+    <List label="Search results">
+      {results.map((session) => {
+        const href = `/chat/${session.id}`;
+        return (
+          <li key={session.id} className="list-row">
+            <Link
+              href={href}
+              aria-current={pathname === href ? "page" : undefined}
+              className="hit-target flex flex-col items-start gap-0.5 px-4 py-2 text-callout text-label transition-colors duration-150 ease-standard hover:bg-fill-tertiary aria-[current=page]:bg-fill-secondary aria-[current=page]:font-semibold"
+            >
+              <MarqueeText text={session.title} className="w-full" />
+              {session.snippet != null && (
+                <span className="line-clamp-2 text-footnote font-normal text-label-secondary">
+                  {session.snippet}
+                </span>
+              )}
+            </Link>
+          </li>
+        );
+      })}
+    </List>
+  );
+}
+
 type SessionGroup =
   | { key: string; label: string; kind: "folder"; folder: Folder; sessions: ChatSession[] }
   | { key: string; label: string; kind: "recency"; sessions: ChatSession[] };
 
-function groupSessions(sessions: ChatSession[], folders: Folder[], query: string): SessionGroup[] {
-  const q = query.trim().toLocaleLowerCase();
-  const filtered = sessions.filter((session) => session.title.toLocaleLowerCase().includes(q));
+function groupSessions(sessions: ChatSession[], folders: Folder[]): SessionGroup[] {
+  const folderGroups: SessionGroup[] = folders.map((folder) => ({
+    key: `folder-${folder.id}`,
+    label: folder.name,
+    kind: "folder" as const,
+    folder,
+    // Every folder is shown, even empty, so a just-created folder does not
+    // vanish until something is filed into it.
+    sessions: sessions.filter((session) => session.folder_id === folder.id),
+  }));
 
-  const folderGroups: SessionGroup[] = folders
-    .map((folder) => ({
-      key: `folder-${folder.id}`,
-      label: folder.name,
-      kind: "folder" as const,
-      folder,
-      sessions: filtered.filter((session) => session.folder_id === folder.id),
-    }))
-    // A folder with no matches during an active search is noise; an empty
-    // folder with no search active is still worth showing, so a
-    // just-created folder does not disappear until something is filed in it.
-    .filter((group) => q === "" || group.sessions.length > 0);
-
-  const unfiled = filtered.filter((session) => session.folder_id === null);
+  const unfiled = sessions.filter((session) => session.folder_id === null);
   const recencyGroups = groupByRecency(unfiled).map((group) => ({
     key: `recency-${group.label}`,
     label: group.label,

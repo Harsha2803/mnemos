@@ -179,6 +179,18 @@ class ChatRepository(Protocol):
         every new list query in this milestone uses."""
         ...
 
+    async def search_sessions(
+        self, *, org_id: OrgId, user_id: UserId, query: str, limit: int
+    ) -> Sequence[ChatSessionSummary]:
+        """Ranked, not chronological: title matches first (a session whose
+        own title matches ranks ahead of one only its content matches), then
+        content matches by `ts_rank`, explicit `id` tiebreak throughout.
+        `ChatSessionSummary.snippet` is set only for a content match, `None`
+        for a title match, so the caller can tell the difference. No cursor:
+        a search result set is small enough at this scope that a second
+        page is optional surface, not correctness (TRACKER §5 deliverable 4)."""
+        ...
+
     async def upsert_feedback(
         self,
         *,

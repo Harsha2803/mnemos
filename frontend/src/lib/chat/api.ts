@@ -18,8 +18,20 @@ export type BookmarkList = components["schemas"]["BookmarkListResponse"];
 export type Feedback = components["schemas"]["FeedbackResponse"];
 export type FeedbackRating = Feedback["rating"];
 
-export async function fetchSessions(signal?: AbortSignal): Promise<ChatSessionList> {
-  const { data, error } = await api.GET("/api/v1/chat/sessions", { signal });
+/**
+ * `query` switches the list from recency-ordered to search-ranked (title
+ * matches first, then full-text content matches) — same endpoint, same
+ * response shape, an optional `snippet` on rows that matched by content
+ * rather than title (TRACKER §5 deliverable 4).
+ */
+export async function fetchSessions(
+  signal?: AbortSignal,
+  query?: string,
+): Promise<ChatSessionList> {
+  const { data, error } = await api.GET("/api/v1/chat/sessions", {
+    signal,
+    params: { query: query ? { q: query } : {} },
+  });
   if (error !== undefined) throw new Error("could not load conversations");
   return data;
 }

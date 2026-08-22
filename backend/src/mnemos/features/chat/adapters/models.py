@@ -14,6 +14,7 @@ from typing import Any
 from sqlalchemy import (
     Boolean,
     CheckConstraint,
+    Computed,
     Float,
     ForeignKey,
     Index,
@@ -23,7 +24,7 @@ from sqlalchemy import (
     UniqueConstraint,
     text,
 )
-from sqlalchemy.dialects.postgresql import JSONB, UUID
+from sqlalchemy.dialects.postgresql import JSONB, TSVECTOR, UUID
 from sqlalchemy.orm import Mapped, mapped_column
 
 from mnemos.core.types import FeedbackRating, FlowKind, MessageRole, check_in
@@ -80,6 +81,7 @@ class ChatMessage(Base):
         CheckConstraint(check_in("role", MessageRole), name="role_valid"),
         UniqueConstraint("session_id", "ordinal", name="uq_chat_message_session_id_ordinal"),
         Index("ix_chat_message_org_id_session_id_ordinal", "org_id", "session_id", "ordinal"),
+        Index("ix_chat_message_content_tsv", "content_tsv", postgresql_using="gin"),
     )
 
     id: Mapped[uuid.UUID] = pk_column()
@@ -90,6 +92,11 @@ class ChatMessage(Base):
     ordinal: Mapped[int] = mapped_column(Integer, nullable=False)
     role: Mapped[str] = mapped_column(String(16), nullable=False)
     content: Mapped[str] = mapped_column(Text, nullable=False)
+    # `C3` deliverable 4: Postgres keeps this consistent with `content` on
+    # every write, not application code — see migration `0008`.
+    content_tsv: Mapped[str] = mapped_column(
+        TSVECTOR, Computed("to_tsvector('english', content)", persisted=True), nullable=False
+    )
 
     # Which pipeline the router chose. Surfaced in the UI so the routing decision
     # is visible instead of mysterious.

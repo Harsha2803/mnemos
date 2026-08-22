@@ -88,7 +88,16 @@ class ChatService:
         user_id: UserId,
         limit: int = DEFAULT_PAGE_SIZE,
         cursor: str | None = None,
+        query: str | None = None,
     ) -> ChatSessionPage:
+        if query is not None:
+            # Search-ranked, not recency-ordered, and no cursor — TRACKER §5
+            # deliverable 4 scopes this to one page; the result set at this
+            # scope is small enough that a second page is optional surface.
+            rows = await self._repository.search_sessions(
+                org_id=org_id, user_id=user_id, query=query, limit=limit
+            )
+            return ChatSessionPage(sessions=tuple(rows), next_cursor=None)
         before = decode_cursor(cursor) if cursor is not None else None
         # One extra row, never shown, to answer "is there a next page" without
         # a second COUNT query.

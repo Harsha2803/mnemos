@@ -5,12 +5,13 @@
 > state. [`TRACKER.md`](../TRACKER.md) holds live task status; this holds the design.
 
 **Last updated:** 2026-08-22 — `D1` shipped (PR #25); `C3` — conversation product depth —
-was then reopened by explicit project-owner decision (docs/Roadmap.md §2). Deliverables 1-3
-(folders, bookmarks, feedback) are done: backend vertical slices, 21 new tests plus 0
-regressions across 274 backend tests, frontend UI plus a new `/bookmarks` screen with 0
-regressions across 122 frontend tests, and live browser walkthroughs against rebuilt
-containers. Deliverables 4-5 (history search, audit log) remain. `B4`, `C1`, `C2` stay
-deliberately deferred; full detail is in `TRACKER.md`'s 2026-08-22 dated notes.
+was then reopened by explicit project-owner decision (docs/Roadmap.md §2). Deliverables 1-4
+(folders, bookmarks, feedback, history search) are done: backend vertical slices including a
+real migration (`0008`), 26 new tests plus 0 regressions across 279 backend tests, frontend
+UI plus a new `/bookmarks` screen and a search-results view with 0 regressions across 124
+frontend tests, and live browser walkthroughs against rebuilt containers — two real bugs
+found and fixed closing deliverable 4. Deliverable 5 (audit log) remains. `B4`, `C1`, `C2`
+stay deliberately deferred; full detail is in `TRACKER.md`'s 2026-08-22 dated notes.
 
 ---
 
@@ -110,7 +111,7 @@ rows are marked and are not promises in the portfolio plan.
 | **A tool runtime with a trust boundary** | `features/tools/`: MCP registry, per-user encrypted credentials, live-role grants, trust tiers, durable approval, invocation records, and a Tool console. A denial names the offending source on screen | `B3` ✅ |
 | **Multi-step work that can be inspected mid-flight** | Optional future `flows/agent/`: a bounded state machine over tools with checkpoints and a step trace | `B4` deferred |
 | **Conversation persistence** — sessions, messages, streaming | `features/chat/`: `chat_session` + `chat_message`, SSE token streaming | `A1` |
-| **Conversation *management*** — the part that makes it usable past the first week | Folders, bookmarks (built), feedback/history search (in progress) | `C3` in progress |
+| **Conversation *management*** — the part that makes it usable past the first week | Folders, bookmarks, feedback, history search (built) | `C3` in progress |
 | **Prompts as data, not as string literals in a handler** | Optional DB-backed versioned prompts with diff and activation | `C2` deferred |
 | **Cost and token accounting** | Optional `inference_call` ledger and cost dashboard | `C2` deferred |
 | **An audit trail** | Expanded `audit_log` product surface | `C3` deliverable 5, not started |
@@ -1421,12 +1422,14 @@ because the gap between what `docs/` describes and what runs is the thing this f
 to keep honest:
 
 - ~~**There is no conversation *organization* — no folders, bookmarks, feedback, or
-  history search.**~~ **`C3` deliverables 1-3 (folders, bookmarks, feedback) built
-  2026-08-22.** Sessions can be grouped into folders, created/renamed/deleted from the
-  sidebar, with a session movable in and out. Any assistant answer can be bookmarked with a
-  note from the transcript and reviewed on a dedicated `/bookmarks` screen, or rated up/down
-  with an optional comment on a down rating. History search and the audit log (deliverables
-  4-5) remain not started — full evidence in TRACKER's 2026-08-22 `C3` dated notes.
+  history search.**~~ **`C3` deliverables 1-4 (folders, bookmarks, feedback, history
+  search) built 2026-08-22.** Sessions can be grouped into folders, created/renamed/deleted
+  from the sidebar, with a session movable in and out. Any assistant answer can be
+  bookmarked with a note from the transcript and reviewed on a dedicated `/bookmarks`
+  screen, or rated up/down with an optional comment on a down rating. The sidebar search box
+  now full-text searches message content, not just session titles, via a real migration
+  (`chat_message.content_tsv`, GIN-indexed). The audit log (deliverable 5) remains not
+  started — full evidence in TRACKER's 2026-08-22 `C3` dated notes.
 
 - **`B1` is done.** There is a source connector abstraction, an event bus, an authenticated
   realtime channel, a worker that actually processes ingestion jobs, and a browser-verified

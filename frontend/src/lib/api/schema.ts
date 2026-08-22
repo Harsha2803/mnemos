@@ -825,6 +825,8 @@ export interface components {
             created_at: string;
             /** Updated At */
             updated_at: string;
+            /** Snippet */
+            snippet?: string | null;
         };
         /** CitationResponse */
         CitationResponse: {
@@ -1747,6 +1749,7 @@ export interface operations {
             query?: {
                 limit?: number;
                 cursor?: string | null;
+                q?: string | null;
             };
             header?: never;
             path?: never;

@@ -17,7 +17,7 @@ from __future__ import annotations
 from collections.abc import Sequence
 from datetime import datetime
 
-from sqlalchemy import delete, exists, func, literal, select, tuple_, update
+from sqlalchemy import delete, exists, func, literal, select, text, tuple_, update
 from sqlalchemy.dialects.postgresql import insert
 
 from mnemos.core.ids import IdGenerator
@@ -95,6 +95,77 @@ class SqlChatRepository:
         async with self._db.session(org_id=org_id) as session:
             rows = (await session.scalars(query)).all()
         return [_session_summary(r) for r in rows]
+
+    async def search_sessions(
+        self, *, org_id: OrgId, user_id: UserId, query: str, limit: int
+    ) -> Sequence[ChatSessionSummary]:
+        # Raw SQL rather than SQLAlchemy Core: this is a ranked UNION of a
+        # title-match branch and a full-text content-match branch, deduped
+        # to one row per session — the same `text()`-with-bound-params shape
+        # `features/knowledge/adapters/jobs_repository.py` already uses for
+        # a query this awkward to express through the query builder.
+        statement = text(
+            """
+            WITH title_matches AS (
+                SELECT id, org_id, user_id, title, is_archived, folder_id,
+                       last_message_at, created_at, updated_at,
+                       2.0::float8 AS rank, NULL::text AS snippet
+                  FROM chat_session
+                 WHERE org_id = :org_id AND user_id = :user_id AND deleted_at IS NULL
+                   AND title ILIKE '%' || :query || '%'
+            ),
+            content_matches AS (
+                SELECT DISTINCT ON (s.id)
+                       s.id, s.org_id, s.user_id, s.title, s.is_archived, s.folder_id,
+                       s.last_message_at, s.created_at, s.updated_at,
+                       ts_rank(m.content_tsv, websearch_to_tsquery('english', :query)) AS rank,
+                       ts_headline(
+                           'english', m.content, websearch_to_tsquery('english', :query),
+                           'MaxFragments=1, MaxWords=20'
+                       ) AS snippet
+                  FROM chat_session s
+                  JOIN chat_message m ON m.session_id = s.id
+                 WHERE s.org_id = :org_id AND s.user_id = :user_id AND s.deleted_at IS NULL
+                   AND m.content_tsv @@ websearch_to_tsquery('english', :query)
+                 ORDER BY s.id,
+                          ts_rank(m.content_tsv, websearch_to_tsquery('english', :query)) DESC
+            ),
+            combined AS (
+                SELECT DISTINCT ON (id)
+                       id, org_id, user_id, title, is_archived, folder_id,
+                       last_message_at, created_at, updated_at, rank, snippet
+                  FROM (
+                      SELECT * FROM title_matches
+                      UNION ALL
+                      SELECT * FROM content_matches
+                  ) u
+                 ORDER BY id, rank DESC
+            )
+            SELECT * FROM combined
+             ORDER BY rank DESC, id DESC
+             LIMIT :limit
+            """
+        )
+        async with self._db.session(org_id=org_id) as session:
+            result = await session.execute(
+                statement, {"org_id": org_id, "user_id": user_id, "query": query, "limit": limit}
+            )
+            rows = result.mappings().all()
+        return [
+            ChatSessionSummary(
+                id=ChatSessionId(row["id"]),
+                org_id=OrgId(row["org_id"]),
+                user_id=UserId(row["user_id"]),
+                title=row["title"],
+                is_archived=row["is_archived"],
+                folder_id=FolderId(row["folder_id"]) if row["folder_id"] is not None else None,
+                last_message_at=row["last_message_at"],
+                created_at=row["created_at"],
+                updated_at=row["updated_at"],
+                snippet=_plain_snippet(row["snippet"]),
+            )
+            for row in rows
+        ]
 
     async def get_session(
         self, *, org_id: OrgId, session_id: ChatSessionId
@@ -538,6 +609,16 @@ class SqlChatRepository:
             )
             await session.refresh(row)
             return _message_record(row)
+
+
+def _plain_snippet(headline: str | None) -> str | None:
+    """`ts_headline` wraps its matched terms in `<b>...</b>` by default — an
+    empty `StartSel`/`StopSel` in the options string is a Postgres syntax
+    error, not a way to suppress them, so the tags are stripped here instead.
+    Plain text only reaches the frontend; nothing renders it as HTML."""
+    if headline is None:
+        return None
+    return headline.replace("<b>", "").replace("</b>", "")
 
 
 def _session_summary(row: ChatSession) -> ChatSessionSummary:

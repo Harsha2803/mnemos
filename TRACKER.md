@@ -6,16 +6,18 @@
 > **and [`docs/ADAPTATION.md`](docs/ADAPTATION.md)** *in the same commit* — a stale
 > tracker is worse than none.
 
-**Last updated:** 2026-08-22 — `C3` deliverables 1-3 (folders, bookmarks, feedback) are
-**done**: backend vertical slices, 21 new backend tests plus 0 regressions across 274,
-frontend UI for all three plus a new `/bookmarks` screen, 0 regressions across 122 frontend
-tests, and live browser walkthroughs against rebuilt `api`/`web` containers for each. Full
-evidence is in this file's 2026-08-22 dated notes. Deliverables 4-5 (history search, audit
-log) remain.
+**Last updated:** 2026-08-22 — `C3` deliverables 1-4 (folders, bookmarks, feedback, history
+search) are **done**: backend vertical slices including a real migration (`0008`,
+full-text search column + GIN index), 26 new backend tests plus 0 regressions across 279,
+frontend UI for all four plus a new `/bookmarks` screen and a search-results view, 0
+regressions across 124 frontend tests, and live browser walkthroughs against rebuilt
+`api`/`migrate`/`web` containers for each — two real bugs found and fixed closing deliverable
+4 (a `ts_headline` options-string syntax error, and a migrate/api separate-image rebuild gap).
+Full evidence is in this file's 2026-08-22 dated notes. Deliverable 5 (audit log) remains.
 **Phase:** **`C3` — conversation product depth.** Committed 2026-08-22 by explicit
 project-owner decision, reopening scope the 2026-08-18 reset had deferred. `B4`, `C1`, `C2`
 stay deliberately deferred; do not start any of them without a separate explicit decision.
-**Next task:** `C3` deliverable 4 (history search) — full brief in §5.
+**Next task:** `C3` deliverable 5 (audit log) — full brief in §5.
 **Branch right now:** `agent/c3-conversation-depth`, PR #26 (draft) — pushed after
 deliverable 1's commit.
 
@@ -3347,6 +3349,89 @@ Recorded so they are not rediscovered as surprises:
 > manual cleanup step.
 >
 > **Not done yet, by design — deliverables 4-5** (history search, audit log) remain.
+
+---
+
+> ### 2026-08-22 — `C3` deliverable 4 done: history search, and two real bugs found closing it
+>
+> **A real schema change, not just application code.** New migration
+> `backend/migrations/versions/0008_chat_message_search.py`: `chat_message` gains a
+> `content_tsv tsvector GENERATED ALWAYS AS (to_tsvector('english', content)) STORED NOT NULL`
+> column plus a GIN index — Postgres keeps it consistent with `content` on every write, no
+> application code involved. Verified reversible (`alembic downgrade 0007` then `upgrade
+> head` again, clean both directions) and consistent with the ORM model (`alembic check`
+> passes — `ChatMessage.content_tsv` is declared with `Computed(..., persisted=True)` and the
+> GIN index is declared in `__table_args__`, matching the migration's raw SQL exactly; without
+> both of those the check fails with a spurious `modify_nullable`/`remove_index` diff).
+>
+> **Backend.** New `SqlChatRepository.search_sessions`: raw SQL (a `WITH` of a title-`ILIKE`
+> branch ranked fixed-high, a full-text `websearch_to_tsquery` branch ranked by `ts_rank`,
+> `DISTINCT ON` deduped to one row per session, explicit `id` tiebreak) — the same
+> `text()`-with-bound-params shape `features/knowledge/adapters/jobs_repository.py` already
+> uses for a query this awkward to express through the query builder. `ChatSessionSummary`
+> gained `snippet: str | None = None`, populated only for a content match. `GET /chat/sessions`
+> gained an optional `q` param — same endpoint, same response shape, not a new route; an
+> empty/whitespace `q` is treated as no search. **No cursor for search results** — a
+> deliberate, stated scope cut (TRACKER §5's original brief), not an oversight.
+>
+> **A real bug found and fixed while building this, not just verified:** the plan called for
+> disabling `ts_headline`'s default `<b>...</b>` match-highlighting via `StartSel=, StopSel=`
+> in its options string, so a snippet would reach the frontend as plain text. Postgres rejects
+> empty option values outright — `invalid parameter list format` — a syntax error, not a way
+> to suppress the tags. Fixed by keeping the default highlighting and stripping `<b>`/`</b>`
+> in Python (`_plain_snippet`) before the value ever reaches `ChatSessionSummary`, with a
+> regression test (`test_a_session_is_found_by_message_content_it_does_not_title_match`
+> asserts `"<b>" not in snippet`) so a future change to the options string cannot silently
+> reintroduce raw HTML on the wire. Caught by the live browser verification below, not by the
+> unit tests alone — the first browser check (before this fix shipped to the rebuilt `api`
+> container) showed literal `<b>revenue</b>` text in a real search result.
+>
+> **A second real gap, operational rather than a code bug:** rebuilding `docker compose build
+> api` does **not** rebuild the `migrate` service, even though both build from the same
+> `backend/Dockerfile` — they are two separate service definitions and therefore two separate
+> images. Restarting only `api` after adding migration `0008` left `migrate` on its old image;
+> the next `docker compose up -d api` run re-triggered `migrate` (a one-shot dependency), which
+> failed with `Can't locate revision identified by '0008'` because its baked-in `migrations/`
+> directory didn't have the new file yet, even though the *database* already had `0008`
+> applied (from testing `alembic check` locally). Fixed by rebuilding both
+> (`docker compose build api migrate`). Any future migration-bearing deliverable in this
+> milestone needs the same two-service rebuild, not just `api`.
+>
+> **Tests.** `backend/tests/test_search_endpoints.py` (5 tests, real Postgres): a session found
+> by content it does not title-match, with a clean plain-text snippet; a title match ranks
+> above a content-only match for the same query; a session with genuinely no match is excluded;
+> another org's matching session never appears; a blank query falls back to ordinary recency
+> listing byte-for-byte. Full suite: 279 passed (274 + 5), 0 regressions. `ruff`/`ruff format`/
+> `mypy --strict` clean; `alembic check` clean.
+>
+> **Frontend.** `lib/chat/api.ts`'s `fetchSessions` gained an optional `query` argument.
+> `ChatSessionList.tsx`: the existing search input's client-side `.includes()` title filter is
+> **replaced**, not augmented — a 300ms-debounced call to the search-augmented endpoint once
+> `query.trim()` is non-empty, rendering a new flat `SearchResults` list (ranked, not grouped
+> by folder/recency — "which folder is this session in" is not what a search answers) with a
+> snippet shown under any row that matched by content. Clearing the query returns to the
+> existing folder/recency-grouped view unchanged. This is a genuine behavior change from what
+> shipped in deliverable 1, not an additive one — worth being explicit about since a reviewer
+> diffing behavior should be able to see title-only matching stopped being the whole story.
+>
+> **Frontend tests.** New `components/chat/search.test.tsx` (2 tests): typing a query calls
+> the search endpoint with `q` set and renders the returned snippet; a query with no matches
+> shows "No conversations match." Full suite: 124 passed (122 + 2), 0 regressions.
+> `npm run typecheck` and `npm run lint` clean.
+>
+> **Live-verified in a real browser**, and this is exactly where the `ts_headline` bug above
+> was actually caught: rebuilt `api`+`migrate`+`web`, regenerated `schema.ts`, searched a term
+> matching both a session title and a message body, confirmed the title match ranks first and
+> a genuine flat-list re-render replaces the grouped view (not a filter within it), confirmed
+> the content match's snippet rendered as clean text only after the `api` rebuild picked up
+> the fix, searched a nonsense term and got "No conversations match.", and cleared the search
+> to confirm the folder/recency view returns. (One visual read of the DOM initially reported
+> the same title-matching session appearing "8 times" — traced to `MarqueeText`'s scroll-loop
+> rendering the label into multiple text nodes for the CSS marquee effect, confirmed by the
+> screenshot showing exactly two real rows; not a duplicate-results bug.) Zero console errors
+> on the final run.
+>
+> **Not done yet, by design — deliverable 5** (audit log) remains.
 
 ---
 

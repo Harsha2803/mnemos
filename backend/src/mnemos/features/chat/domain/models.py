@@ -45,6 +45,10 @@ class ChatSessionSummary:
     last_message_at: datetime | None
     created_at: datetime
     updated_at: datetime
+    # `C3` deliverable 4: a snippet of the matching passage, present only
+    # when this row came from `search_sessions` matching *message content*
+    # rather than the session's own title — `None` everywhere else.
+    snippet: str | None = None
 
 
 @dataclass(frozen=True, slots=True)

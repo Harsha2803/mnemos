@@ -60,6 +60,7 @@ class ChatSessionResponse(BaseModel):
     last_message_at: str | None
     created_at: str
     updated_at: str
+    snippet: str | None = None
 
 
 class ChatSessionListResponse(BaseModel):
@@ -136,6 +137,7 @@ def _session_response(summary: ChatSessionSummary) -> ChatSessionResponse:
         else None,
         created_at=summary.created_at.isoformat(),
         updated_at=summary.updated_at.isoformat(),
+        snippet=summary.snippet,
     )
 
 
@@ -233,12 +235,17 @@ async def list_sessions(
     service: Annotated[ChatService, Depends(_service)],
     limit: Annotated[int, Query(ge=1, le=MAX_LIMIT)] = DEFAULT_LIMIT,
     cursor: Annotated[str | None, Query()] = None,
+    q: Annotated[str | None, Query(max_length=200)] = None,
 ) -> ChatSessionListResponse:
+    # An empty/whitespace-only `q` is the same as no search — recency order,
+    # not a search that matches everything.
+    query = q.strip() if q is not None and q.strip() else None
     page = await service.list_sessions(
         org_id=caller.principal.org_id,
         user_id=caller.principal.principal_id,
         limit=limit,
         cursor=cursor,
+        query=query,
     )
     return ChatSessionListResponse(
         sessions=[_session_response(s) for s in page.sessions],
