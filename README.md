@@ -59,6 +59,7 @@ authoritative list of what is built, with the evidence for each claim.
 ```bash
 git clone https://github.com/Harsha2803/mnemos && cd mnemos
 docker compose up -d                    # ten services, web + demo MCP included
+make wait                               # blocks until ready; first run pulls the ~2GB model
 docker compose exec api mnemosctl bootstrap \
     --org-slug mnemos --org-name Mnemos --admin-email admin@mnemos.local
 ```

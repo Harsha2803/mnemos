@@ -11,7 +11,7 @@ PY   := $(VENV)/bin/python
 PIP  := $(VENV)/bin/pip
 
 .DEFAULT_GOAL := help
-.PHONY: help venv install install-neural up down logs ps rebuild bootstrap doctor \
+.PHONY: help venv install install-neural up wait down logs ps rebuild bootstrap doctor \
         migrate migrate-down check test test-fast lint types web-install web-dev \
         web-test web-build bench ask clean
 
@@ -35,6 +35,16 @@ install-neural: install ## Also install sentence-transformers (~2.5GB, optional)
 
 up: ## Bring the whole stack up (ten services, web and demo MCP included)
 	docker compose up -d
+
+wait: ## Block until /readyz is fully green. First run also pulls the ~2GB Ollama model
+	@echo "Waiting for postgres, redis, ollama (pulls the model on first run) and object storage..."
+	@for i in $$(seq 1 100); do \
+	  if curl -sf http://localhost:8000/readyz 2>/dev/null | grep -q '"status":"ready"'; then \
+	    echo "ready."; exit 0; \
+	  fi; \
+	  sleep 3; \
+	done; \
+	echo "Still not ready after 5 minutes. Check: docker compose logs ollama-init api"; exit 1
 
 down: ## Stop everything; volumes are preserved
 	docker compose down

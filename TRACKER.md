@@ -6,14 +6,55 @@
 > **and [`docs/ADAPTATION.md`](docs/ADAPTATION.md)** *in the same commit* — a stale
 > tracker is worse than none.
 
-**Last updated:** 2026-08-18 — `C4` is complete on PR #24: bitemporal Postgres memory,
-the hard-budget context compiler, persisted bundles, the Memory screen and Bundle inspector,
-and the unchanged benchmark reproduced on Postgres.
+**Last updated:** 2026-08-22 — reduced `D1` deliverable 1 (clean-clone Compose proof) is
+done; deliverables 2-5 (Playwright hardening, demo script, README rewrite, release
+verification) remain in this same session.
 **Phase:** **Portfolio finish.** One committed milestone remains: reduced `D1`.
-**Next task:** reduced `D1` — prove clean-clone Compose, cover the critical journeys in
-Playwright, add the deterministic walkthrough, and finish the measured portfolio README.
-**Branch right now:** `agent/c4-governed-context`, PR #24; `C4` implementation and evidence
-complete. Close its repository lifecycle before starting reduced `D1`.
+**Next task:** reduced `D1` deliverable 2 — make the critical-path Playwright journeys
+reliable in Chromium, then the demo script, the README rewrite, and release verification.
+**Branch right now:** `agent/d1-portfolio-release`, not yet pushed; `C4`/PR #24 already
+merged to `main`.
+
+> ### 2026-08-22 — `D1` deliverable 1 done: a genuinely clean clone comes up ready
+>
+> **Proved, not just documented:** `git clone` from `github.com/Harsha2803/mnemos` into a
+> scratch directory, `docker compose up -d --build` under an **isolated project name**
+> (`mnemos-cleanclone`) so it gets its own fresh named volumes rather than silently
+> reattaching to this machine's existing `mnemos_*` dev volumes — the first attempt did
+> exactly that by accident (same `name: mnemos` in the compose file regardless of
+> directory) and would have proven nothing about a first run. Fresh Postgres ran its
+> `docker-entrypoint-initdb.d` init scripts for the first time, `alembic upgrade head`
+> applied all revisions, and `ollama-init` pulled `qwen2.5:3b-instruct` (~1.9 GB) into an
+> empty volume — end to end, container creation to `/readyz` fully green, in a little over
+> two minutes. `mnemosctl bootstrap` created the org/admin/roles/providers and was then
+> confirmed idempotent on a second run (`already present` on every row). `mnemosctl db
+> doctor` reported **42 tables, 41 with `FORCE` row-level security** — the current true
+> count, which is one table more than the README's stale "41 tables, 40 with RLS" line;
+> deliverable 4 fixes that. The isolated project and its volumes were torn down
+> (`down -v`) afterward, and the real dev-stack volumes were confirmed untouched throughout.
+>
+> **A real gap found and fixed, not just verified:** `/readyz`'s ollama check
+> (`OllamaChatModel.health`, `backend/src/mnemos/features/llm/adapters/ollama.py`)
+> correctly reports not-ready while the model is mid-pull, but nothing in the compose file
+> or the docs gave a first-time user a way to wait for it short of hand-polling `curl` —
+> `ollama-init` is a fire-and-forget one-shot nothing else `depends_on`. Added `make wait`
+> (Makefile): polls `/readyz` every 3s up to 5 minutes, then fails with a pointer to
+> `docker compose logs ollama-init api` rather than hanging silently forever. The README
+> Quickstart now runs it between `docker compose up -d` and `bootstrap`. Verified both
+> paths live: an already-ready stack returns `ready.` in under 50ms, and the in-progress
+> pull correctly reports `not_ready`/`ollama: error` until the model lands, exactly as
+> designed — this is documented behavior now, not a mystery.
+>
+> The original 10-service dev stack (real `mnemos_*` volumes, all accumulated dev/test
+> state) was stopped before this test and restarted after; `make wait` on it returned
+> `ready.` immediately and `docker compose ps` showed all ten containers healthy/running,
+> confirming the stop/restart round trip lost nothing.
+>
+> **Not done yet, by design — deliverables 2-5.** No Playwright changes, no demo script, no
+> README rewrite beyond the two Quickstart lines above, no benchmark re-run (the
+> retrieval/compile path did not move). Continuing in the same session per the project
+> owner's explicit choice to checkpoint through all of `D1` rather than stop per
+> deliverable.
 
 > ### 2026-08-18 — `C4` done: context is governed, persisted, and inspectable
 >
