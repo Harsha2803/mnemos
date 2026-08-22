@@ -6,13 +6,14 @@
 > **and [`docs/ADAPTATION.md`](docs/ADAPTATION.md)** *in the same commit* — a stale
 > tracker is worse than none.
 
-**Last updated:** 2026-08-22 — reduced `D1` deliverable 1 (clean-clone Compose proof) is
-done; deliverables 2-5 (Playwright hardening, demo script, README rewrite, release
-verification) remain in this same session.
+**Last updated:** 2026-08-22 — reduced `D1` deliverables 1-2 done: a genuinely clean clone
+comes up ready (`make wait`), and all 14 critical-path Playwright tests pass in one run
+after fixing a real Keycloak fixture bug (see the dated notes below). Deliverables 3-5
+(demo script, README rewrite, release verification) remain in this same session.
 **Phase:** **Portfolio finish.** One committed milestone remains: reduced `D1`.
-**Next task:** reduced `D1` deliverable 2 — make the critical-path Playwright journeys
-reliable in Chromium, then the demo script, the README rewrite, and release verification.
-**Branch right now:** `agent/d1-portfolio-release`, not yet pushed; `C4`/PR #24 already
+**Next task:** reduced `D1` deliverable 3 — the deterministic demo dataset/walkthrough
+script, then the README rewrite and release verification.
+**Branch right now:** `agent/d1-portfolio-release`, PR #25 (draft); `C4`/PR #24 already
 merged to `main`.
 
 > ### 2026-08-22 — `D1` deliverable 1 done: a genuinely clean clone comes up ready
@@ -55,6 +56,68 @@ merged to `main`.
 > retrieval/compile path did not move). Continuing in the same session per the project
 > owner's explicit choice to checkpoint through all of `D1` rather than stop per
 > deliverable.
+
+> ### 2026-08-22 — a real bug found running deliverable 2: Keycloak's dev storage has no
+> volume, so any container recreation silently locks out every seeded user
+>
+> Running the full Playwright suite for the first time in one sitting (deliverable 2)
+> failed all 11 auth-dependent specs at the identical point — `signIn()`'s
+> `page.waitForURL(WEB/)` timing out on `/signin?error=auth_failed` — which looked like
+> flakiness but was not. `docker compose logs api` named the real cause precisely:
+> `auth.signin_failed reason="email 'analyst@mnemos.local' already belongs to a different
+> subject in this org"` — M3.4's JIT-provisioning collision guard, correctly refusing to
+> re-link an email to a new IdP subject.
+>
+> **Root cause, traced to a real subject, not the stack in general:** every other stateful
+> service (postgres, redis, minio, ollama) has a named volume in `docker-compose.yml`;
+> **Keycloak does not.** Its dev-mode embedded H2 database lives only in the container's
+> writable layer, so recreating the container — not merely restarting it — discards it and
+> `--import-realm` mints a **fresh random UUID** for every seeded user on the next import.
+> `app_user.external_subject`, JIT-provisioned into Postgres against the *old* UUID back on
+> 2026-08-15, then permanently disagrees with Keycloak's new one, and every future login
+> for that email is correctly refused forever — not a timing race, a durable lockout.
+> Traced with the Keycloak admin API (`GET .../users?username=analyst@mnemos.local`)
+> against a direct `psql` read of `app_user.external_subject`: Keycloak reported
+> `c9d3481a-...`, Postgres still held `d25a281f-...` from creation. This session's own
+> deliverable 1 work caused *this instance* of it — an early clean-clone attempt ran
+> `docker compose down` against the shared `mnemos` project from the wrong directory before
+> the isolation bug was caught and fixed — but the underlying fragility is real and
+> pre-existing: **any** `docker compose down && up`, image update, or host reboot that
+> recreates the Keycloak container reproduces this exact lockout for anyone, including a
+> reviewer following the README, and there was no guidance anywhere for recovering from it.
+>
+> **Fixed at the source, not patched around:** `deploy/keycloak/mnemos-realm.json` now
+> pins an explicit `id` for each of the three seeded users (a standard field in Keycloak's
+> `UserRepresentation` import schema), so a fresh import is deterministic — the same
+> subject UUID every time, matching what `docker-entrypoint-initdb.d` and the deterministic
+> demo MCP fixture already do elsewhere in this stack. `analyst@mnemos.local`'s pinned id is
+> the exact value already bound in Postgres (`d25a281f-9f3a-4744-b394-ce0c1d57c553`), so the
+> fix required no Postgres write and lost no accumulated history; `admin@mnemos.local` and
+> `user@mnemos.local` (never yet JIT-provisioned in this stack) got fresh pinned UUIDs for
+> the same future-proofing. Verified by recreating only the Keycloak container
+> (`docker compose up -d --force-recreate keycloak`) and confirming the admin API now
+> reports the pinned id, matching Postgres exactly, with zero other services touched.
+>
+> **Why this belongs in `D1` rather than being filed as a known gap:** deliverable 1
+> already claims a proof that clean-clone startup is reproducible; a stack whose identity
+> layer silently and permanently breaks itself on the *second* normal `docker compose down
+> && up` is not that claim, it just had not been exercised twice in one sitting before now.
+> No design document mentioned it because no prior session's live verification happened to
+> straddle a Keycloak container recreation after a JIT-provisioned login already existed in
+> Postgres.
+>
+> **`D1` deliverable 2 done, once the fixture fix landed: all 7 critical journeys are
+> reliable in Chromium, unmodified.** `npx playwright test` — **14/14 passed in 2.5
+> minutes**, sequentially, against the real stack (Postgres, Redis, Ollama, MinIO, Keycloak,
+> the demo MCP server): auth (7 cases: sign-in, no-credential-in-URL/storage, reload
+> persistence, sign-out, unknown workspace, unauthenticated redirect, bare-token refusal),
+> routed chat streaming/persistence, memory lifecycle + bundle inspection, document
+> upload/RAG/citation click-through, NL2SQL happy-path and guarded-write-refusal, live
+> connector ingestion over the authenticated WebSocket, and MCP register→discover→grant→
+> approve→result. None of the seven spec files needed a code change — no hardcoded
+> `waitForTimeout`, every wait already keyed to a real DOM/URL condition, every spec already
+> self-skips with a named reason when a dependency is down. The only real defect was the
+> Keycloak fixture bug above; once fixed, the existing suite needed no hardening at all.
 
 > ### 2026-08-18 — `C4` done: context is governed, persisted, and inspectable
 >
