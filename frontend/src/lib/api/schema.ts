@@ -286,6 +286,41 @@ export interface paths {
         patch: operations["update_folder_api_v1_chat_folders__folder_id__patch"];
         trace?: never;
     };
+    "/api/v1/chat/messages/{message_id}/bookmark": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        /** Upsert Bookmark */
+        put: operations["upsert_bookmark_api_v1_chat_messages__message_id__bookmark_put"];
+        post?: never;
+        /** Remove Bookmark */
+        delete: operations["remove_bookmark_api_v1_chat_messages__message_id__bookmark_delete"];
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/v1/chat/bookmarks": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /** List Bookmarks */
+        get: operations["list_bookmarks_api_v1_chat_bookmarks_get"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
     "/api/v1/knowledge/documents": {
         parameters: {
             query?: never;
@@ -633,6 +668,43 @@ export interface components {
             /** Title */
             title?: string | null;
         };
+        /** BookmarkListResponse */
+        BookmarkListResponse: {
+            /** Bookmarks */
+            bookmarks: components["schemas"]["BookmarkedMessageResponse"][];
+            /** Next Cursor */
+            next_cursor: string | null;
+        };
+        /** BookmarkResponse */
+        BookmarkResponse: {
+            /** Id */
+            id: string;
+            /** Message Id */
+            message_id: string;
+            /** Note */
+            note: string | null;
+            /** Created At */
+            created_at: string;
+        };
+        /** BookmarkedMessageResponse */
+        BookmarkedMessageResponse: {
+            /** Id */
+            id: string;
+            /** Message Id */
+            message_id: string;
+            /** Session Id */
+            session_id: string;
+            /** Session Title */
+            session_title: string;
+            /** Message Role */
+            message_role: string;
+            /** Message Content */
+            message_content: string;
+            /** Note */
+            note: string | null;
+            /** Created At */
+            created_at: string;
+        };
         /** BundleItemResponse */
         BundleItemResponse: {
             /** Id */
@@ -699,6 +771,8 @@ export interface components {
             finish_reason: string | null;
             /** Created At */
             created_at: string;
+            /** Bookmarked */
+            bookmarked: boolean;
         };
         /** ChatSessionDetailResponse */
         ChatSessionDetailResponse: {
@@ -1384,6 +1458,11 @@ export interface components {
             /** Position */
             position?: number | null;
         };
+        /** UpsertBookmarkRequest */
+        UpsertBookmarkRequest: {
+            /** Note */
+            note?: string | null;
+        };
         /** ValidationError */
         ValidationError: {
             /** Location */
@@ -1916,6 +1995,102 @@ export interface operations {
                 };
                 content: {
                     "application/json": components["schemas"]["FolderResponse"];
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
+    upsert_bookmark_api_v1_chat_messages__message_id__bookmark_put: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                message_id: string;
+            };
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["UpsertBookmarkRequest"];
+            };
+        };
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["BookmarkResponse"];
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
+    remove_bookmark_api_v1_chat_messages__message_id__bookmark_delete: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                message_id: string;
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Successful Response */
+            204: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content?: never;
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
+    list_bookmarks_api_v1_chat_bookmarks_get: {
+        parameters: {
+            query?: {
+                limit?: number;
+                cursor?: string | null;
+            };
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["BookmarkListResponse"];
                 };
             };
             /** @description Validation Error */

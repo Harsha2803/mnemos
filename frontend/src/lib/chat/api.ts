@@ -12,6 +12,9 @@ export type ChatSessionDetail = components["schemas"]["ChatSessionDetailResponse
 export type ChatSessionList = components["schemas"]["ChatSessionListResponse"];
 export type Folder = components["schemas"]["FolderResponse"];
 export type FolderList = components["schemas"]["FolderListResponse"];
+export type Bookmark = components["schemas"]["BookmarkResponse"];
+export type BookmarkedMessage = components["schemas"]["BookmarkedMessageResponse"];
+export type BookmarkList = components["schemas"]["BookmarkListResponse"];
 
 export async function fetchSessions(signal?: AbortSignal): Promise<ChatSessionList> {
   const { data, error } = await api.GET("/api/v1/chat/sessions", { signal });
@@ -116,4 +119,28 @@ export async function deleteFolder(folderId: string): Promise<void> {
     params: { path: { folder_id: folderId } },
   });
   if (error !== undefined) throw new Error("could not delete this folder");
+}
+
+export const CHAT_BOOKMARKS_QUERY_KEY = ["chat", "bookmarks"] as const;
+
+export async function upsertBookmark(messageId: string, note?: string): Promise<Bookmark> {
+  const { data, error } = await api.PUT("/api/v1/chat/messages/{message_id}/bookmark", {
+    params: { path: { message_id: messageId } },
+    body: { note: note ?? null },
+  });
+  if (error !== undefined) throw new Error("could not bookmark this message");
+  return data;
+}
+
+export async function removeBookmark(messageId: string): Promise<void> {
+  const { error } = await api.DELETE("/api/v1/chat/messages/{message_id}/bookmark", {
+    params: { path: { message_id: messageId } },
+  });
+  if (error !== undefined) throw new Error("could not remove this bookmark");
+}
+
+export async function fetchBookmarks(signal?: AbortSignal): Promise<BookmarkList> {
+  const { data, error } = await api.GET("/api/v1/chat/bookmarks", { signal });
+  if (error !== undefined) throw new Error("could not load bookmarks");
+  return data;
 }

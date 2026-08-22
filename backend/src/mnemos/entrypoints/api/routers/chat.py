@@ -81,6 +81,7 @@ class ChatMessageResponse(BaseModel):
     model: str | None
     finish_reason: str | None
     created_at: str
+    bookmarked: bool
 
 
 class CitationResponse(BaseModel):
@@ -152,6 +153,7 @@ def _message_response(record: ChatMessageRecord) -> ChatMessageResponse:
         model=record.model,
         finish_reason=record.finish_reason,
         created_at=record.created_at.isoformat(),
+        bookmarked=record.bookmarked,
     )
 
 

@@ -17,11 +17,13 @@ from __future__ import annotations
 from collections.abc import Sequence
 from datetime import datetime
 
-from sqlalchemy import delete, func, literal, select, tuple_, update
+from sqlalchemy import delete, exists, func, literal, select, tuple_, update
+from sqlalchemy.dialects.postgresql import insert
 
 from mnemos.core.ids import IdGenerator
 from mnemos.core.types import MessageRole
 from mnemos.features.chat.adapters.models import (
+    Bookmark,
     ChatMessage,
     ChatSession,
     Folder,
@@ -29,6 +31,9 @@ from mnemos.features.chat.adapters.models import (
 )
 from mnemos.features.chat.application.ports import UNSET, _UnsetType
 from mnemos.features.chat.domain import (
+    BookmarkedMessage,
+    BookmarkId,
+    BookmarkRecord,
     ChatMessageId,
     ChatMessageRecord,
     ChatSessionId,
@@ -156,6 +161,23 @@ class SqlChatRepository:
                 )
             ).all()
         return [_message_record(r) for r in rows]
+
+    async def list_messages_with_state(
+        self, *, org_id: OrgId, session_id: ChatSessionId, user_id: UserId
+    ) -> Sequence[ChatMessageRecord]:
+        bookmarked_expr = exists(
+            select(Bookmark.id).where(
+                Bookmark.message_id == ChatMessage.id, Bookmark.user_id == user_id
+            )
+        )
+        query = (
+            select(ChatMessage, bookmarked_expr)
+            .where(ChatMessage.org_id == org_id, ChatMessage.session_id == session_id)
+            .order_by(ChatMessage.ordinal.asc())
+        )
+        async with self._db.session(org_id=org_id) as session:
+            rows = (await session.execute(query)).all()
+        return [_message_record(row[0], bookmarked=row[1]) for row in rows]
 
     async def append_user_message(
         self, *, org_id: OrgId, session_id: ChatSessionId, content: str
@@ -320,6 +342,86 @@ class SqlChatRepository:
             )
         return deleted is not None
 
+    async def upsert_bookmark(
+        self, *, org_id: OrgId, user_id: UserId, message_id: ChatMessageId, note: str | None
+    ) -> BookmarkRecord | None:
+        async with self._db.session(org_id=org_id) as session:
+            owned = await session.scalar(
+                select(ChatMessage.id)
+                .join(ChatSession, ChatSession.id == ChatMessage.session_id)
+                .where(
+                    ChatMessage.id == message_id,
+                    ChatMessage.org_id == org_id,
+                    ChatSession.user_id == user_id,
+                )
+            )
+            if owned is None:
+                return None
+            statement = insert(Bookmark).values(
+                id=self._ids.new(),
+                org_id=org_id,
+                user_id=user_id,
+                message_id=message_id,
+                note=note,
+            )
+            row = await session.scalar(
+                statement.on_conflict_do_update(
+                    constraint="uq_bookmark_user_id_message_id",
+                    set_={"note": statement.excluded.note, "updated_at": func.now()},
+                ).returning(Bookmark)
+            )
+        return _bookmark_record(row) if row is not None else None
+
+    async def remove_bookmark(
+        self, *, org_id: OrgId, user_id: UserId, message_id: ChatMessageId
+    ) -> bool:
+        async with self._db.session(org_id=org_id) as session:
+            deleted = await session.scalar(
+                delete(Bookmark)
+                .where(
+                    Bookmark.org_id == org_id,
+                    Bookmark.user_id == user_id,
+                    Bookmark.message_id == message_id,
+                )
+                .returning(Bookmark.id)
+            )
+        return deleted is not None
+
+    async def list_bookmarks(
+        self,
+        *,
+        org_id: OrgId,
+        user_id: UserId,
+        limit: int,
+        before: tuple[datetime, BookmarkId] | None,
+    ) -> Sequence[BookmarkedMessage]:
+        query = (
+            select(Bookmark, ChatMessage, ChatSession)
+            .join(ChatMessage, ChatMessage.id == Bookmark.message_id)
+            .join(ChatSession, ChatSession.id == ChatMessage.session_id)
+            .where(Bookmark.org_id == org_id, Bookmark.user_id == user_id)
+            .order_by(Bookmark.created_at.desc(), Bookmark.id.desc())
+            .limit(limit)
+        )
+        if before is not None:
+            before_ts, before_id = before
+            query = query.where(
+                tuple_(Bookmark.created_at, Bookmark.id)
+                < tuple_(literal(before_ts), literal(before_id))
+            )
+        async with self._db.session(org_id=org_id) as session:
+            rows = (await session.execute(query)).all()
+        return [
+            BookmarkedMessage(
+                bookmark=_bookmark_record(bookmark),
+                message_content=message.content,
+                message_role=MessageRole(message.role),
+                session_id=ChatSessionId(session_row.id),
+                session_title=session_row.title,
+            )
+            for bookmark, message, session_row in rows
+        ]
+
     async def _append_message(
         self,
         *,
@@ -395,7 +497,7 @@ def _folder_record(row: Folder, *, session_count: int) -> FolderRecord:
     )
 
 
-def _message_record(row: ChatMessage) -> ChatMessageRecord:
+def _message_record(row: ChatMessage, *, bookmarked: bool = False) -> ChatMessageRecord:
     return ChatMessageRecord(
         id=ChatMessageId(row.id),
         session_id=ChatSessionId(row.session_id),
@@ -412,6 +514,19 @@ def _message_record(row: ChatMessage) -> ChatMessageRecord:
         finish_reason=row.finish_reason,
         error_code=row.error_code,
         created_at=row.created_at,
+        bookmarked=bookmarked,
+    )
+
+
+def _bookmark_record(row: Bookmark) -> BookmarkRecord:
+    return BookmarkRecord(
+        id=BookmarkId(row.id),
+        org_id=OrgId(row.org_id),
+        user_id=UserId(row.user_id),
+        message_id=ChatMessageId(row.message_id),
+        note=row.note,
+        created_at=row.created_at,
+        updated_at=row.updated_at,
     )
 
 

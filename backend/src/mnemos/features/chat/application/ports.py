@@ -9,6 +9,9 @@ from datetime import datetime
 from typing import Protocol
 
 from mnemos.features.chat.domain import (
+    BookmarkedMessage,
+    BookmarkId,
+    BookmarkRecord,
     ChatMessageId,
     ChatMessageRecord,
     ChatSessionId,
@@ -77,6 +80,19 @@ class ChatRepository(Protocol):
         self, *, org_id: OrgId, session_id: ChatSessionId
     ) -> Sequence[ChatMessageRecord]: ...
 
+    async def list_messages_with_state(
+        self, *, org_id: OrgId, session_id: ChatSessionId, user_id: UserId
+    ) -> Sequence[ChatMessageRecord]:
+        """Same as `list_messages`, plus `bookmarked` (and, from deliverable 3,
+        `feedback`) populated via a `LEFT JOIN` filtered to `user_id` — one
+        query, not a per-message lookup. Only `ChatService.get_session_detail`
+        needs this; `stream_reply`'s history-for-the-model-prompt load and
+        `ContextService`'s history read (`features/context/`, a caller outside
+        this feature) go through the plain `list_messages` instead, because
+        neither renders a bookmark button and neither should have to know a
+        caller's identity just to read message content for a prompt."""
+        ...
+
     async def append_user_message(
         self, *, org_id: OrgId, session_id: ChatSessionId, content: str
     ) -> ChatMessageRecord:
@@ -134,6 +150,31 @@ class ChatRepository(Protocol):
         """The FK (`chat_session.folder_id`) is `ondelete=SET NULL`, so
         deleting the row already un-files its sessions at the database level —
         no service-side cleanup query is needed here."""
+        ...
+
+    async def upsert_bookmark(
+        self, *, org_id: OrgId, user_id: UserId, message_id: ChatMessageId, note: str | None
+    ) -> BookmarkRecord | None:
+        """`None` means the message does not exist, or belongs to a session
+        this `user_id` does not own — checked inside the same statement so a
+        caller cannot bookmark a message it could not otherwise read, rather
+        than trusting the URL's `message_id` on its own."""
+        ...
+
+    async def remove_bookmark(
+        self, *, org_id: OrgId, user_id: UserId, message_id: ChatMessageId
+    ) -> bool: ...
+
+    async def list_bookmarks(
+        self,
+        *,
+        org_id: OrgId,
+        user_id: UserId,
+        limit: int,
+        before: tuple[datetime, BookmarkId] | None,
+    ) -> Sequence[BookmarkedMessage]:
+        """Newest first by `(created_at, id)` — the same explicit tiebreak
+        every new list query in this milestone uses."""
         ...
 
 

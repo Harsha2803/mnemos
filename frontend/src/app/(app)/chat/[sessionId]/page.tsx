@@ -9,7 +9,7 @@ import { Composer } from "@/components/chat/Composer";
 import type { DisplayMessage } from "@/components/chat/MessageBubble";
 import { MessageList } from "@/components/chat/MessageList";
 import { Skeleton } from "@/components/ui/Skeleton";
-import { fetchSession } from "@/lib/chat/api";
+import { fetchSession, removeBookmark, upsertBookmark } from "@/lib/chat/api";
 import { streamChatReply } from "@/lib/chat/stream";
 import { useInspectorSelection } from "@/lib/inspector/SelectionProvider";
 import type { Citation } from "@/lib/knowledge/api";
@@ -54,6 +54,7 @@ export default function ChatSessionPage() {
         flow: message.flow,
         routeReason: message.router_rationale,
         citations: citations.filter((c) => c.message_id === message.id),
+        bookmarked: message.bookmarked,
       })),
     );
   }, [data, sessionId]);
@@ -191,6 +192,21 @@ export default function ChatSessionPage() {
     });
   }
 
+  function handleToggleBookmark(message: DisplayMessage): void {
+    const nextBookmarked = message.bookmarked !== true;
+    // Optimistic: the toggle should feel instant, and a failed request is
+    // rare enough that reverting on catch is simpler than a pending state.
+    setMessages((prev) =>
+      prev.map((m) => (m.id === message.id ? { ...m, bookmarked: nextBookmarked } : m)),
+    );
+    const request = nextBookmarked ? upsertBookmark(message.id) : removeBookmark(message.id);
+    request.catch(() => {
+      setMessages((prev) =>
+        prev.map((m) => (m.id === message.id ? { ...m, bookmarked: !nextBookmarked } : m)),
+      );
+    });
+  }
+
   function handleMessageSelect(message: DisplayMessage): void {
     select({
       kind: "message",
@@ -217,6 +233,7 @@ export default function ChatSessionPage() {
             messages={messages}
             onCitationClick={handleCitationClick}
             onMessageSelect={handleMessageSelect}
+            onToggleBookmark={handleToggleBookmark}
             selectedCitationId={selection?.kind === "citation" ? selection.citation.id : undefined}
           />
         )}

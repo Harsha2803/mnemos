@@ -1,4 +1,4 @@
-import { Check, Copy, Search } from "lucide-react";
+import { Bookmark, BookmarkCheck, Check, Copy, Search } from "lucide-react";
 import Link from "next/link";
 import { useState } from "react";
 
@@ -35,12 +35,17 @@ export type DisplayMessage = {
   nl2sql?: Nl2SqlResult;
   /** The one MCP proposal/result attached to a live tool-routed turn. */
   tool?: ToolResult;
+  /** `C3` deliverable 2 — set from `GET /chat/sessions/{id}`'s per-message
+   * state, absent (never `false`) on a message still streaming in, since a
+   * message cannot be bookmarked before it exists. */
+  bookmarked?: boolean;
 };
 
 export type MessageBubbleProps = {
   message: DisplayMessage;
   onCitationClick?: (citation: Citation) => void;
   onMessageSelect?: () => void;
+  onToggleBookmark?: () => void;
   selectedCitationId?: string;
 };
 
@@ -60,6 +65,7 @@ export function MessageBubble({
   message,
   onCitationClick,
   onMessageSelect,
+  onToggleBookmark,
   selectedCitationId,
 }: MessageBubbleProps) {
   const isUser = message.role === "user";
@@ -73,6 +79,7 @@ export function MessageBubble({
 
   return (
     <div
+      id={`message-${message.id}`}
       className={[
         "flex flex-col gap-1",
         isUser ? "items-end" : "items-start",
@@ -127,6 +134,22 @@ export function MessageBubble({
             {copied ? <Check className="size-4" aria-hidden="true" /> : <Copy className="size-4" aria-hidden="true" />}
             {copied ? "Copied" : "Copy"}
           </Button>
+          {onToggleBookmark && (
+            <Button
+              rank="plain"
+              className="!px-2 text-footnote"
+              aria-label={message.bookmarked === true ? "Remove bookmark" : "Bookmark this answer"}
+              aria-pressed={message.bookmarked === true}
+              onClick={onToggleBookmark}
+            >
+              {message.bookmarked === true ? (
+                <BookmarkCheck className="size-4" aria-hidden="true" />
+              ) : (
+                <Bookmark className="size-4" strokeWidth={1.5} aria-hidden="true" />
+              )}
+              {message.bookmarked === true ? "Bookmarked" : "Bookmark"}
+            </Button>
+          )}
         </div>
       )}
       {!isUser && (message.citations?.length ?? 0) >= 2 && (

@@ -6,15 +6,16 @@
 > **and [`docs/ADAPTATION.md`](docs/ADAPTATION.md)** *in the same commit* — a stale
 > tracker is worse than none.
 
-**Last updated:** 2026-08-22 — `C3` deliverable 1 (folders) is **done**: backend vertical
-slice, 7 new backend tests plus 0 regressions across 260, frontend grouping/create/rename/
-delete/move UI, 0 regressions across 114 frontend tests, and a live browser walkthrough
-against rebuilt `api`/`web` containers. Full evidence is in this file's 2026-08-22 dated
-notes. Deliverables 2-5 (bookmarks, feedback, history search, audit log) remain.
+**Last updated:** 2026-08-22 — `C3` deliverables 1-2 (folders, bookmarks) are **done**:
+backend vertical slices, 14 new backend tests plus 0 regressions across 267, frontend UI for
+both plus a new `/bookmarks` screen, 0 regressions across 117 frontend tests, and live
+browser walkthroughs against rebuilt `api`/`web` containers for each. Full evidence is in
+this file's 2026-08-22 dated notes. Deliverables 3-5 (feedback, history search, audit log)
+remain.
 **Phase:** **`C3` — conversation product depth.** Committed 2026-08-22 by explicit
 project-owner decision, reopening scope the 2026-08-18 reset had deferred. `B4`, `C1`, `C2`
 stay deliberately deferred; do not start any of them without a separate explicit decision.
-**Next task:** `C3` deliverable 2 (bookmarks) — full brief in §5.
+**Next task:** `C3` deliverable 3 (feedback) — full brief in §5.
 **Branch right now:** `agent/c3-conversation-depth`, PR #26 (draft) — pushed after
 deliverable 1's commit.
 
@@ -3239,6 +3240,64 @@ Recorded so they are not rediscovered as surprises:
 > **Not done yet, by design — deliverables 2-5** (bookmarks, feedback, history search, audit
 > log) remain. `BookmarkId`/`FeedbackId` exist as unused domain ids; nothing else for those
 > three deliverables has been built yet.
+
+---
+
+> ### 2026-08-22 — `C3` deliverable 2 done: bookmarks
+>
+> **Backend.** `domain/models.py` gained `BookmarkRecord` and `BookmarkedMessage` (a bookmark
+> joined to the message it points at and the session that owns it — the exact shape
+> `GET /chat/bookmarks` answers with, so the bookmarks screen never has to make a second call
+> per row) plus `BookmarkPage`. `ChatMessageRecord` gained `bookmarked: bool = False` — default
+> `False` so a message still streaming in (which cannot be bookmarked before it exists) needs
+> no special-casing. **Deliberately did not widen `list_messages`'s signature**: threading a
+> caller identity through it would also touch `features/context/`'s `ContextService`, a
+> caller outside this feature that only reads message content for a prompt and has no reason
+> to know who is asking. Instead, a new `list_messages_with_state(org_id, session_id, user_id)`
+> — a `LEFT JOIN`-shaped `EXISTS` subquery, one query, not a per-message lookup — is used only
+> by `ChatService.get_session_detail`, the one caller that renders a bookmark button.
+>
+> `upsert_bookmark` checks message ownership (message → session → `user_id`) inside the same
+> statement before the `ON CONFLICT (user_id, message_id) DO UPDATE` upsert, so a caller
+> cannot bookmark a message it could not otherwise read by guessing a UUID — returns `None`,
+> which the service turns into the same 404 `_owned_session` uses for "not yours." New router
+> `entrypoints/api/routers/bookmarks.py`: `PUT`/`DELETE /chat/messages/{id}/bookmark`,
+> `GET /chat/bookmarks` (cursor-paginated, explicit `id` tiebreak). `PATCH`'s idempotent `PUT`
+> (not `POST`) reflects that bookmarking twice is the same action twice, not a conflict.
+>
+> **Tests.** `backend/tests/test_bookmarks_endpoints.py` (7 tests, real Postgres): bookmark
+> with a note → list → remove round trip; bookmarking the same message twice updates the note
+> rather than creating a second row; `GET /chat/sessions/{id}` reflects `bookmarked` state
+> before and after; removing a bookmark that does not exist is a 404; bookmarking another
+> user's message in the same org is a 404 (RLS cannot produce this, the join has to);
+> bookmarking a message from another org is a 404; a bookmark from one user is invisible to
+> another user's list. Full suite: 267 passed (260 + 7), 0 regressions. `ruff`/`ruff format`/
+> `mypy --strict` clean.
+>
+> **Frontend.** `lib/chat/api.ts` gained `upsertBookmark`/`removeBookmark`/`fetchBookmarks` and
+> `CHAT_BOOKMARKS_QUERY_KEY`. `MessageBubble.tsx` gained a bookmark toggle in the existing
+> per-message action row (`Bookmark`/`BookmarkCheck`, `aria-pressed`, joining "Inspect
+> answer"/"Copy") and a stable `id="message-{id}"` on the bubble root so a bookmarks-list row
+> can link straight to the exact message. The toggle is optimistic (flips immediately, reverts
+> only on a failed request) rather than round-tripping before showing state. New page
+> `frontend/src/app/(app)/bookmarks/page.tsx`, the Tool-console list-screen pattern: every
+> bookmarked message across every session, newest first, each linking to
+> `/chat/{session_id}#message-{message_id}`, with its note and a remove control. Added
+> `{ href: "/bookmarks", label: "Bookmarks", Icon: Bookmark }` to `destinations.tsx`.
+>
+> **Frontend tests.** New `components/chat/bookmark.test.tsx` (3 tests): the bookmark button
+> reports which message it toggled; a bookmarked message shows `aria-pressed="true"` and the
+> "Remove bookmark" label; a user turn never gets a bookmark button. Full suite: 117 passed
+> (114 + 3), 0 regressions. `npm run typecheck` and `npm run lint` clean.
+>
+> **Live-verified in a real browser**: rebuilt `api`/`web`, regenerated `schema.ts`, then
+> opened an existing demo-seeded conversation, bookmarked its answer, confirmed the button
+> flips to "Bookmarked" state, reloaded the page and confirmed the bookmark survived (proving
+> the state came from the server, not local-only), visited `/bookmarks` and found the same
+> message with a working link back to it, removed it from that screen, and confirmed the
+> empty state ("No bookmarks yet") renders correctly afterward. Zero console errors.
+>
+> **Not done yet, by design — deliverables 3-5** (feedback, history search, audit log) remain.
 
 ---
 
