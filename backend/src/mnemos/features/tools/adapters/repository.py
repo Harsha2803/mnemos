@@ -241,7 +241,7 @@ class SqlToolRepository:
                 await session.scalars(
                     select(McpTool)
                     .where(McpTool.org_id == org_id, McpTool.server_id == server_id)
-                    .order_by(McpTool.name)
+                    .order_by(McpTool.name, McpTool.id)
                 )
             ).all()
         return [_tool(row) for row in rows]
@@ -249,11 +249,20 @@ class SqlToolRepository:
     async def list_tools(
         self, *, org_id: OrgId, server_id: McpServerId | None = None
     ) -> Sequence[McpToolRecord]:
+        # `name` is not unique — every demo/registered server can cache a tool
+        # called "echo" — so `id` (UUIDv7, time-ordered) is a required tiebreak,
+        # not a style preference. Without it, rows tied on `name` have no
+        # guaranteed order and Postgres is free to return them differently
+        # across executions of the identical query; a caller that reads "last"
+        # as "most recently added" (`frontend/e2e/tools.spec.ts` does, on
+        # purpose, to operate on one tool without assuming a clean database)
+        # would then intermittently resolve a different row than the one it
+        # just acted on.
         statement = select(McpTool).where(McpTool.org_id == org_id)
         if server_id is not None:
             statement = statement.where(McpTool.server_id == server_id)
         async with self._db.session(org_id=org_id) as session:
-            rows = (await session.scalars(statement.order_by(McpTool.name))).all()
+            rows = (await session.scalars(statement.order_by(McpTool.name, McpTool.id))).all()
         return [_tool(row) for row in rows]
 
     async def get_tool(self, *, org_id: OrgId, tool_id: McpToolId) -> McpToolRecord | None:
@@ -552,7 +561,12 @@ class SqlToolRepository:
                     McpInvocation.org_id == org_id,
                     McpInvocation.user_id == user_id,
                 )
-                .order_by(McpInvocation.created_at.desc())
+                # `id` (UUIDv7, time-ordered) breaks ties on `created_at` —
+                # same reasoning as `list_tools` above: two invocations can
+                # share a timestamp, and a caller reading "first" as "most
+                # recent" needs that to be deterministic across identical
+                # queries, not merely likely.
+                .order_by(McpInvocation.created_at.desc(), McpInvocation.id.desc())
             )
             rows = result.all()
         return [_invocation(row, source) for row, source in rows]

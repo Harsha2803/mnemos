@@ -1,6 +1,6 @@
 # Roadmap
 
-**Last revised:** 2026-08-18
+**Last revised:** 2026-08-22 — reduced `D1` is complete; the committed roadmap is finished.
 
 Mnemos is a portfolio project built to make the author's production experience legible to
 reviewers and hiring teams. The roadmap therefore prioritizes a small number of deep,
@@ -16,9 +16,9 @@ next executable brief live in [`TRACKER.md`](../TRACKER.md).
 |---|---|---|---|
 | **Built** | `B3` — safe single-call MCP tools | Register, discover, approve, invoke, and audit one self-hosted tool with trust-tier denial | Shows current AI-tooling experience and security judgment. |
 | **Built** | `C4` — governed context | Bitemporal Postgres memory, exact hard-budget compiler, persisted bundles, inspector, and Postgres benchmark | Lands the project's strongest and most differentiated technical claim. |
-| **Now / finish** | reduced `D1` — portfolio release | Reproducible Compose startup, critical-path E2E, scripted demo, measured README | Makes the work easy to evaluate and every claim reproducible. |
+| **Built** | reduced `D1` — portfolio release | Reproducible Compose startup, critical-path E2E, scripted demo, measured README | Makes the work easy to evaluate and every claim reproducible. |
 
-After `D1`, the committed roadmap is complete. New scope should be added only in response to
+**The committed roadmap is complete.** New scope should be added only in response to
 interview feedback, real users, or a concrete role requirement—not because an old design
 document contains another possible feature.
 

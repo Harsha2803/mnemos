@@ -470,12 +470,28 @@ def _connector_config(args: argparse.Namespace) -> dict[str, object]:
 
 
 async def _connector_register(args: argparse.Namespace) -> int:
+    """Register a source, or print the existing one — this is what makes the
+    command's own ``--help`` text ("idempotent per slug") true. Checking first
+    avoids relying on `uq_content_source_org_id_slug` to reject the retry: the
+    API router (`entrypoints/api/routers/connectors.py`) translates that same
+    constraint into a 409 for a browser caller, which is correct there — a
+    second click *is* a conflict. A re-run of this command is not; it is the
+    normal shape of an idempotent seed script (`make demo-seed`), and the
+    constraint violation's own traceback is not a fit answer for either case.
+    """
     settings = get_settings()
     db = Database(settings)
     http_client = httpx.AsyncClient()
     try:
         org_id = await _resolve_org_id(db, args.org_slug)
         service = _connector_service(db, settings, http_client)
+        repository = ContentSourceRepository(db, DEFAULT_ID_GENERATOR)
+        existing = await repository.get_by_slug(org_id=org_id, slug=args.slug)
+        if existing is not None:
+            print(f"content source   : {existing.slug}  ({existing.name}) — already present")
+            print(f"kind             : {existing.kind}")
+            print(f"id               : {existing.id}")
+            return 0
         config = _connector_config(args)
         source = await service.register(
             org_id=org_id, slug=args.slug, name=args.name, kind=args.kind, config=config
@@ -484,7 +500,7 @@ async def _connector_register(args: argparse.Namespace) -> int:
         await http_client.aclose()
         await db.dispose()
 
-    print(f"content source   : {source.slug}  ({source.name})")
+    print(f"content source   : {source.slug}  ({source.name}) — created")
     print(f"kind             : {source.kind}")
     print(f"id               : {source.id}")
     return 0

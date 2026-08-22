@@ -1,15 +1,15 @@
 # Implementation Plan
 
-**Last revised:** 2026-08-18
+**Last revised:** 2026-08-22 — reduced `D1` is complete on PR #25. The committed plan is
+finished; no milestone remains.
 
-This is the committed implementation plan for turning Mnemos into a focused, resume-ready
-portfolio project. Live status and the complete brief for the next milestone remain in
-[`TRACKER.md`](../TRACKER.md); architecture and the milestone ledger remain in
-[`ADAPTATION.md`](ADAPTATION.md).
+This is the committed implementation plan that turned Mnemos into a focused, resume-ready
+portfolio project. Live status remains in [`TRACKER.md`](../TRACKER.md); architecture and
+the milestone ledger remain in [`ADAPTATION.md`](ADAPTATION.md).
 
-The plan intentionally optimizes for evidence of engineering depth, not feature count.
-Completed capabilities stay supported and tested. Only two milestones remain committed:
-a reduced `D1`; `B3` is complete on PR #23 and `C4` on PR #24.
+The plan intentionally optimized for evidence of engineering depth, not feature count.
+Completed capabilities stay supported and tested. `B3` is complete on PR #23, `C4` on
+PR #24, and reduced `D1` — the plan's last committed milestone — on PR #25.
 
 ## 1. Current baseline
 
@@ -74,7 +74,7 @@ and historically correct rather than concatenated ad hoc.
 excluded and why, and how the token budget was spent. Verified 2026-08-18 against migrated
 Postgres, rebuilt Compose, Chromium, and the unchanged benchmark; PR #24.
 
-### D1 — ship the portfolio release
+### D1 — ship the portfolio release ✅
 
 **Portfolio signal:** a reviewer can run, verify, and understand the project without help
 from its author.
@@ -92,7 +92,8 @@ Realtime presence, nginx, and cosmetic breadth are included only if a measured r
 demo problem requires them. They are no longer independent completion requirements.
 
 **Exit:** a reviewer can clone the repository, start it without an API key, follow one
-documented walkthrough, and reproduce every material claim shown in the README.
+documented walkthrough, and reproduce every material claim shown in the README. Verified
+2026-08-22 against migrated Postgres, rebuilt Compose, and 14/14 Chromium tests; PR #25.
 
 ## 3. Deliberately deferred
 
@@ -111,7 +112,7 @@ owner explicitly reopens scope after `D1`.
 
 ## 4. Delivery rules
 
-- Finish reduced `D1`; `C4` is complete and its security/budget invariants remain mandatory.
+- Reduced `D1` is complete; `C4`'s security/budget invariants remain mandatory going forward.
 - Keep the default path free and self-hosted; Ollama remains the model path.
 - Preserve existing security invariants and do not weaken tests to shorten delivery.
 - Every backend capability ships with its usable frontend slice.

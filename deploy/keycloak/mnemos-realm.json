@@ -66,6 +66,7 @@
 
   "users": [
     {
+      "id": "a12e46c5-6612-46ea-81a7-3db0578366d8",
       "username": "admin@mnemos.local",
       "email": "admin@mnemos.local",
       "emailVerified": true,
@@ -76,6 +77,7 @@
       "realmRoles": ["mnemos-admin", "mnemos-analyst", "mnemos-user"]
     },
     {
+      "id": "d25a281f-9f3a-4744-b394-ce0c1d57c553",
       "username": "analyst@mnemos.local",
       "email": "analyst@mnemos.local",
       "emailVerified": true,
@@ -86,6 +88,7 @@
       "realmRoles": ["mnemos-analyst", "mnemos-user"]
     },
     {
+      "id": "479c9b04-2107-4215-9940-4fff176c4237",
       "username": "user@mnemos.local",
       "email": "user@mnemos.local",
       "emailVerified": true,

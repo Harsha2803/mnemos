@@ -11,8 +11,8 @@ PY   := $(VENV)/bin/python
 PIP  := $(VENV)/bin/pip
 
 .DEFAULT_GOAL := help
-.PHONY: help venv install install-neural up down logs ps rebuild bootstrap doctor \
-        migrate migrate-down check test test-fast lint types web-install web-dev \
+.PHONY: help venv install install-neural up wait down logs ps rebuild bootstrap demo-seed \
+        doctor migrate migrate-down check test test-fast lint types web-install web-dev \
         web-test web-build bench ask clean
 
 help: ## Show available targets
@@ -36,6 +36,16 @@ install-neural: install ## Also install sentence-transformers (~2.5GB, optional)
 up: ## Bring the whole stack up (ten services, web and demo MCP included)
 	docker compose up -d
 
+wait: ## Block until /readyz is fully green. First run also pulls the ~2GB Ollama model
+	@echo "Waiting for postgres, redis, ollama (pulls the model on first run) and object storage..."
+	@for i in $$(seq 1 100); do \
+	  if curl -sf http://localhost:8000/readyz 2>/dev/null | grep -q '"status":"ready"'; then \
+	    echo "ready."; exit 0; \
+	  fi; \
+	  sleep 3; \
+	done; \
+	echo "Still not ready after 5 minutes. Check: docker compose logs ollama-init api"; exit 1
+
 down: ## Stop everything; volumes are preserved
 	docker compose down
 
@@ -51,10 +61,18 @@ rebuild: ## Rebuild the images that build from source and restart them
 bootstrap: ## First org + admin + system roles + provider rows. Idempotent.
 	@echo "Password comes from MNEMOS_BOOTSTRAP_ADMIN_PASSWORD or an interactive"
 	@echo "prompt — never from argv, which is world-readable in /proc."
-	docker compose exec api mnemosctl bootstrap \
+	docker compose exec -e MNEMOS_BOOTSTRAP_ADMIN_PASSWORD api mnemosctl bootstrap \
 	  --org-slug $(or $(ORG),mnemos) \
 	  --org-name "$(or $(ORG_NAME),Mnemos)" \
 	  --admin-email $(or $(EMAIL),admin@mnemos.local)
+
+demo-seed: bootstrap ## Deterministic demo state for docs/Demo.md: warehouse + glossary + the fixture source. Idempotent.
+	docker compose exec api mnemosctl datasource introspect --org-slug $(or $(ORG),mnemos)
+	docker compose exec api mnemosctl datasource seed-glossary --org-slug $(or $(ORG),mnemos)
+	docker compose exec api mnemosctl connector register \
+	  --org-slug $(or $(ORG),mnemos) --slug demo-fixtures --name "Demo fixtures" \
+	  --kind local_fs --root /fixtures/sources
+	@echo "Demo state ready — follow docs/Demo.md."
 
 doctor: ## Print what the database actually looks like right now
 	docker compose exec api mnemosctl db doctor

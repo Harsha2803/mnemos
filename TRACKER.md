@@ -6,14 +6,289 @@
 > **and [`docs/ADAPTATION.md`](docs/ADAPTATION.md)** *in the same commit* — a stale
 > tracker is worse than none.
 
-**Last updated:** 2026-08-18 — `C4` is complete on PR #24: bitemporal Postgres memory,
-the hard-budget context compiler, persisted bundles, the Memory screen and Bundle inspector,
-and the unchanged benchmark reproduced on Postgres.
-**Phase:** **Portfolio finish.** One committed milestone remains: reduced `D1`.
-**Next task:** reduced `D1` — prove clean-clone Compose, cover the critical journeys in
-Playwright, add the deterministic walkthrough, and finish the measured portfolio README.
-**Branch right now:** `agent/c4-governed-context`, PR #24; `C4` implementation and evidence
-complete. Close its repository lifecycle before starting reduced `D1`.
+**Last updated:** 2026-08-22 — reduced `D1` is **complete**: a genuinely clean clone comes
+up ready, all 14 critical-path Playwright tests pass (three real bugs found and fixed along
+the way), `make demo-seed` + `docs/Demo.md` give a live-verified scripted walkthrough, and
+the README is rewritten on exactly these measured numbers with a new Known-limitations
+section. Full evidence is in this file's 2026-08-22 dated notes.
+**Phase:** **Portfolio finish — complete.** No committed milestone remains.
+**Next task:** none committed. `B4`, `C1`, `C2`, `C3` stay deliberately deferred; do not
+start any of them without an explicit decision from the project owner.
+**Branch right now:** `agent/d1-portfolio-release`, PR #25 — closing its repository
+lifecycle (ready → merge → sync `main`) completes this session.
+
+> ### 2026-08-22 — `D1` deliverable 1 done: a genuinely clean clone comes up ready
+>
+> **Proved, not just documented:** `git clone` from `github.com/Harsha2803/mnemos` into a
+> scratch directory, `docker compose up -d --build` under an **isolated project name**
+> (`mnemos-cleanclone`) so it gets its own fresh named volumes rather than silently
+> reattaching to this machine's existing `mnemos_*` dev volumes — the first attempt did
+> exactly that by accident (same `name: mnemos` in the compose file regardless of
+> directory) and would have proven nothing about a first run. Fresh Postgres ran its
+> `docker-entrypoint-initdb.d` init scripts for the first time, `alembic upgrade head`
+> applied all revisions, and `ollama-init` pulled `qwen2.5:3b-instruct` (~1.9 GB) into an
+> empty volume — end to end, container creation to `/readyz` fully green, in a little over
+> two minutes. `mnemosctl bootstrap` created the org/admin/roles/providers and was then
+> confirmed idempotent on a second run (`already present` on every row). `mnemosctl db
+> doctor` reported **42 tables, 41 with `FORCE` row-level security** — the current true
+> count, which is one table more than the README's stale "41 tables, 40 with RLS" line;
+> deliverable 4 fixes that. The isolated project and its volumes were torn down
+> (`down -v`) afterward, and the real dev-stack volumes were confirmed untouched throughout.
+>
+> **A real gap found and fixed, not just verified:** `/readyz`'s ollama check
+> (`OllamaChatModel.health`, `backend/src/mnemos/features/llm/adapters/ollama.py`)
+> correctly reports not-ready while the model is mid-pull, but nothing in the compose file
+> or the docs gave a first-time user a way to wait for it short of hand-polling `curl` —
+> `ollama-init` is a fire-and-forget one-shot nothing else `depends_on`. Added `make wait`
+> (Makefile): polls `/readyz` every 3s up to 5 minutes, then fails with a pointer to
+> `docker compose logs ollama-init api` rather than hanging silently forever. The README
+> Quickstart now runs it between `docker compose up -d` and `bootstrap`. Verified both
+> paths live: an already-ready stack returns `ready.` in under 50ms, and the in-progress
+> pull correctly reports `not_ready`/`ollama: error` until the model lands, exactly as
+> designed — this is documented behavior now, not a mystery.
+>
+> The original 10-service dev stack (real `mnemos_*` volumes, all accumulated dev/test
+> state) was stopped before this test and restarted after; `make wait` on it returned
+> `ready.` immediately and `docker compose ps` showed all ten containers healthy/running,
+> confirming the stop/restart round trip lost nothing.
+>
+> **Not done yet, by design — deliverables 2-5.** No Playwright changes, no demo script, no
+> README rewrite beyond the two Quickstart lines above, no benchmark re-run (the
+> retrieval/compile path did not move). Continuing in the same session per the project
+> owner's explicit choice to checkpoint through all of `D1` rather than stop per
+> deliverable.
+
+> ### 2026-08-22 — a real bug found running deliverable 2: Keycloak's dev storage has no
+> volume, so any container recreation silently locks out every seeded user
+>
+> Running the full Playwright suite for the first time in one sitting (deliverable 2)
+> failed all 11 auth-dependent specs at the identical point — `signIn()`'s
+> `page.waitForURL(WEB/)` timing out on `/signin?error=auth_failed` — which looked like
+> flakiness but was not. `docker compose logs api` named the real cause precisely:
+> `auth.signin_failed reason="email 'analyst@mnemos.local' already belongs to a different
+> subject in this org"` — M3.4's JIT-provisioning collision guard, correctly refusing to
+> re-link an email to a new IdP subject.
+>
+> **Root cause, traced to a real subject, not the stack in general:** every other stateful
+> service (postgres, redis, minio, ollama) has a named volume in `docker-compose.yml`;
+> **Keycloak does not.** Its dev-mode embedded H2 database lives only in the container's
+> writable layer, so recreating the container — not merely restarting it — discards it and
+> `--import-realm` mints a **fresh random UUID** for every seeded user on the next import.
+> `app_user.external_subject`, JIT-provisioned into Postgres against the *old* UUID back on
+> 2026-08-15, then permanently disagrees with Keycloak's new one, and every future login
+> for that email is correctly refused forever — not a timing race, a durable lockout.
+> Traced with the Keycloak admin API (`GET .../users?username=analyst@mnemos.local`)
+> against a direct `psql` read of `app_user.external_subject`: Keycloak reported
+> `c9d3481a-...`, Postgres still held `d25a281f-...` from creation. This session's own
+> deliverable 1 work caused *this instance* of it — an early clean-clone attempt ran
+> `docker compose down` against the shared `mnemos` project from the wrong directory before
+> the isolation bug was caught and fixed — but the underlying fragility is real and
+> pre-existing: **any** `docker compose down && up`, image update, or host reboot that
+> recreates the Keycloak container reproduces this exact lockout for anyone, including a
+> reviewer following the README, and there was no guidance anywhere for recovering from it.
+>
+> **Fixed at the source, not patched around:** `deploy/keycloak/mnemos-realm.json` now
+> pins an explicit `id` for each of the three seeded users (a standard field in Keycloak's
+> `UserRepresentation` import schema), so a fresh import is deterministic — the same
+> subject UUID every time, matching what `docker-entrypoint-initdb.d` and the deterministic
+> demo MCP fixture already do elsewhere in this stack. `analyst@mnemos.local`'s pinned id is
+> the exact value already bound in Postgres (`d25a281f-9f3a-4744-b394-ce0c1d57c553`), so the
+> fix required no Postgres write and lost no accumulated history; `admin@mnemos.local` and
+> `user@mnemos.local` (never yet JIT-provisioned in this stack) got fresh pinned UUIDs for
+> the same future-proofing. Verified by recreating only the Keycloak container
+> (`docker compose up -d --force-recreate keycloak`) and confirming the admin API now
+> reports the pinned id, matching Postgres exactly, with zero other services touched.
+>
+> **Why this belongs in `D1` rather than being filed as a known gap:** deliverable 1
+> already claims a proof that clean-clone startup is reproducible; a stack whose identity
+> layer silently and permanently breaks itself on the *second* normal `docker compose down
+> && up` is not that claim, it just had not been exercised twice in one sitting before now.
+> No design document mentioned it because no prior session's live verification happened to
+> straddle a Keycloak container recreation after a JIT-provisioned login already existed in
+> Postgres.
+>
+> **`D1` deliverable 2 done, once the fixture fix landed: all 7 critical journeys are
+> reliable in Chromium, unmodified.** `npx playwright test` — **14/14 passed in 2.5
+> minutes**, sequentially, against the real stack (Postgres, Redis, Ollama, MinIO, Keycloak,
+> the demo MCP server): auth (7 cases: sign-in, no-credential-in-URL/storage, reload
+> persistence, sign-out, unknown workspace, unauthenticated redirect, bare-token refusal),
+> routed chat streaming/persistence, memory lifecycle + bundle inspection, document
+> upload/RAG/citation click-through, NL2SQL happy-path and guarded-write-refusal, live
+> connector ingestion over the authenticated WebSocket, and MCP register→discover→grant→
+> approve→result. None of the seven spec files needed a code change — no hardcoded
+> `waitForTimeout`, every wait already keyed to a real DOM/URL condition, every spec already
+> self-skips with a named reason when a dependency is down. The only real defect was the
+> Keycloak fixture bug above; once fixed, the existing suite needed no hardening at all.
+
+> ### 2026-08-22 — `D1` deliverable 3 done: a scripted, verified demo walkthrough
+>
+> **`make demo-seed`** (new Makefile target, depends on `bootstrap`): idempotently
+> registers/introspects the seeded `analytics.*` warehouse, seeds its business glossary, and
+> registers `e2e-fixtures/sources/handbook.txt` as a `local_fs` connector (slug
+> `demo-fixtures`) — the non-visual prerequisites a presenter should not do on camera.
+> Verified idempotent by running it twice in a row against the live stack (`already present`
+> on every row the second time).
+>
+> **A second real CLI bug, found building this and fixed in the same shape as the Keycloak
+> one:** `mnemosctl connector register`'s own `--help` text promises "idempotent per slug",
+> but the CLI dispatch in `main()` only caught `(MnemosError, ValueError)`; a duplicate slug
+> fell through to the raw `asyncpg.IntegrityError` from `uq_content_source_org_id_slug` — a
+> full stack trace on stderr, exit 1. `entrypoints/api/routers/connectors.py` already
+> translates the identical constraint into a clean 409 for a browser caller, but nothing did
+> the CLI's equivalent. Fixed in `_connector_register` by checking `get_by_slug` first,
+> matching `mnemosctl bootstrap`'s own "already present" idiom, rather than relying on the
+> constraint violation as control flow — a retry is the normal shape of a re-run seed
+> script, not a conflict, and the two callers now correctly disagree on purpose. Regression
+> test: `tests/test_cli_connector_register.py`, against real Postgres, registers the same
+> slug twice and asserts both calls return `0`. Full connector-adjacent suite (29 tests
+> across `test_connectors_service.py`, `test_connectors_router.py`,
+> `test_worker_ingestion.py`, and the new file) passed; `ruff`/`ruff format`/`mypy --strict`
+> clean on both changed files.
+>
+> **`docs/Demo.md`** — a presenter-facing script (not a test) covering, in order: sign-in;
+> connect-and-ingest-live over the pre-registered connector then ask a Documents-routed
+> question with citation click-through; an NL2SQL happy path (`what was total revenue by
+> region`) and the guarded-write refusal/repair; the full MCP register→discover→grant→
+> propose→approve→result flow; opening the Bundle inspector on a completed answer; and an
+> optional memory supersession/retraction beat. A reset section uses only
+> `docker compose down -v` + `make demo-seed` — never a hand-edited row, matching the
+> deliverable's own constraint.
+>
+> **The one sequence that had not been exercised end to end before — verified live, not
+> assumed:** every individual piece above already had Playwright coverage, but no existing
+> spec asked a chat question about content ingested through the *connector* path (as opposed
+> to a direct Knowledge upload). A throwaway Playwright script (not committed —
+> `frontend/e2e/` gained no new file) drove exactly `docs/Demo.md` §2's sequence against the
+> live stack: ingest `demo-fixtures`' `handbook.txt` via Sources, watch it reach `Succeeded`
+> live, ask "According to the uploaded handbook, how many leave days carry over?", confirm
+> the router labels it **Documents**, and confirm the citation inspector shows "five working
+> days" — passed in 13.5 seconds. The demo script's claims are reproduced, not merely
+> plausible.
+>
+> **Not done yet, by design — deliverables 4-5.** No README rewrite beyond deliverable 1's
+> two Quickstart lines and the `docs/Demo.md` pointer added alongside them; no final release
+> verification or PR lifecycle.
+
+> ### 2026-08-22 — `D1` deliverable 4 done: the README is rewritten on measured numbers
+>
+> Every count was re-measured, not carried forward from C4's 2026-08-18 evidence: backend
+> `pytest` — **464 passed** (463 + the new CLI regression test), Ruff/`ruff format`/
+> `mypy --strict` clean across 216 source files, `alembic check` clean; frontend
+> `npm run test` — **114 passed**; `mnemosctl db doctor` — **42 tables, 41 with `FORCE`
+> row-level security**. The README's "41 tables, 40 with RLS" line (both occurrences) was
+> already stale before this session — deliverable 1 found the count first; deliverable 4 is
+> where it got fixed in the shipped document. The `Run the gates` section now also states
+> the exact `npx playwright test` command and its current **14 passed**, which the README
+> previously did not mention at all.
+>
+> **Added a `Known limitations` section** (README, between "Design decisions worth
+> defending" and "Layout") — a compact, reviewer-facing distillation, not a duplicate of
+> TRACKER §4's exhaustive dated list, covering: small local-model behaviour in NL2SQL
+> (execution-time failures on semantically-wrong-but-syntactically-valid SQL, occasional
+> narration echoes of a refused instruction after a successful repair — both real, both
+> harmless, both worth seeing rather than hiding), Keycloak's dev-mode posture and why its
+> seeded-user ids are now pinned, the HS256 single-trust-domain JWT decision and what
+> reverses it, and a pointer to the deferred-scope ledger rather than repeating it.
+>
+> `docs/ADAPTATION.md` §7's `D1` row, its new dated `### D1` subsection in §8, and §10 all
+> updated in the same commit — including a `TRACKER.md`-only-hazard: the compose file's
+> hardcoded `name: mnemos` means an isolated Compose test **must** pass explicit `-p`, or it
+> silently attaches to (and, on a bare `down`, can delete the containers of) this machine's
+> real dev stack. Recorded as its own §10 bullet because it is exactly what happened once
+> during deliverable 1, before the isolation bug was caught — see that dated note above.
+>
+> **Not done yet, by design — deliverable 5.** No final combined verification run (backend
+> gates, frontend gates, rebuilt Compose, `/readyz`, the Playwright suite), no `make bench`
+> re-run (not required — the retrieval/compile path did not move), and PR #25 is still
+> draft.
+
+> ### 2026-08-22 — a third real bug, found running the Playwright suite a second time in
+> one session: `ORDER BY name` with no tiebreak on a column that is not unique
+>
+> Deliverable 5's final verification pass reran the full 14-test suite against a freshly
+> rebuilt stack — the same suite that had just passed 14/14 minutes earlier. This time
+> `tools.spec.ts` failed: `expect(status).toContainText("waiting below")` saw "Invocation
+> denied" instead. `docker compose logs api` named it precisely:
+> `tool.invocation_denied reason=grant_missing_or_expired`, ~130ms after the grant that
+> should have covered it had already returned `200`.
+>
+> **Root cause:** `SqlToolRepository.list_tools` (and the post-`discover` tool list)
+> ordered by `McpTool.name` alone. Every demo/registered server caches a tool literally
+> named `echo`, and this session had, by this point, run `tools.spec.ts` — which registers
+> a fresh uniquely-slugged server and its own `echo` tool every run — twice against the same
+> live database. With more than one row tied on `name`, Postgres has no contractual
+> obligation to return them in the same order across two executions of the identical query,
+> and the frontend refetches the tools list after every mutation. `tools.spec.ts` reads
+> `.last()` as "the tool I just discovered and granted" (its own comment says so, aware
+> state accumulates across runs) — a read that is only valid if the order is actually
+> stable. It reproduced only on the *second* full run in one session, not the first, because
+> a small, freshly-populated table commonly (never by contract) returns tied rows in
+> insertion order until something disturbs that — exactly the trap in relying on it.
+>
+> **Fixed** by adding `McpTool.id` (UUIDv7, time-ordered) as an explicit tiebreak after
+> `name`, in both `list_tools` and the tool list `replace_discovered_tools` returns.
+> Same latent shape found and fixed one more place while auditing nearby: `list_invocations`
+> ordered by `created_at DESC` alone, and two invocations can tie on a timestamp; added
+> `McpInvocation.id.desc()` as its tiebreak too, since `tools.spec.ts`'s final assertion
+> reads `.first()` the same way. A repo-wide grep for other bare `order_by` calls found
+> none of the remaining ones sort on a column that is not already unique in its scope,
+> **except** `features/knowledge/adapters/repository.py`'s document list, which orders by
+> `created_at DESC` alone — left unfixed for now: no test exercises positional order there
+> (`knowledge.spec.ts` filters by filename, never position) and no failure has been
+> observed, so fixing it now would be speculative rather than demonstrated. Flagged here so
+> it is not rediscovered as a surprise if a future feature ever reads that list positionally.
+>
+> **The regression test does not trust incidental row order, and that distinction was
+> proven, not assumed.** `test_list_tools_orders_same_named_tools_deterministically`
+> (`test_tools_repository.py`) intercepts `AsyncSession.scalars` to inspect the *compiled
+> SQL* `ORDER BY` clause directly — asserting `id` appears after `name` in the statement
+> Postgres actually receives. Reverting the fix and keeping only a same-session behavioural
+> assertion ("read three times, rows are identical each time") **still passed** on the
+> unfixed code, on this small a table — the exact false-confidence trap that let the bug
+> ship in the first place. Reverting the fix with the SQL-inspection assertion in place
+> correctly failed. Both were verified live, not asserted.
+>
+> **Evidence:** `pytest` — 465 passed (was 464); `make lint`/`make types`/`make check`
+> clean, 216 source files. Full Compose rebuild (`api`/`worker`/`realtime`), `/readyz`
+> green, and the complete Playwright suite rerun a third time against the rebuilt stack —
+> **14/14 passed in 1.3 minutes**, including `tools.spec.ts`. Three consecutive full runs
+> in one session (14/14, then the one that caught this bug, then 14/14 again) is itself the
+> evidence that the fix — not luck — closed it.
+
+> ### 2026-08-22 — `D1` deliverable 5 done: reduced `D1` is complete
+>
+> Final combined verification, all against the rebuilt Compose stack: backend `pytest` —
+> **465 passed**; `make lint` / `make types` (`mypy --strict`, 216 source files) / `make
+> check` (`alembic check`) all clean. Frontend `npm run lint`, `npx tsc --noEmit`, `npm run
+> test` (**114 passed**), and `npm run build` all clean. `docker compose up -d --build`
+> rebuilt every service; `/readyz` returned all four dependencies `ok`; `docker compose ps`
+> showed all ten containers healthy or running. `npx playwright test` — **14/14 passed**,
+> the critical-path suite covering auth, routed chat, memory/bundle inspection,
+> document upload/RAG/citations, NL2SQL happy-path and guarded-write-refusal, live
+> connector ingestion, and MCP register→discover→grant→approve→result. `make bench` was
+> **not** re-run: nothing in `D1` touched the retrieval, memory or compiler path, so the
+> Postgres numbers already committed in `bench_results/hashing.json` and quoted in the
+> README remain the accurate, reproducible measurement.
+>
+> **The finish line, stated plainly:** reduced `D1` — the one committed milestone remaining
+> after the 2026-08-18 scope reset — is done. Every deliverable in TRACKER §5's original
+> brief landed: a genuinely clean clone reaches `/readyz` green in about two minutes and
+> `make wait` closes the one gap found in that proof; every critical-path Playwright journey
+> is reliable, with three real, load-bearing bugs found and fixed along the way (Keycloak's
+> ephemeral dev storage breaking JIT-provisioned logins on any container recreation,
+> `mnemosctl connector register` not actually being idempotent despite claiming to be, and
+> an `ORDER BY` with no tiebreak on a non-unique column causing an intermittent MCP
+> authorization denial); `make demo-seed` + `docs/Demo.md` give a scripted, live-verified
+> walkthrough of documents, database, one MCP call and the Bundle inspector; and the README
+> is rewritten on exactly these measured numbers with an added, honest limitations section.
+>
+> **What is next, now that `D1` is done:** nothing is committed. `B4` (multi-step agent
+> plans/loops/checkpoints/replay), `C1` (API keys, full RBAC matrix, tag-scoped ACL UI),
+> `C2` (versioned prompts, cost dashboard) and `C3` (folders, bookmarks, feedback, history
+> search) remain exactly as deliberately deferred as the 2026-08-18 scope reset left them.
+> A future session should not resume any of them, add deployment breadth, or invent new
+> scope without an explicit decision from the project owner — the resume-focused finish
+> line this whole plan was built around has been reached.
 
 > ### 2026-08-18 — `C4` done: context is governed, persisted, and inspectable
 >
@@ -1296,7 +1571,7 @@ order" list is the authoritative next-up sequence; the note above it explains wh
 
 | ID | What it builds | You can now… | Status |
 |---|---|---|---|
-| **D1** | Portfolio release: clean-clone Compose proof · critical-path Playwright · deterministic demo · README rewritten on measured numbers | **clone it, run one command, follow one walkthrough, and reproduce every material claim in the README** | ⬜ committed — final milestone |
+| **D1** | Portfolio release: clean-clone Compose proof · critical-path Playwright · deterministic demo · README rewritten on measured numbers | **clone it, run one command, follow one walkthrough, and reproduce every material claim in the README** | ✅ 2026-08-22 — PR #25, all 14 Playwright tests green, three real bugs found and fixed |
 
 **Already built — the foundation the above stands on.**
 
@@ -2890,63 +3165,28 @@ Recorded so they are not rediscovered as surprises:
 
 ## 5. NEXT TASK
 
-`C4` is done and verified. Do not reopen deferred `B4` or `C1`–`C3`; finish the portfolio.
+**Nothing is committed.** Reduced `D1` — the last item on the committed plan — is done
+(§3.0, and this file's 2026-08-22 dated notes have the full evidence). The resume-focused
+finish line the 2026-08-18 scope reset was built around has been reached.
 
-### Reduced `D1` — ship the reproducible portfolio release
+**Do not start any of the following without an explicit decision from the project owner:**
+`B4` (multi-step agent plans, loops, checkpoints, crash recovery, replay), `C1` (API keys,
+full RBAC permission matrix, tag-scoped document ACL UI), `C2` (versioned prompt management,
+cost dashboard), `C3` (folders, bookmarks, feedback, history search, expanded audit UI), any
+deployment breadth (Kubernetes, nginx, multi-node), or any new scope not already named in
+`docs/Roadmap.md` §2. All four remain valid future extensions with schema/architecture seams
+already preserved for them — see ADAPTATION §3 — but none is a promise.
 
-**The sentence:** a reviewer can clone Mnemos, start it without a paid key, follow one
-deterministic walkthrough across its strongest journeys, and reproduce every material
-security and benchmark claim in the README.
+**If a future session is asked to add something not on this list:** read TRACKER §0-§4 and
+ADAPTATION in full first, exactly as this file has always instructed, then write a fresh
+brief in this section following the same level of detail C4's and D1's briefs were written
+at — do not silently resume an old, superseded plan.
 
-**What already exists and must be reused, not rebuilt:**
-- Compose has the complete ten-service default stack, health checks, migrations, bootstrap,
-  deterministic demo MCP server, Keycloak realm fixture, MinIO and demo warehouse.
-- Browser proofs already exist for auth, chat, RAG/citations, NL2SQL, sources/jobs, tools,
-  and governed context. Consolidate the critical journey rather than inventing product scope.
-- `make bench`, `bench_results/hashing.json`, `/readyz`, database doctor, the test suite and
-  CI are the reproducible evidence surface. Do not replace deterministic measurements with
-  screenshots or an LLM judge.
-- The README already records architecture and benchmark details. D1 edits it for reviewer
-  flow and exact clean-clone evidence; it does not reopen deferred features.
-
-**Deliverables, in build order — one commit (or a small adjacent group) per numbered item:**
-
-1. **Clean-clone Compose proof.** From a fresh worktree or clone with no existing volumes,
-   run the documented one-command startup, migrations and bootstrap. Make every missing
-   dependency or failed health check actionable. Keep the default free and self-hosted;
-   no Kubernetes, cloud account, paid model or deployment abstraction.
-2. **Critical-path Playwright.** Make the portfolio journeys reliable in Chromium:
-   authentication, routed chat, RAG with citation inspection, guarded NL2SQL, connector
-   progress/retry, MCP approval and denial, and memory/context inspection. Reuse fixtures,
-   remove timing races, and keep skips explicit about the missing dependency.
-3. **Deterministic walkthrough.** Add the smallest repeatable seed/demo command and a concise
-   script that exercises documents, database, one MCP call and the governed Bundle inspector.
-   It must be suitable for a screen recording and an interview without hand-edited database
-   state or external credentials.
-4. **Measured release documentation.** Rewrite the README around the verified walkthrough,
-   exact commands, architecture choices, security controls, Postgres benchmark and honest
-   limitations. Synchronize ADAPTATION, Roadmap, ImplementationPlan and this handoff. Tag or
-   publish only if the repository's established lifecycle calls for it.
-5. **Release verification and lifecycle.** Run the full backend/frontend gates, clean-clone
-   Compose proof, `/readyz`, Chromium suite and `make bench`; commit scoped evidence, make the
-   PR ready, merge green, fast-forward clean `main`, and stop.
-
-**Explicitly NOT `D1`:** multi-step plans/loops/replay (`B4`), API keys/full RBAC/tag ACL UI
-(`C1`), prompt/cost management (`C2`), folders/bookmarks/expanded audit (`C3`), Kubernetes,
-nginx or realtime presence unless a measured release blocker requires one.
-
-### Then, in order — the complete committed finish
-
-Each item is one session and one repository lifecycle. Exactly one committed milestone remains:
-
-1. **Reduced `D1` — ship the portfolio release.** ⬅ **next.** Prove clean-clone Compose, cover the
-   critical journeys in Chromium, add a deterministic walkthrough, and rewrite the README
-   around reproducible measurements and honest limitations.
-
-`B4` and `C1`–`C3` are deliberately deferred. Do not start them after `B3` or insert them
-between `C4` and `D1`; only an explicit future owner decision may reopen that scope.
-
-**Commit shape:** one commit per numbered deliverable, not one bulk release commit.
+**If a future session is asked to fix a bug or make a small polish change with no new
+milestone attached:** that is fine and does not need a milestone id. Follow §0's rules
+(scoped commits, a PR immediately, full verification, this file and ADAPTATION updated in
+the same commit) exactly as if it were milestone work, because a maintenance change that
+skips verification is exactly how the three bugs D1 found would have shipped unnoticed.
 
 ---
 
