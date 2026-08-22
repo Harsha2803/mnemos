@@ -81,11 +81,15 @@ Check it came up:
 
 ```bash
 curl http://localhost:8000/readyz             # postgres, redis, ollama, objectstore → ok
-docker compose exec api mnemosctl db doctor   # 41 tables, 40 with FORCE row-level security
+docker compose exec api mnemosctl db doctor   # 42 tables, 41 with FORCE row-level security
 ```
 
 Those credentials are dev-stack credentials in the same class as Keycloak's `admin`/`admin`.
 They are never to be reused anywhere real.
+
+**For a guided tour** — documents, database, one MCP call, and the Bundle inspector, in one
+scripted pass — run `make demo-seed` (idempotent) and follow
+[`docs/Demo.md`](docs/Demo.md).
 
 ---
 

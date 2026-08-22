@@ -6,13 +6,15 @@
 > **and [`docs/ADAPTATION.md`](docs/ADAPTATION.md)** *in the same commit* — a stale
 > tracker is worse than none.
 
-**Last updated:** 2026-08-22 — reduced `D1` deliverables 1-2 done: a genuinely clean clone
-comes up ready (`make wait`), and all 14 critical-path Playwright tests pass in one run
-after fixing a real Keycloak fixture bug (see the dated notes below). Deliverables 3-5
-(demo script, README rewrite, release verification) remain in this same session.
+**Last updated:** 2026-08-22 — reduced `D1` deliverables 1-3 done: a genuinely clean clone
+comes up ready (`make wait`), all 14 critical-path Playwright tests pass in one run, and
+`make demo-seed` + `docs/Demo.md` give a scripted, verified walkthrough of documents,
+database, one MCP call and the Bundle inspector. Deliverables 4-5 (README rewrite, release
+verification) remain in this same session.
 **Phase:** **Portfolio finish.** One committed milestone remains: reduced `D1`.
-**Next task:** reduced `D1` deliverable 3 — the deterministic demo dataset/walkthrough
-script, then the README rewrite and release verification.
+**Next task:** reduced `D1` deliverable 4 — rewrite the README around the verified
+walkthrough, exact commands, and honest limitations, then deliverable 5's release
+verification and lifecycle.
 **Branch right now:** `agent/d1-portfolio-release`, PR #25 (draft); `C4`/PR #24 already
 merged to `main`.
 
@@ -118,6 +120,55 @@ merged to `main`.
 > `waitForTimeout`, every wait already keyed to a real DOM/URL condition, every spec already
 > self-skips with a named reason when a dependency is down. The only real defect was the
 > Keycloak fixture bug above; once fixed, the existing suite needed no hardening at all.
+
+> ### 2026-08-22 — `D1` deliverable 3 done: a scripted, verified demo walkthrough
+>
+> **`make demo-seed`** (new Makefile target, depends on `bootstrap`): idempotently
+> registers/introspects the seeded `analytics.*` warehouse, seeds its business glossary, and
+> registers `e2e-fixtures/sources/handbook.txt` as a `local_fs` connector (slug
+> `demo-fixtures`) — the non-visual prerequisites a presenter should not do on camera.
+> Verified idempotent by running it twice in a row against the live stack (`already present`
+> on every row the second time).
+>
+> **A second real CLI bug, found building this and fixed in the same shape as the Keycloak
+> one:** `mnemosctl connector register`'s own `--help` text promises "idempotent per slug",
+> but the CLI dispatch in `main()` only caught `(MnemosError, ValueError)`; a duplicate slug
+> fell through to the raw `asyncpg.IntegrityError` from `uq_content_source_org_id_slug` — a
+> full stack trace on stderr, exit 1. `entrypoints/api/routers/connectors.py` already
+> translates the identical constraint into a clean 409 for a browser caller, but nothing did
+> the CLI's equivalent. Fixed in `_connector_register` by checking `get_by_slug` first,
+> matching `mnemosctl bootstrap`'s own "already present" idiom, rather than relying on the
+> constraint violation as control flow — a retry is the normal shape of a re-run seed
+> script, not a conflict, and the two callers now correctly disagree on purpose. Regression
+> test: `tests/test_cli_connector_register.py`, against real Postgres, registers the same
+> slug twice and asserts both calls return `0`. Full connector-adjacent suite (29 tests
+> across `test_connectors_service.py`, `test_connectors_router.py`,
+> `test_worker_ingestion.py`, and the new file) passed; `ruff`/`ruff format`/`mypy --strict`
+> clean on both changed files.
+>
+> **`docs/Demo.md`** — a presenter-facing script (not a test) covering, in order: sign-in;
+> connect-and-ingest-live over the pre-registered connector then ask a Documents-routed
+> question with citation click-through; an NL2SQL happy path (`what was total revenue by
+> region`) and the guarded-write refusal/repair; the full MCP register→discover→grant→
+> propose→approve→result flow; opening the Bundle inspector on a completed answer; and an
+> optional memory supersession/retraction beat. A reset section uses only
+> `docker compose down -v` + `make demo-seed` — never a hand-edited row, matching the
+> deliverable's own constraint.
+>
+> **The one sequence that had not been exercised end to end before — verified live, not
+> assumed:** every individual piece above already had Playwright coverage, but no existing
+> spec asked a chat question about content ingested through the *connector* path (as opposed
+> to a direct Knowledge upload). A throwaway Playwright script (not committed —
+> `frontend/e2e/` gained no new file) drove exactly `docs/Demo.md` §2's sequence against the
+> live stack: ingest `demo-fixtures`' `handbook.txt` via Sources, watch it reach `Succeeded`
+> live, ask "According to the uploaded handbook, how many leave days carry over?", confirm
+> the router labels it **Documents**, and confirm the citation inspector shows "five working
+> days" — passed in 13.5 seconds. The demo script's claims are reproduced, not merely
+> plausible.
+>
+> **Not done yet, by design — deliverables 4-5.** No README rewrite beyond deliverable 1's
+> two Quickstart lines and the `docs/Demo.md` pointer added alongside them; no final release
+> verification or PR lifecycle.
 
 > ### 2026-08-18 — `C4` done: context is governed, persisted, and inspectable
 >
