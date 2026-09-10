@@ -1,4 +1,4 @@
-import { render, screen } from "@testing-library/react";
+import { fireEvent, render, screen } from "@testing-library/react";
 import userEvent from "@testing-library/user-event";
 import { describe, expect, it, vi } from "vitest";
 import { axe } from "vitest-axe";
@@ -17,6 +17,18 @@ function renderComposer(overrides: Partial<ComposerProps> = {}) {
 }
 
 describe("the composer", () => {
+  it("keeps input-method composition Enter from sending a partial message", () => {
+    const onSend = vi.fn();
+    renderComposer({ onSend });
+    const textarea = screen.getByRole("textbox", { name: "Message" });
+    fireEvent.change(textarea, { target: { value: "こんにちは" } });
+    fireEvent.keyDown(textarea, { key: "Enter", isComposing: true });
+    expect(onSend).not.toHaveBeenCalled();
+    expect(textarea).toHaveValue("こんにちは");
+    fireEvent.keyDown(textarea, { key: "Enter", isComposing: false });
+    expect(onSend).toHaveBeenCalledWith("こんにちは");
+  });
+
   it("test_the_composer_sends_on_enter_and_newlines_on_shift_enter", async () => {
     const onSend = vi.fn();
     renderComposer({ onSend });

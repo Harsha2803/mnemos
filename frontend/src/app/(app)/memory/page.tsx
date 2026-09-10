@@ -113,7 +113,7 @@ export default function MemoryPage() {
             The prior claim remains in belief-time history; this form creates its immutable replacement.
           </p>
         )}
-        <form className="grid gap-4 rounded-lg bg-bg-secondary p-4 md:grid-cols-2" onSubmit={(event) => { event.preventDefault(); setNotice(null); save.mutate(); }}>
+        <form className="grid grid-cols-1 gap-4 rounded-lg bg-bg-secondary p-4 @xl/content:grid-cols-2" onSubmit={(event) => { event.preventDefault(); setNotice(null); save.mutate(); }}>
           <Field label="Subject type"><input required className={INPUT} value={draft.subjectKind} onChange={(event) => setDraft({ ...draft, subjectKind: event.target.value })} /></Field>
           <Field label="Subject reference"><input required className={INPUT} placeholder="employee:ada" value={draft.subjectRef} onChange={(event) => setDraft({ ...draft, subjectRef: event.target.value })} /></Field>
           <Field label="Subject name"><input required className={INPUT} placeholder="Ada Lovelace" value={draft.subjectName} onChange={(event) => setDraft({ ...draft, subjectName: event.target.value })} /></Field>
@@ -122,8 +122,8 @@ export default function MemoryPage() {
           <Field label="Confidence"><input required type="number" min="0" max="1" step="0.01" className={INPUT} value={draft.confidence} onChange={(event) => setDraft({ ...draft, confidence: event.target.value })} /></Field>
           <Field label="Valid from"><input type="datetime-local" className={INPUT} value={draft.validFrom} onChange={(event) => setDraft({ ...draft, validFrom: event.target.value })} /></Field>
           <Field label="Valid to"><input type="datetime-local" className={INPUT} value={draft.validTo} onChange={(event) => setDraft({ ...draft, validTo: event.target.value })} /></Field>
-          <Field label="Claim" className="md:col-span-2"><textarea required className={TEXTAREA} value={draft.objectText} onChange={(event) => setDraft({ ...draft, objectText: event.target.value })} /></Field>
-          <div className="flex flex-wrap items-center gap-3 md:col-span-2">
+          <Field label="Claim" className="@xl/content:col-span-2"><textarea required className={TEXTAREA} value={draft.objectText} onChange={(event) => setDraft({ ...draft, objectText: event.target.value })} /></Field>
+          <div className="flex flex-wrap items-center gap-3 @xl/content:col-span-2">
             <Button rank="filled" type="submit" disabled={save.isPending}>{superseding ? "Create replacement" : "Save claim"}</Button>
             {save.isError && <p role="alert" className="text-footnote text-danger">{save.error.message}</p>}
             {notice && <p role="status" className="text-footnote text-success">{notice}</p>}
@@ -144,7 +144,7 @@ export default function MemoryPage() {
         ) : history.data.claims.length === 0 ? (
           <EmptyState icon={Brain} title="No claims at this time" description="Record a claim above, or broaden the two time filters." headingLevel={3} />
         ) : (
-          <div className="grid gap-4 lg:grid-cols-[minmax(0,1fr)_20rem]">
+          <div className="grid grid-cols-1 gap-4 @xl/content:grid-cols-[minmax(0,1fr)_20rem]">
             <ol aria-label="Memory claims" className="flex flex-col gap-3">
               {history.data.claims.map((claim) => (
                 <li key={claim.id} className="rounded-lg border border-separator bg-bg-secondary p-4">
@@ -152,7 +152,7 @@ export default function MemoryPage() {
                     <div><p className="text-callout font-semibold text-label">{claim.subject.display_name} · {claim.predicate}</p><p className="mt-1 text-footnote text-label-secondary">{claim.object_text}</p></div>
                     <span className="rounded-full bg-fill-tertiary px-2 py-1 text-caption font-semibold uppercase text-label-secondary">{claim.status}</span>
                   </div>
-                  <dl className="mt-3 grid gap-2 text-caption text-label-tertiary sm:grid-cols-2">
+                  <dl className="mt-3 grid gap-2 text-caption text-label-tertiary @xl/content:grid-cols-2">
                     <div><dt className="font-semibold">Valid time</dt><dd>{formatRange(claim.valid_from, claim.valid_to)}</dd></div>
                     <div><dt className="font-semibold">Belief time</dt><dd>{formatRange(claim.recorded_at, claim.retracted_at)}</dd></div>
                   </dl>
@@ -181,7 +181,7 @@ function Field({ label, children, className = "" }: { label: string; children: R
 }
 
 function MemoryFilterBar({ filters, onChange }: { filters: MemoryFilters; onChange: (next: MemoryFilters) => void }) {
-  return <div className="grid gap-3 rounded-lg bg-bg-tertiary p-3 md:grid-cols-4"><Field label="Subject reference"><input className={INPUT} value={filters.subjectRef ?? ""} onChange={(event) => onChange({ ...filters, subjectRef: event.target.value })} /></Field><Field label="Valid at"><input type="datetime-local" className={INPUT} value={toLocalDateTime(filters.asOf)} onChange={(event) => onChange({ ...filters, asOf: localToIso(event.target.value) })} /></Field><Field label="Believed at"><input type="datetime-local" className={INPUT} value={toLocalDateTime(filters.believedAt)} onChange={(event) => onChange({ ...filters, believedAt: localToIso(event.target.value) })} /></Field><label className="hit-target flex items-center gap-2 self-end text-footnote font-semibold text-label-secondary"><input type="checkbox" checked={filters.includeRetracted ?? true} onChange={(event) => onChange({ ...filters, includeRetracted: event.target.checked })} />Include retracted</label></div>;
+  return <div className="grid grid-cols-1 gap-3 rounded-lg bg-bg-tertiary p-3 @xl/content:grid-cols-4"><Field label="Subject reference"><input className={INPUT} value={filters.subjectRef ?? ""} onChange={(event) => onChange({ ...filters, subjectRef: event.target.value })} /></Field><Field label="Valid at"><input type="datetime-local" className={INPUT} value={toLocalDateTime(filters.asOf)} onChange={(event) => onChange({ ...filters, asOf: localToIso(event.target.value) })} /></Field><Field label="Believed at"><input type="datetime-local" className={INPUT} value={toLocalDateTime(filters.believedAt)} onChange={(event) => onChange({ ...filters, believedAt: localToIso(event.target.value) })} /></Field><label className="hit-target flex items-center gap-2 self-end text-footnote font-semibold text-label-secondary"><input type="checkbox" checked={filters.includeRetracted ?? true} onChange={(event) => onChange({ ...filters, includeRetracted: event.target.checked })} />Include retracted</label></div>;
 }
 
 function toWrite(draft: Draft): MemoryWrite {

@@ -21,7 +21,7 @@ const INTERACTIVE = 'button, a[href], input, select, textarea, [role="button"]';
 
 function viewport(width: number): void {
   setMediaQueries({
-    [INSPECTOR_INLINE]: width >= 1024,
+    [INSPECTOR_INLINE]: width >= 1280,
     [SIDEBAR_INLINE]: width >= 768,
   });
 }
@@ -185,7 +185,7 @@ describe("the three-column shell", () => {
     expect(handle).toHaveAttribute("aria-valuenow", "336");
   });
 
-  it("test_below_1024px_the_inspector_becomes_an_overlay_sheet", async () => {
+  it("test_below_1280px_the_inspector_becomes_an_overlay_sheet", async () => {
     viewport(900);
     renderShell();
 
@@ -225,6 +225,24 @@ describe("the three-column shell", () => {
     );
 
     await userEvent.keyboard("{Escape}");
+    expect(screen.queryByRole("dialog")).toBeNull();
+  });
+
+  it("mobile navigation closes by touch and returns focus to its opener", async () => {
+    viewport(320);
+    renderShell();
+    const opener = screen.getByRole("button", { name: "Show navigation" });
+    await userEvent.click(opener);
+    await userEvent.click(screen.getByRole("button", { name: "Close navigation" }));
+    expect(screen.queryByRole("dialog")).toBeNull();
+    expect(opener).toHaveFocus();
+  });
+
+  it("following even the current navigation link dismisses the mobile sheet", async () => {
+    viewport(320);
+    renderShell();
+    await userEvent.click(screen.getByRole("button", { name: "Show navigation" }));
+    await userEvent.click(screen.getByRole("link", { name: "Overview" }));
     expect(screen.queryByRole("dialog")).toBeNull();
   });
 

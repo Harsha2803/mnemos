@@ -1,3 +1,18 @@
+Current task update — 2026-09-10
+
+The owner-authorized BrowserStack mobile-first pass is complete and fully verified locally
+on feat/mobile-first. Read TRACKER §3 and docs/DesignSystem §7 for behavior and evidence.
+The frontend passes lint/typecheck, 131 Vitest tests, production build, 12 responsive
+Chromium cases, and all 16 real Compose Playwright journeys. Backend regression gates pass:
+ruff lint/format, strict mypy (228 sources), 501 tests, Alembic drift, readiness, and database
+doctor (42 tables, 41 forced RLS). The branch is not pushed and has no PR because remote
+publication still requires explicit owner authorization. Once authorized, follow TRACKER
+§0/§7 through personal-account PR closure. B4/C1/C2 remain deferred. Physical iOS/Android
+keyboard and safe-area checks remain manual release QA; Chromium viewport emulation is not
+device certification.
+
+--- Historical D1 handoff (superseded by the task update above) ---
+
 You are picking up Mnemos at:
 
   /home/shreeharsha/Personal/Projects/Resume_001/mnemos

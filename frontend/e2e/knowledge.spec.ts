@@ -126,7 +126,7 @@ test("test_you_can_upload_a_document_ask_about_it_and_click_the_citation", async
 
   await expect(
     page.getByLabel("Routed to Documents: Asks about documents or cited knowledge."),
-  ).toBeVisible();
+  ).toBeVisible({ timeout: 90_000 });
 
   await expect(page.getByRole("button", { name: "Send message" })).toBeVisible({
     timeout: 90_000,

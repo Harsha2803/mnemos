@@ -4,6 +4,7 @@ import { Check, Copy, Database, ShieldAlert, TriangleAlert } from "lucide-react"
 import { useState } from "react";
 
 import { Button } from "@/components/ui/Button";
+import { Table } from "@/components/ui/Table";
 import type { Nl2SqlResult, Nl2SqlVerdict, SqlCellValue } from "@/lib/chat/stream";
 
 export type SqlPanelProps = { result: Nl2SqlResult };
@@ -28,7 +29,7 @@ export function SqlPanel({ result }: SqlPanelProps) {
   }
 
   return (
-    <div className="flex w-full flex-col gap-3 rounded-lg border border-separator bg-bg-secondary p-4">
+    <div className="flex min-w-0 w-full max-w-full flex-col gap-3 rounded-lg border border-separator bg-bg-secondary p-4">
       {refused && (
         <div className="flex items-start gap-2 rounded-md border border-danger bg-bg px-3 py-2 text-footnote text-danger">
           <ShieldAlert className="size-4 shrink-0 translate-y-0.5" strokeWidth={1.5} aria-hidden="true" />
@@ -90,15 +91,13 @@ export function SqlPanel({ result }: SqlPanelProps) {
               {copied === "table" ? <Check className="size-4" aria-hidden="true" /> : <Copy className="size-4" aria-hidden="true" />}{copied === "table" ? "Copied" : "Copy table"}
             </Button>
           </div>
-          <div className="max-h-96 overflow-auto rounded-md border border-separator">
-            <table className="w-full border-collapse text-left text-footnote">
-              <caption className="sr-only">Query results</caption>
-              <thead className="sticky top-0 z-10">
-                <tr>{result.columns.map((column) => <th key={column} scope="col" className="border-b border-separator bg-bg-tertiary px-3 py-2 font-semibold text-label">{column}</th>)}</tr>
-              </thead>
-              <tbody>{result.rows.map((row, rowIndex) => <tr key={rowIndex}>{row.map((cell, cellIndex) => <td key={cellIndex} className="border-b border-separator px-3 py-2 text-label-secondary">{formatCell(cell)}</td>)}</tr>)}</tbody>
-            </table>
-          </div>
+          <Table
+            caption="Query results"
+            className="max-h-96"
+            columns={result.columns.map((column, index) => ({ key: String(index), header: column, render: (row: SqlCellValue[]) => formatCell(row[index] ?? null) }))}
+            rows={result.rows}
+            rowKey={(_, index) => String(index)}
+          />
           {result.truncated && <p className="text-footnote text-label-tertiary">Showing the first {result.rows.length} rows — more were available and were not fetched.</p>}
         </>
       )}

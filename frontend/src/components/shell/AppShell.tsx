@@ -1,14 +1,22 @@
 "use client";
 
 import * as Dialog from "@radix-ui/react-dialog";
-import * as VisuallyHidden from "@radix-ui/react-visually-hidden";
-import { PanelLeft, PanelRight } from "lucide-react";
+import { PanelLeft, PanelRight, X } from "lucide-react";
 import { usePathname } from "next/navigation";
-import { useEffect, useRef, useState, type CSSProperties, type KeyboardEvent, type PointerEvent, type ReactNode } from "react";
+import {
+  useEffect,
+  useRef,
+  useState,
+  type CSSProperties,
+  type KeyboardEvent,
+  type PointerEvent,
+  type ReactNode,
+} from "react";
 
 import { ThemeToggle } from "@/components/theme/ThemeToggle";
 import { Button } from "@/components/ui/Button";
 import { readLayoutPreferences, writeLayoutPreferences } from "@/lib/layoutPreferences";
+import { useInspectorSelection } from "@/lib/inspector/SelectionProvider";
 
 import { destinationFor } from "./destinations";
 import { InspectorContent } from "./InspectorContent";
@@ -42,7 +50,7 @@ function clamp(value: number, min: number, max: number): number {
  * measure, inspector. The arrangement is not a stylistic borrowing — it is this
  * product's information architecture, and the inspector is the feature.
  *
- * Below 1024px the inspector stops being a column and becomes a modal sheet;
+ * Below 1280px the inspector stops being a column and becomes a modal sheet;
  * below 768px the sidebar does too. That is a change of *component*, not of
  * width — a sheet traps focus, closes on Esc and restores focus to its trigger,
  * none of which a narrower column does — which is why the breakpoints are read
@@ -50,8 +58,13 @@ function clamp(value: number, min: number, max: number): number {
  */
 export function AppShell({ children }: { children: ReactNode }) {
   const pathname = usePathname();
-  const inspectorIsInline = useMediaQuery(INSPECTOR_INLINE, true);
-  const sidebarIsInline = useMediaQuery(SIDEBAR_INLINE, true);
+  const inspectorIsInline = useMediaQuery(INSPECTOR_INLINE, false);
+  const sidebarIsInline = useMediaQuery(SIDEBAR_INLINE, false);
+  const { selection } = useInspectorSelection();
+  const navigationTrigger = useRef<HTMLButtonElement>(null);
+  const inspectorTrigger = useRef<HTMLButtonElement>(null);
+  const inspectorReturnFocus = useRef<HTMLElement | null>(null);
+  const previousSelection = useRef(selection);
 
   // An open conversation is chrome as much as it is prose (the composer, its
   // flow annotations, `SqlPanel`), so it gets the wider `measure-chat` column and
@@ -72,12 +85,41 @@ export function AppShell({ children }: { children: ReactNode }) {
   const [inspectorWidth, setInspectorWidth] = useState(DEFAULT_INSPECTOR_WIDTH);
   const [preferencesHydrated, setPreferencesHydrated] = useState(false);
 
+  // A citation or Inspect action opens its result. Resizing alone must never
+  // reopen a dismissed sheet or resurrect an old selection.
+  useEffect(() => {
+    if (selection !== previousSelection.current && selection !== null) {
+      if (inspectorIsInline) setInspectorPinned(true);
+      else {
+        if (!inspectorSheetOpen) {
+          inspectorReturnFocus.current = document.activeElement as HTMLElement;
+        }
+        setInspectorSheetOpen(true);
+      }
+    }
+    previousSelection.current = selection;
+  }, [selection, inspectorIsInline, inspectorSheetOpen]);
+
+  useEffect(() => {
+    setSidebarSheetOpen(false);
+    setInspectorSheetOpen(false);
+  }, [pathname]);
+
+  useEffect(() => {
+    if (sidebarIsInline) setSidebarSheetOpen(false);
+    if (inspectorIsInline) setInspectorSheetOpen(false);
+  }, [sidebarIsInline, inspectorIsInline]);
+
   useEffect(() => {
     const saved = readLayoutPreferences();
     if (saved.sidebarPinned !== undefined) setSidebarPinned(saved.sidebarPinned);
     if (saved.inspectorPinned !== undefined) setInspectorPinned(saved.inspectorPinned);
-    if (saved.sidebarWidth !== undefined) setSidebarWidth(clamp(saved.sidebarWidth, SIDEBAR_MIN_WIDTH, SIDEBAR_MAX_WIDTH));
-    if (saved.inspectorWidth !== undefined) setInspectorWidth(clamp(saved.inspectorWidth, INSPECTOR_MIN_WIDTH, INSPECTOR_MAX_WIDTH));
+    if (saved.sidebarWidth !== undefined) {
+      setSidebarWidth(clamp(saved.sidebarWidth, SIDEBAR_MIN_WIDTH, SIDEBAR_MAX_WIDTH));
+    }
+    if (saved.inspectorWidth !== undefined) {
+      setInspectorWidth(clamp(saved.inspectorWidth, INSPECTOR_MIN_WIDTH, INSPECTOR_MAX_WIDTH));
+    }
     setPreferencesHydrated(true);
   }, []);
 
@@ -90,7 +132,7 @@ export function AppShell({ children }: { children: ReactNode }) {
   const inspectorShowing = inspectorIsInline ? inspectorPinned : inspectorSheetOpen;
 
   return (
-    <div className="flex h-dvh overflow-hidden bg-bg text-label">
+    <div className="workspace-shell flex h-dvh overflow-hidden bg-bg text-label">
       {sidebarIsInline && (
         <nav
           id={SIDEBAR_ID}
@@ -99,11 +141,11 @@ export function AppShell({ children }: { children: ReactNode }) {
           className={[
             "material-chrome shrink-0 overflow-hidden border-separator",
             "transition-[width] duration-250 ease-spring",
-            sidebarPinned ? "w-[var(--sidebar-width)] border-r" : "w-0",
+            sidebarPinned ? "sidebar-column w-[var(--sidebar-width)] border-r" : "w-0",
           ].join(" ")}
         >
           {sidebarPinned && (
-            <div className="h-full w-[var(--sidebar-width)] overflow-y-auto">
+            <div className="h-full overflow-y-auto">
               <SidebarContent />
             </div>
           )}
@@ -124,9 +166,12 @@ export function AppShell({ children }: { children: ReactNode }) {
           inside it and content genuinely passes *under* the material. A toolbar
           that is a flex sibling of a separately scrolling pane is translucent
           over nothing, which is a blur filter costing frames for no effect. */}
-      <div className="flex min-w-0 flex-1 flex-col overflow-y-auto">
-        <header className="material-chrome sticky top-0 z-20 flex h-14 shrink-0 items-center gap-2 border-b border-separator px-3">
+      <div
+        className={`flex min-w-0 flex-1 flex-col ${isChatSession ? "overflow-hidden" : "overflow-y-auto"}`}
+      >
+        <header className="workspace-toolbar material-chrome sticky top-0 z-20 flex min-h-14 shrink-0 items-center gap-2 border-b border-separator px-3">
           <Button
+            ref={navigationTrigger}
             aria-label={sidebarShowing ? "Hide navigation" : "Show navigation"}
             aria-expanded={sidebarShowing}
             aria-controls={sidebarIsInline ? SIDEBAR_ID : undefined}
@@ -140,19 +185,23 @@ export function AppShell({ children }: { children: ReactNode }) {
 
           {/* Read from the same list the sidebar renders, so the bar and the nav
               cannot disagree. A literal here is a lie waiting for the second route. */}
-          <span className="text-subheadline font-semibold text-label">
+          <span className="min-w-0 flex-1 truncate text-subheadline font-semibold text-label">
             {destinationFor(pathname)?.label ?? "Mnemos"}
           </span>
 
-          <div className="ml-auto flex items-center gap-2">
-            <ThemeToggle />
+          <div className="ml-auto flex shrink-0 items-center gap-2">
+            {sidebarIsInline && <ThemeToggle />}
             <Button
+              ref={inspectorTrigger}
               aria-label={inspectorShowing ? "Hide context inspector" : "Show context inspector"}
               aria-expanded={inspectorShowing}
               aria-controls={inspectorIsInline ? INSPECTOR_ID : undefined}
               onClick={() => {
                 if (inspectorIsInline) setInspectorPinned((open) => !open);
-                else setInspectorSheetOpen(true);
+                else {
+                  inspectorReturnFocus.current = inspectorTrigger.current;
+                  setInspectorSheetOpen(true);
+                }
               }}
             >
               <PanelRight className="size-[18px]" strokeWidth={1.5} aria-hidden="true" />
@@ -160,14 +209,16 @@ export function AppShell({ children }: { children: ReactNode }) {
           </div>
         </header>
 
-        <main className="flex-1">
+        <main className={`min-w-0 flex-1 ${isChatSession ? "flex min-h-0 flex-col" : ""}`}>
           {/* The 46rem measure (DesignSystem §2.2). Past ~75 characters the eye
               loses its place on the return sweep. An open conversation reads
               at `measure-chat` instead, with a tighter gutter — see the
               `isChatSession` comment above. */}
           <div
             className={
-              isChatSession ? "measure-chat mx-auto px-4 py-4" : "measure mx-auto px-6 py-8"
+              isChatSession
+                ? "@container/content measure-chat mx-auto flex min-h-0 w-full flex-1 flex-col"
+                : "@container/content measure mx-auto w-full px-4 py-4 sm:px-6 sm:py-8"
             }
           >
             {children}
@@ -194,11 +245,11 @@ export function AppShell({ children }: { children: ReactNode }) {
           className={[
             "shrink-0 overflow-hidden border-separator bg-bg-secondary",
             "transition-[width] duration-250 ease-spring",
-            inspectorPinned ? "w-[var(--inspector-width)] border-l" : "w-0",
+            inspectorPinned ? "inspector-column w-[var(--inspector-width)] border-l" : "w-0",
           ].join(" ")}
         >
           {inspectorPinned && (
-            <div className="h-full w-[var(--inspector-width)]">
+            <div className="h-full">
               <InspectorContent />
             </div>
           )}
@@ -211,9 +262,9 @@ export function AppShell({ children }: { children: ReactNode }) {
           title="Context inspector"
           open={inspectorSheetOpen}
           onOpenChange={setInspectorSheetOpen}
-          width="var(--inspector-width)"
+          returnFocus={() => inspectorReturnFocus.current ?? inspectorTrigger.current}
         >
-          <InspectorContent />
+          <InspectorContent headerAction={<SheetClose label="Close context inspector" />} />
         </Sheet>
       )}
 
@@ -223,9 +274,18 @@ export function AppShell({ children }: { children: ReactNode }) {
           title="Workspace"
           open={sidebarSheetOpen}
           onOpenChange={setSidebarSheetOpen}
-          width="var(--sidebar-width)"
+          returnFocus={() => navigationTrigger.current}
         >
-          <SidebarContent />
+          <div
+            className="h-full"
+            onClick={(event) => {
+              if ((event.target as HTMLElement).closest("a[href]")) {
+                setSidebarSheetOpen(false);
+              }
+            }}
+          >
+            <SidebarContent mobile headerAction={<SheetClose label="Close navigation" />} />
+          </div>
         </Sheet>
       )}
     </div>
@@ -316,7 +376,7 @@ type SheetProps = {
   title: string;
   open: boolean;
   onOpenChange: (open: boolean) => void;
-  width: string;
+  returnFocus: () => HTMLElement | null;
   children: ReactNode;
 };
 
@@ -329,25 +389,41 @@ type SheetProps = {
  * requirement is right — an unnamed dialog is announced as "dialog" and nothing
  * else — but the panel already carries its own visible heading.
  */
-function Sheet({ side, title, open, onOpenChange, width, children }: SheetProps) {
+function Sheet({ side, title, open, onOpenChange, returnFocus, children }: SheetProps) {
   return (
     <Dialog.Root open={open} onOpenChange={onOpenChange}>
       <Dialog.Portal>
         <Dialog.Overlay className="fixed inset-0 z-30 bg-label-quaternary" />
         <Dialog.Content
           aria-label={title}
-          style={{ width }}
+          aria-describedby={undefined}
+          onCloseAutoFocus={(event) => {
+            event.preventDefault();
+            const target = returnFocus();
+            if (target?.isConnected) target.focus();
+          }}
           className={[
-            "fixed inset-y-0 z-40 max-w-[85vw] overflow-y-auto bg-bg-secondary shadow-lg",
-            side === "right" ? "right-0 border-l border-separator" : "left-0 border-r border-separator",
+            "workspace-sheet fixed inset-y-0 z-40 w-full overflow-y-auto bg-bg-secondary shadow-lg",
+            side === "right" ? "max-w-md" : "max-w-sm",
+            side === "right"
+              ? "right-0 border-l border-separator"
+              : "left-0 border-r border-separator",
           ].join(" ")}
         >
-          <VisuallyHidden.Root asChild>
-            <Dialog.Title>{title}</Dialog.Title>
-          </VisuallyHidden.Root>
+          <Dialog.Title className="sr-only">{title}</Dialog.Title>
           {children}
         </Dialog.Content>
       </Dialog.Portal>
     </Dialog.Root>
+  );
+}
+
+function SheetClose({ label }: { label: string }) {
+  return (
+    <Dialog.Close asChild>
+      <Button aria-label={label} className="!px-2">
+        <X className="size-5" aria-hidden="true" />
+      </Button>
+    </Dialog.Close>
   );
 }

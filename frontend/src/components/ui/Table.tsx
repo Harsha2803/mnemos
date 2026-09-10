@@ -12,7 +12,7 @@ export type TableProps<T> = {
   caption: string;
   columns: TableColumn<T>[];
   rows: T[];
-  rowKey: (row: T) => string;
+  rowKey: (row: T, index: number) => string;
   className?: string;
 };
 
@@ -24,20 +24,23 @@ export type TableProps<T> = {
  * styling reproduces (DesignSystem §3, semantics). The first primitive of
  * this shape in the app — everything before it was a list or a card grid.
  *
- * Wrapped in its own horizontal scroller so a wide table never widens the
- * page itself.
+ * Labelled fields stack in a narrow container. Explicit roles preserve table
+ * semantics in browsers that remove them when CSS changes table display.
  */
 export function Table<T>({ caption, columns, rows, rowKey, className = "" }: TableProps<T>) {
   return (
-    <div className={`overflow-x-auto rounded-xl border border-separator ${className}`.trim()}>
-      <table className="w-full text-left text-callout">
+    <div
+      className={`table-region min-w-0 max-w-full overflow-auto rounded-lg border border-separator ${className}`.trim()}
+    >
+      <table role="table" className="responsive-table w-full text-left text-callout">
         <caption className="sr-only">{caption}</caption>
-        <thead>
-          <tr className="border-b border-separator bg-bg-secondary">
+        <thead role="rowgroup">
+          <tr role="row" className="border-b border-separator bg-bg-secondary">
             {columns.map((column) => (
               <th
                 key={column.key}
                 scope="col"
+                role="columnheader"
                 className="whitespace-nowrap px-4 py-2 text-footnote font-semibold text-label-secondary"
               >
                 {column.header}
@@ -45,15 +48,26 @@ export function Table<T>({ caption, columns, rows, rowKey, className = "" }: Tab
             ))}
           </tr>
         </thead>
-        <tbody>
-          {rows.map((row) => (
-            <tr key={rowKey(row)} className="border-b border-separator last:border-0">
+        <tbody role="rowgroup">
+          {rows.map((row, index) => (
+            <tr
+              role="row"
+              key={rowKey(row, index)}
+              className="border-b border-separator last:border-0"
+            >
               {columns.map((column) => (
                 <td
                   key={column.key}
+                  role="cell"
                   className={`px-4 py-2 align-top ${column.className ?? ""}`.trim()}
                 >
-                  {column.render(row)}
+                  <span
+                    className="table-field-label text-footnote font-semibold text-label-secondary"
+                    aria-hidden="true"
+                  >
+                    {column.header}
+                  </span>
+                  <div className="min-w-0">{column.render(row)}</div>
                 </td>
               ))}
             </tr>

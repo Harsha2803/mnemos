@@ -12,7 +12,8 @@
     "test": "vitest run",
     "test:watch": "vitest",
     "test:e2e": "playwright test",
-    "generate:api": "openapi-typescript ${MNEMOS_OPENAPI_URL:-http://localhost:8000/openapi.json} --output src/lib/api/schema.ts"
+    "generate:api": "openapi-typescript ${MNEMOS_OPENAPI_URL:-http://localhost:8000/openapi.json} --output src/lib/api/schema.ts",
+    "test:responsive": "playwright test --config=playwright.responsive.config.ts"
   },
   "dependencies": {
     "@radix-ui/react-dialog": "^1.1.15",

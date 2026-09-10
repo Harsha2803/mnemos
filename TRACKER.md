@@ -6,28 +6,16 @@
 > **and [`docs/ADAPTATION.md`](docs/ADAPTATION.md)** *in the same commit* — a stale
 > tracker is worse than none.
 
-**Last updated:** 2026-08-23 — `C3` — conversation product depth — is **complete**, all five
-deliverables (folders, bookmarks, feedback, history search, audit log): backend vertical
-slices including a real migration (`0008`, full-text search column + GIN index) and a new
-`observability` feature (audit write path + 8 named call sites), 515 backend tests (0
-regressions), frontend UI for all five plus `/bookmarks` and `/audit` screens, 128 frontend
-Vitest tests (0 regressions), a new `organize.spec.ts` Playwright spec, and all 16 tests
-across all 8 Playwright specs green against a freshly rebuilt `api`/`web` stack. Four real
-bugs found and fixed across the milestone (a `ts_headline` options-string syntax error and a
-migrate/api separate-image rebuild gap, both deliverable 4; an audited-deny reason using the
-sanitized public message instead of the real diagnostic one, deliverable 5; a frontend race
-where a slow initial session fetch could silently wipe a just-sent first message, found by the
-new Playwright spec and fixed in `app/(app)/chat/[sessionId]/page.tsx`). Full evidence is in
-this file's 2026-08-22 and 2026-08-23 dated notes.
-**Phase:** **`C3` — conversation product depth — done.** Committed 2026-08-22 by explicit
-project-owner decision, reopening scope the 2026-08-18 reset had deferred; all five
-deliverables and every cross-cutting requirement in §5's brief are verified. `B4`, `C1`, `C2`
-stay deliberately deferred; do not start any of them without a separate explicit decision.
-**Next task:** none committed. Per §0/§7, the next milestone (`B4`, `C1`, or `C2`) needs a
-fresh explicit project-owner decision before any brief is written or any code changes —
-do not assume which one from this file alone.
-**Branch right now:** `agent/c3-conversation-depth`, PR #26 — ready to leave draft and merge
-once this update lands.
+**Last updated:** 2026-09-10 — owner-authorized mobile-first product polish is implemented
+and fully verified locally. The shell, every existing workspace screen, narrow tables,
+chat viewport behavior, and source selection now follow the brief recorded in §3.
+**Phase:** **Mobile-first frontend maintenance — locally complete.** No backend contract,
+retrieval, compiler, security, database, or benchmark behavior changed. `B4`, `C1`, and
+`C2` stay deliberately deferred.
+**Next task:** close the repository lifecycle for this branch after the owner authorizes
+remote publication; no further product work is committed. Any later milestone needs a fresh
+explicit owner decision.
+**Branch right now:** `feat/mobile-first` — verified locally; no remote PR has been opened.
 
 > ### 2026-08-22 — `D1` deliverable 1 done: a genuinely clean clone comes up ready
 >
@@ -1467,7 +1455,7 @@ reduced `D1` are the plan; larger architecture seams are optional extensions, no
 
 | Area | What ships |
 |---|---|
-| **Conversation** | Sessions, messages, token-by-token streaming, and automatic flow routing |
+| **Conversation** | Sessions, messages, token-by-token streaming, automatic flow routing, folders, bookmarks, feedback, and history search |
 | **RAG** | Upload → extract → chunk → embed → hybrid retrieval → answer with click-through citations |
 | **NL2SQL** | Schema introspection, business glossary, generated SQL, AST read-only guard, read-only DB role, result grid, narration |
 | **Tools** | MCP registry, per-user credentials, approval gates, trust tiers, and one auditable tool call |
@@ -1476,10 +1464,11 @@ reduced `D1` are the plan; larger architecture seams are optional extensions, no
 | **Identity** | OIDC + internal auth, platform JWT with refresh rotation, live role bindings, and per-tenant row-level security |
 | **Governed context** | Bitemporal memory with supersession, a budgeted context compiler, and an inspector that shows what was admitted, what was excluded and why |
 | **Operations** | Reproducible Compose, migrations, CI, critical-path end-to-end tests, and measured documentation |
+| **Audit** | Eight security-relevant event types and an administrator-only audit screen |
 
-Multi-step agent orchestration, API keys/full RBAC/tag ACLs, prompt/cost management, and
-conversation-product depth remain valid future extensions but are deliberately deferred from
-the resume-focused finish line. See §3.0 and [`docs/Roadmap.md`](docs/Roadmap.md).
+Multi-step agent orchestration, API keys/full RBAC/tag ACLs, and prompt/cost management
+remain valid future extensions but are deliberately deferred from the resume-focused finish
+line. See §3.0 and [`docs/Roadmap.md`](docs/Roadmap.md).
 
 The milestone plan is §3.0 here; the architecture, schema and design rationale are in
 **[`docs/ADAPTATION.md`](docs/ADAPTATION.md)**. Read that next.
@@ -1536,6 +1525,33 @@ port in `C4`. Until then the README must say so.
 Milestone ledger and exit criteria live in [ADAPTATION §7](docs/ADAPTATION.md#7-milestones).
 Detailed evidence for each ✅ is in [ADAPTATION §8](docs/ADAPTATION.md#8-current-state).
 
+### ✅ Mobile-first product polish — verified locally 2026-09-10
+
+**You can now navigate, send, inspect evidence, and use every existing management screen
+at 320px without page-wide horizontal scrolling; desktop retains the three-column
+workspace.** The server renders one content column first. Navigation moves inline at 768px
+and the context inspector at 1280px; below those points, explicit close controls, focus
+containment, and focus restoration make both available as sheets. Selecting an answer or
+citation opens its evidence automatically.
+
+Content-container breakpoints keep forms and grids responsive to their actual pane. The
+shared semantic `Table` stacks labelled fields below 40rem and restores columns above it,
+covering documents, source items, SQL results, and audit. Inputs stay at 16px, controls keep
+their 44px floor, safe areas and long content are handled, and the chat transcript owns the
+scroll while its composer remains reachable. Source registration is disclosed when sources
+exist; selections survive filtering, reset on source changes, and keep a sticky ingest action.
+
+**Evidence:** frontend lint and typecheck clean; 131/131 Vitest tests; production Next build
+clean; 12/12 deterministic Chromium layout/interaction cases at 320px, 390px, 768px, and
+1440px including long content and a 400px-tall chat; 16/16 Playwright journeys against the
+rebuilt Compose stack. Backend regression gates stayed green: ruff lint/format, strict mypy
+(228 sources), 501/501 tests, Alembic drift check, ready dependencies, and database doctor
+(42 tables, 41 with forced RLS). The full browser run exposed an impossible timeout budget:
+model-backed waits allowed 90 seconds inside a 60-second test. It now allows 120 seconds;
+Ollama logs showed the cold RAG prompt itself taking 59.2 seconds, and the final suite passed.
+Emulated Chromium coverage is not physical-device certification; iOS Safari and Android
+keyboard/safe-area behavior remain manual release QA. No benchmark rerun was needed.
+
 ### 3.0 The plan — completed foundation and the resume-focused finish
 
 Every milestone ships its backend *and* its UI (C12), and every milestone ends with a
@@ -1576,7 +1592,7 @@ order" list is the authoritative next-up sequence; the note above it explains wh
 |---|---|---|---|
 | **C1** | API keys (old `M3.5`) · full RBAC permission matrix + tag-scoped document ACLs (old `M3.6`) · keys UI + real 403 states | **issue an API key, call the API with it, and watch a user without the permission be refused** — in the UI and at the wire | ⏸ deferred — existing OIDC/JWT/RLS already carries the core security signal |
 | **C2** | Versioned prompt store (diff, activate) · cost + token ledger · prompt manager + cost dashboard | **change the prompt behind a flow, activate the new version, and see what every answer cost** | ⏸ deferred — operations breadth, not a finish-line differentiator |
-| **C3** | Chat history depth: folders, bookmarks, feedback · audit log · search over history | **organise, bookmark, rate and search your conversations, and read the audit trail of who did what** | ⏸ deferred — conventional product depth |
+| **C3** | Chat history depth: folders, bookmarks, feedback · audit log · search over history | **organise, bookmark, rate and search your conversations, and read the audit trail of who did what** | ✅ 2026-08-23 — PR #26, all five deliverables verified against the rebuilt stack |
 | **C4** | **The context layer.** Bitemporal memory + supersession · the budgeted context compiler · the context inspector · re-run the benchmark on Postgres | **open any answer and see its compiled context** — what was admitted, what was excluded and why, and the token spend against budget | ✅ 2026-08-18 (PR #24) — Postgres, Compose and Chromium verified |
 
 **Phase D — ship it.**
@@ -1599,9 +1615,9 @@ order" list is the authoritative next-up sequence; the note above it explains wh
 | **F0a** | CI — pytest, ruff, mypy `--strict`, `alembic check`, and the frontend gate on every PR | ✅ |
 
 **Old milestone numbers, mapped.** This translation is historical. The 2026-08-18 scope
-reset deliberately deferred `B4` and `C1`–`C3`; an old design reference does not reopen
-them. If you find an old ID anywhere, use this table to understand it rather than treating
-it as committed work:
+reset deferred `B4` and `C1`–`C3`; the owner reopened and completed `C3` on 2026-08-23,
+while the others remain deferred. An old design reference does not reopen them. If you find
+an old ID anywhere, use this table to understand it rather than treating it as committed work:
 
 | Old | New | Note |
 |---|---|---|
@@ -1611,7 +1627,7 @@ it as committed work:
 | `M5` objectstore/connectors/events | `B1` | Minimal upload lands in `A2`; the connector *abstraction* is `B1` |
 | `M6` knowledge + jobs | split — extract/chunk/embed to `A2`, job machinery to `B2` | |
 | `M7` LLM gateway + prompts + cost | split — gateway to `A1`, prompts + cost to `C2` | The gateway shipped; prompt/cost management is deliberately deferred |
-| `M8` chat | split — sessions/messages/streaming to `A1`, folders/bookmarks/feedback to `C3` | Core chat shipped; conversation-product depth is deliberately deferred |
+| `M8` chat | split — sessions/messages/streaming to `A1`, folders/bookmarks/feedback to `C3` | Core chat shipped in `A1`; conversation-product depth completed in `C3` (PR #26) |
 | `M9` RAG | `A2` | |
 | `M10` NL2SQL | `A3` | |
 | `M11` MCP tools | `B3` | |
@@ -3664,6 +3680,12 @@ Recorded so they are not rediscovered as surprises:
 ---
 
 ## 5. NEXT TASK
+
+### No product work committed
+
+The owner-authorized mobile-first brief is complete and its implementation and evidence have
+moved to §3. The verified `feat/mobile-first` branch is ready for owner-authorized remote
+publication and PR closure. That repository action is the only remaining lifecycle step.
 
 **Nothing is committed.** `C3` — conversation product depth, the last item on the committed
 plan — is done (all five deliverables: folders, bookmarks, feedback, history search, audit

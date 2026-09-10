@@ -4,6 +4,7 @@ import { FileQuestion, Search } from "lucide-react";
 import { useMemo, useState } from "react";
 
 import { Button } from "@/components/ui/Button";
+import { Table } from "@/components/ui/Table";
 import { EmptyState } from "@/components/ui/EmptyState";
 import type { SourceItem } from "@/lib/connectors/api";
 
@@ -82,7 +83,7 @@ export function ItemBrowser({ sourceName, items, onIngest }: ItemBrowserProps) {
 
   return (
     <div className="flex flex-col gap-3">
-      <div className="grid gap-2 sm:grid-cols-[minmax(0,1fr)_auto]">
+      <div className="grid grid-cols-1 gap-2 @xl/content:grid-cols-[minmax(0,1fr)_auto]">
         <label className="relative">
           <span className="sr-only">Search source items</span>
           <Search className="pointer-events-none absolute left-3 top-1/2 size-4 -translate-y-1/2 text-label-tertiary" aria-hidden="true" />
@@ -90,24 +91,11 @@ export function ItemBrowser({ sourceName, items, onIngest }: ItemBrowserProps) {
         </label>
         <label>
           <span className="sr-only">Filter item type</span>
-          <select value={type} onChange={(event) => setType(event.target.value)} className="hit-target rounded-md border border-separator bg-bg px-3 text-callout text-label">
+          <select value={type} onChange={(event) => setType(event.target.value)} className="hit-target w-full min-w-0 rounded-md border border-separator bg-bg px-3 text-callout text-label">
             <option value="all">All file types</option>
             {types.map((value) => <option key={value} value={value}>{value}</option>)}
           </select>
         </label>
-      </div>
-      <div className="flex items-center justify-between gap-3">
-        <p className="text-footnote text-label-secondary">
-          {selected.size} selected · {visible.length} visible
-        </p>
-        <Button
-          rank="filled"
-          disabled={selected.size === 0 || busy}
-          aria-busy={busy}
-          onClick={() => void ingestSelected()}
-        >
-          {busy ? "Queuing…" : `Ingest ${selected.size || ""}`.trim()}
-        </Button>
       </div>
 
       <p role="alert" className="text-footnote text-danger empty:hidden">
@@ -116,64 +104,32 @@ export function ItemBrowser({ sourceName, items, onIngest }: ItemBrowserProps) {
 
       {visible.length === 0 ? (
         <p className="rounded-md border border-separator p-4 text-footnote text-label-secondary">No source items match these filters.</p>
-      ) : <div className="overflow-x-auto rounded-md border border-separator">
-        <table className="w-full border-collapse text-left text-footnote">
-          <caption className="sr-only">Items at {sourceName}</caption>
-          <thead>
-            <tr>
-              <th scope="col" className="border-b border-separator bg-bg-tertiary px-3 py-2">
-                <label className="hit-target flex cursor-pointer items-center justify-center">
-                  <input type="checkbox" checked={visible.every((item) => selected.has(item.uri))} onChange={toggleVisible} aria-label="Select all visible items" className="size-[18px]" />
-                </label>
-              </th>
-              <th
-                scope="col"
-                className="border-b border-separator bg-bg-tertiary px-3 py-2 font-semibold text-label"
-              >
-                Name
-              </th>
-              <th
-                scope="col"
-                className="border-b border-separator bg-bg-tertiary px-3 py-2 font-semibold text-label"
-              >
-                Type
-              </th>
-              <th
-                scope="col"
-                className="border-b border-separator bg-bg-tertiary px-3 py-2 font-semibold text-label"
-              >
-                Size
-              </th>
-              <th scope="col" className="border-b border-separator bg-bg-tertiary px-3 py-2 font-semibold text-label">Modified</th>
-            </tr>
-          </thead>
-          <tbody>
-            {visible.map((item) => (
-              <tr key={item.uri}>
-                <td className="border-b border-separator px-3 py-2">
-                  <label className="hit-target flex cursor-pointer items-center justify-center">
-                    <input
-                      type="checkbox"
-                      checked={selected.has(item.uri)}
-                      onChange={() => toggle(item.uri)}
-                      aria-label={`Select ${item.name}`}
-                      className="size-[18px]"
-                    />
-                  </label>
-                </td>
-                <td className="border-b border-separator px-3 py-2 text-label">{item.name}</td>
-                <td className="border-b border-separator px-3 py-2 text-label-secondary">
-                  {item.content_type}
-                </td>
-                <td className="border-b border-separator px-3 py-2 text-label-secondary">
-                  {formatBytes(item.size_bytes)}
-                </td>
-                <td className="border-b border-separator px-3 py-2 text-label-secondary">{formatDate(item.modified_at)}</td>
-              </tr>
-            ))}
-          </tbody>
-        </table>
-      </div>}
+      ) : <Table
+        caption={`Items at ${sourceName}`}
+        rows={visible}
+        rowKey={(item) => item.uri}
+        columns={[
+          { key: "name", header: "Name", render: (item) => (
+            <label className="hit-target flex cursor-pointer items-center gap-3 font-semibold">
+              <input type="checkbox" checked={selected.has(item.uri)} onChange={() => toggle(item.uri)} aria-label={`Select ${item.name}`} className="size-[18px] shrink-0" />
+              <span className="min-w-0">{item.name}</span>
+            </label>
+          ) },
+          { key: "type", header: "Type", render: (item) => item.content_type },
+          { key: "size", header: "Size", render: (item) => formatBytes(item.size_bytes) },
+          { key: "modified", header: "Modified", render: (item) => formatDate(item.modified_at) },
+        ]}
+      />}
+      <div className="selection-bar sticky bottom-0 z-10 flex flex-wrap items-center justify-between gap-2 border-t border-separator bg-bg py-2">
+        <label className="hit-target flex cursor-pointer items-center gap-2 text-footnote">
+          <input type="checkbox" checked={visible.length > 0 && visible.every((item) => selected.has(item.uri))} disabled={visible.length === 0 || busy} onChange={toggleVisible} aria-label="Select all visible items" className="size-[18px]" />
+          Select visible
+        </label>
+        <p role="status" className="text-footnote text-label-secondary">{selected.size} selected · {visible.length} visible</p>
+        <Button rank="filled" disabled={selected.size === 0 || busy} aria-busy={busy} onClick={() => void ingestSelected()}>
+          {busy ? "Queuing…" : `Ingest ${selected.size || ""}`.trim()}
+        </Button>
+      </div>
     </div>
   );
 }

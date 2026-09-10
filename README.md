@@ -31,7 +31,7 @@ for you to discover. This is the honest status.
 | **The schema** | 42 tables across identity, memory, knowledge, chat, context, datasources, tools, prompts and observability. **41 with `FORCE` row-level security**, enforced against an unprivileged app role and proven by a test against a real Postgres — not merely declared in the catalogue |
 | **Identity** | Full OIDC round trip against Keycloak (PKCE S256, split-horizon issuers), internal password auth behind the same provider seam, platform JWT with refresh-token rotation and family revocation, and `mnemosctl bootstrap` to create the first org and admin |
 | **CI** | Every PR runs pytest against a real Postgres and a real Keycloak, ruff, `mypy --strict`, `alembic check`, and a frontend gate of lint + `tsc` + tests + a real `next build` |
-| **The app shell** | A themed, accessible three-column Next.js app at `http://localhost:3000`, with a generated API client and one real call end to end |
+| **The app shell** | A themed, accessible, mobile-first Next.js app at `http://localhost:3000`: one content column first, navigation and context in closable phone sheets, then inline navigation at 768px and the three-column workspace at 1280px |
 | **Sign-in** | A sign-in screen over the OIDC round trip, sessions that survive a reload, real sign-out, and a fail-closed route guard — a route that declares nothing is authenticated |
 | **Chat** | An Ollama-backed gateway behind a `ChatModel` port, persisted sessions and messages, and SSE streaming that renders token by token |
 | **RAG** | Upload → extract → chunk → embed onto pgvector HNSW → hybrid retrieval (vector + trigram, RRF-fused, deduplicated) → an answer with citations you click into. **Authorization is a predicate inside the scan and superseded revisions are excluded there too**, both pinned by tests rather than asserted |
@@ -40,14 +40,15 @@ for you to discover. This is the honest status.
 | **Source ingestion** | MinIO/S3, local-filesystem, and curated-HTTP connectors feed durable Redis Streams jobs. Workers heartbeat, retry with backoff, surface stuck leases, and publish per-job progress/history to the Sources screen |
 | **MCP tools** | Register and discover one self-hosted streamable-HTTP server, keep credentials encrypted per user, re-authorize against live roles/grants and the motivating trust tier, persist approval before dispatch, and inspect every result or denial in the Tool console. Retrieved content cannot trigger a user-tier tool; its denial names the source |
 | **Governed context** | Immutable bitemporal memory with supersession/retraction and two-clock history; a deterministic compiler with trust fences, section floors/ceilings and exact hard-budget verification; atomic Postgres bundle persistence attached to every answer flow; and a Bundle inspector showing admissions, exclusions, conflicts, lineage, provenance and token spend |
+| **Conversation management** | Organize conversations into folders, search titles and message bodies, bookmark and rate answers, and inspect the administrator-only audit trail for security-relevant actions |
 
 **Deliberately deferred:** multi-step agent loops (`B4`), API keys/full RBAC/tag ACL UI
-(`C1`), prompt and cost management (`C2`), and conversation-product depth (`C3`). Their
+(`C1`), and prompt and cost management (`C2`). Their
 schema or architectural seams may remain, but they are not promises in the portfolio plan.
 
-**Phase A, the safe-tool slice, and governed context are complete** — sign-in, chat,
-documents, database, router, sources, MCP approval, bitemporal memory and inspectable
-bundles. The remaining finish is **reduced `D1`**. The
+**The committed product plan is complete** — sign-in, chat, documents, database, router,
+sources, MCP approval, bitemporal memory, inspectable bundles, conversation organization,
+search, feedback, bookmarks, and audit. The
 milestone plan is [`TRACKER.md`](TRACKER.md) §3.0 and the
 architecture is [`docs/ADAPTATION.md`](docs/ADAPTATION.md); `TRACKER.md` §3 is the
 authoritative list of what is built, with the evidence for each claim.
@@ -320,14 +321,18 @@ Stated rather than left for you to discover:
   users specifically so a normal `docker compose down && up` stays reproducible (see
   `TRACKER.md`'s 2026-08-22 note for the failure this fixes), but nothing here is rated
   for a second tenant, a second node, or a hostile operator.
+- **Responsive browser coverage is emulation, not device certification.** The automated
+  matrix exercises 320px and 390px touch viewports, a tablet, desktop, long content, and a
+  short chat viewport in Chromium. Physical iOS Safari and Android software-keyboard and
+  safe-area behavior remain manual release checks.
 - **The platform JWT is HS256 with one shared secret** across `api`/`worker`/`realtime` —
   correct for one trust domain with no external verifier and no KMS in this stack, and
   documented as a decision that reverses the moment a verifier outside that domain exists
   (`docs/ThreatModel.md` §5.1).
 - **`B4` (multi-step agent plans/loops/checkpoints), `C1` (API keys, full RBAC matrix,
-  tag-scoped ACL UI), `C2` (prompt versioning, cost dashboard) and `C3` (folders,
-  bookmarks, feedback, history search) are deliberately not built.** Existing schema and
-  architecture seams remain for all four; none is a promise in the current plan. See
+  tag-scoped ACL UI), and `C2` (prompt versioning, cost dashboard) are deliberately not
+  built.** Existing schema and architecture seams remain for all three; none is a promise
+  in the current plan. See
   [`TRACKER.md`](TRACKER.md) §3.0 for the full committed-vs-deferred ledger and §4 for the
   exhaustive, dated list of every known gap.
 
@@ -355,17 +360,19 @@ bench_results/    the JSON behind the tables above
 Run the gates the way CI does:
 
 ```bash
-cd backend  && ../.venv/bin/python -m pytest      # 464 passed (needs Docker + Keycloak)
+cd backend  && ../.venv/bin/python -m pytest      # 501 passed (needs Docker + Keycloak)
 cd frontend && npm ci && npm run lint && npx tsc --noEmit && npm run test && npm run build
-                                                   # 114 passed
+                                                   # 131 passed
 ```
 
 Critical-path browser coverage — auth, routed chat, RAG/citations, guarded NL2SQL, live
-connector ingestion, MCP approval, and the Bundle inspector — runs against the full Compose
-stack:
+connector ingestion, MCP approval, the Bundle inspector, conversation organization, and
+audit — runs against the full Compose stack. A separate deterministic layout suite covers
+the whole workspace at 320px, 390px, tablet, and desktop widths:
 
 ```bash
-cd frontend && npx playwright test               # 14 passed (needs the full stack up)
+cd frontend && npx playwright test               # 16 passed (needs the full stack up)
+cd frontend && npm run test:responsive            # 12 passed; starts its own web server
 ```
 
 ---
@@ -373,8 +380,8 @@ cd frontend && npx playwright test               # 14 passed (needs the full sta
 ## Relationship to `docs/`
 
 `docs/` (Architecture, SystemDesign, DatabaseDesign, APIContract, ThreatModel, DesignSystem
-and 12 ADRs) preserves both the committed design and optional extension seams. The
-resume-focused finish is narrower: completed `B3` and `C4`, then reduced `D1`.
+and 12 ADRs) preserves both the completed design and optional extension seams. The focused
+finish completed `B3`, `C4`, reduced `D1`, and the owner-reopened `C3`.
 
 The distinction is deliberate and stated rather than hidden: deferred product features and
 scaling stages beyond single-node are design options, not unfulfilled claims. See

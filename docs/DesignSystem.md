@@ -498,3 +498,41 @@ harness (`frontend/src/test/harness.ts`) flattens the layers so `getComputedStyl
 real values, and the halves it still cannot reach — the media block's scope, the rendered
 column widths, the absence of a theme flash — were confirmed in headless Chrome. From
 `M3.4`, Playwright is where that belongs.
+
+## 7. Mobile-first layout (2026-09-10)
+
+The [BrowserStack mobile-first guide](https://www.browserstack.com/guide/how-to-implement-mobile-first-design)
+provides the approach: prioritize the primary task on small screens, use fluid layouts,
+make touch controls accessible, and progressively add detail where space permits.
+
+- The server starts with one content column. Navigation becomes inline at 768px; the
+  inspector becomes inline at 1280px. Panel width caps protect the content between them.
+  Phone navigation contains appearance settings; the toolbar keeps navigation, location
+  and inspection. Both sheets have explicit close buttons, Escape, focus containment and
+  focus restoration. Selecting evidence opens its inspector; resizing alone does not.
+- `@container/content` on the content pane drives page grids (`@xl/content`, 36rem), so
+  open sidebars cannot trick a form into using a desktop grid in a narrow pane. Base grids
+  have one `minmax(0, 1fr)` track. Use `min-w-0` for flex/grid children with long content.
+- `Table` uses one semantic table and one set of controls. Below its own 40rem container
+  width, cells stack as labelled fields; above it, normal columns support comparison.
+  Explicit table/row/cell roles preserve semantics when CSS changes display. Headers stay
+  in the accessibility tree; repeated visual field labels are `aria-hidden`. Documents,
+  source items, query results and audit events share this primitive.
+- Inputs use `--text-body` (16px at default scale) regardless of surrounding metadata.
+  Interactive targets remain at least 44px. Long paths, identifiers and passages wrap;
+  SQL/code may scroll within its own bounded region. Primary actions need no hover.
+- The chat transcript owns its scroll; the composer occupies a fixed flex sibling with
+  `min-height: 0` ancestors. Dynamic viewport height, safe-area padding and the viewport's
+  `interactive-widget=resizes-content` hint keep controls available as browser chrome or
+  the supported software keyboard changes the viewport. Pinch zoom remains enabled.
+- Source registration is disclosed on demand when sources exist. The selection bar stays
+  at the bottom of the item browser; filtering retains selection, switching source resets
+  it. Overview quick actions precede operational metrics.
+- Browser coverage: `npm run test:responsive` starts a frontend at port 3001 and uses
+  deterministic API-boundary fixtures at 320, 390, 768 and 1440px, plus short chat
+  viewports. Set `MNEMOS_RESPONSIVE_URL` to use an existing server. Run the separate
+  `npm run test:e2e` suite against Compose for real authentication, streaming and
+  ingestion. Emulation is not real-device certification; iOS Safari/Android keyboard and
+  safe-area checks remain manual QA.
+
+No additional visual assets, webfonts, UI framework or runtime dependency is needed.

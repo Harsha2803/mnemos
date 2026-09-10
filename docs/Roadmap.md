@@ -1,6 +1,7 @@
 # Roadmap
 
-**Last revised:** 2026-08-22 — reduced `D1` is complete; the committed roadmap is finished.
+**Last revised:** 2026-09-10 — `C3` and mobile-first product polish are complete locally;
+the committed roadmap remains finished.
 
 Mnemos is a portfolio project built to make the author's production experience legible to
 reviewers and hiring teams. The roadmap therefore prioritizes a small number of deep,
@@ -34,8 +35,8 @@ Four previously planned milestones were removed from the required finish line on
   central to the portfolio thesis.
 - ~~`C3` conversation organization and expanded audit UI is deferred; it is conventional
   CRUD rather than differentiating engineering work.~~ **Reopened 2026-08-22 by explicit
-  project-owner decision.** See `TRACKER.md` §5 for the committed brief. `B4`, `C1`, `C2`
-  remain deferred, unchanged.
+  project-owner decision and completed on PR #26 (2026-08-23).** `B4`, `C1`, `C2` remain
+  deferred, unchanged.
 
 The schema and architecture may retain seams for deferred capabilities. Retaining a seam
 does not make the feature part of the committed plan until it is explicitly reopened, as
@@ -62,7 +63,6 @@ engineering and are never accepted as schedule shortcuts.
 | Multi-step autonomous agent loops | Deferred to `B4`; not needed to prove safe MCP invocation. |
 | API-key product surface and exhaustive RBAC matrix | Deferred to `C1`; existing tenant isolation remains mandatory. |
 | Prompt/cost management suite | Deferred to `C2`. |
-| Conversation-product depth | Deferred to `C3`. |
 | Kubernetes, Helm, Terraform, or multi-cloud abstractions | Compose is sufficient, reproducible, and free. |
 | Paid models or required SaaS accounts | A reviewer must be able to run the full demo locally. |
 | Benchmark chasing unrelated to governed context | Measurements serve the stated claim, not a leaderboard. |

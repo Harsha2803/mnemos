@@ -47,14 +47,14 @@ export function Composer({
   }
 
   function onKeyDown(event: KeyboardEvent<HTMLTextAreaElement>): void {
-    if (event.key === "Enter" && !event.shiftKey) {
+    if (event.key === "Enter" && !event.shiftKey && !event.nativeEvent.isComposing) {
       event.preventDefault();
       submit();
     }
   }
 
   return (
-    <div className="flex flex-col gap-2 border-t border-separator bg-bg px-4 py-3">
+    <div className="composer flex shrink-0 flex-col gap-2 border-t border-separator bg-bg px-3 py-3 sm:px-4">
       <div className="flex items-end gap-2">
         <textarea
           ref={ref}
@@ -64,7 +64,7 @@ export function Composer({
           disabled={streaming}
           onKeyDown={onKeyDown}
           className={[
-            "min-h-11 flex-1 resize-none rounded-md border border-separator bg-bg-secondary px-3 py-2",
+            "min-h-11 min-w-0 flex-1 resize-none rounded-md border border-separator bg-bg-secondary px-3 py-2",
             "text-body leading-normal text-label placeholder:text-label-tertiary",
             "focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-accent focus-visible:ring-offset-2",
             "disabled:opacity-60",

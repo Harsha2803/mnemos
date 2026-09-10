@@ -114,7 +114,7 @@ export function MessageBubble({
     <div
       id={`message-${message.id}`}
       className={[
-        "flex flex-col gap-1",
+        "flex min-w-0 max-w-full flex-col gap-1",
         isUser ? "items-end" : "items-start",
         // Only the user's own turn animates in: its id never changes after
         // creation. The assistant bubble mounts once (empty, `streaming`)
@@ -140,7 +140,7 @@ export function MessageBubble({
       <div
         aria-live={message.streaming === true ? "polite" : undefined}
         className={[
-          "measure whitespace-pre-wrap rounded-lg px-4 py-3 text-body leading-relaxed",
+          "measure max-w-full whitespace-pre-wrap rounded-lg px-4 py-3 text-body leading-relaxed",
           isUser ? "bg-accent-tint text-label" : "bg-bg-secondary text-label",
         ].join(" ")}
       >
@@ -324,7 +324,7 @@ function renderWithCitations(
         <span
           id={previewId}
           role="tooltip"
-          className="pointer-events-none absolute bottom-full left-1/2 z-30 mb-2 hidden w-72 -translate-x-1/2 rounded-md border border-separator bg-bg p-3 text-left text-footnote font-normal leading-relaxed text-label shadow-lg group-hover/citation:block group-focus-within/citation:block"
+          className="pointer-events-none absolute bottom-full left-1/2 z-30 mb-2 hidden w-72 -translate-x-1/2 rounded-md border border-separator bg-bg p-3 text-left text-footnote font-normal leading-relaxed text-label shadow-lg [@media(hover:hover)_and_(pointer:fine)]:group-hover/citation:block [@media(hover:hover)_and_(pointer:fine)]:group-focus-within/citation:block"
         >
           <span className="mb-1 block font-semibold">Source [{citation.marker}]</span>
           <span className="line-clamp-4 block">{citation.quoted_text}</span>

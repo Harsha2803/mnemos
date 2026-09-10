@@ -1,4 +1,4 @@
-import type { ButtonHTMLAttributes } from "react";
+import type { ComponentPropsWithRef } from "react";
 
 /**
  * Three ranks, and there is no fourth. `filled` is the one primary action in a
@@ -14,7 +14,7 @@ const RANK_CLASSES: Record<ButtonRank, string> = {
   plain: "text-accent hover:bg-fill-tertiary",
 };
 
-export type ButtonProps = ButtonHTMLAttributes<HTMLButtonElement> & {
+export type ButtonProps = ComponentPropsWithRef<"button"> & {
   rank?: ButtonRank;
 };
 

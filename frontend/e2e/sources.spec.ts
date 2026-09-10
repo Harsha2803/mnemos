@@ -94,6 +94,7 @@ test("test_you_can_connect_a_local_fs_source_ingest_an_item_and_watch_it_succeed
   await nav(page).getByRole("link", { name: "Sources", exact: true }).click();
   await page.waitForURL(new RegExp(`^${WEB}/sources`));
 
+  if (!(await page.locator("#source-name").isVisible())) await page.locator("summary").filter({ hasText: "Connect a source" }).click();
   await page.locator("#source-name").fill(`E2E fixtures ${runId}`);
   await page.locator("#source-slug").fill(slug);
   // "Local filesystem directory" is already the form's default `kind`.

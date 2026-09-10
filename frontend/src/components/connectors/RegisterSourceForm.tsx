@@ -22,7 +22,7 @@ const KIND_LABEL: Record<Kind, string> = {
 const KIND_ICON: Record<Kind, LucideIcon> = { s3: Database, minio: Database, local_fs: FolderOpen, http: Globe };
 
 const inputClasses =
-  "hit-target rounded-md border border-separator bg-bg px-4 text-body text-label placeholder:text-label-tertiary focus-visible:border-accent";
+  "hit-target min-w-0 w-full rounded-md border border-separator bg-bg px-4 text-body text-label placeholder:text-label-tertiary focus-visible:border-accent";
 
 /**
  * One form, three shapes: which fields it shows depends on `kind`, matching
@@ -78,10 +78,10 @@ export function RegisterSourceForm({ onRegistered }: RegisterSourceFormProps) {
   return (
     <form
       onSubmit={(event) => void onSubmit(event)}
-      className="flex flex-col gap-4 rounded-lg border border-separator bg-bg-secondary p-6"
+      className="flex flex-col gap-4 rounded-lg border border-separator bg-bg-secondary p-4 @xl/content:p-6"
       noValidate
     >
-      <div className="grid gap-4 sm:grid-cols-2">
+      <div className="grid grid-cols-1 gap-4 @xl/content:grid-cols-2">
         <div className="flex flex-col gap-2">
           <label htmlFor="source-name" className="text-subheadline font-semibold text-label">
             Name
@@ -118,7 +118,7 @@ export function RegisterSourceForm({ onRegistered }: RegisterSourceFormProps) {
 
       <div className="flex flex-col gap-2">
         <span className="text-subheadline font-semibold text-label">Provider</span>
-        <div className="grid grid-cols-2 gap-2 sm:grid-cols-4" role="radiogroup" aria-label="Source provider">
+        <div className="grid grid-cols-2 gap-2 @xl/content:grid-cols-4" role="radiogroup" aria-label="Source provider">
           {(Object.keys(KIND_LABEL) as Kind[]).map((value) => {
             const Icon = KIND_ICON[value];
             return (
@@ -132,7 +132,7 @@ export function RegisterSourceForm({ onRegistered }: RegisterSourceFormProps) {
       </div>
 
       {(kind === "s3" || kind === "minio") && (
-        <div className="grid gap-4 sm:grid-cols-2">
+        <div className="grid grid-cols-1 gap-4 @xl/content:grid-cols-2">
           <div className="flex flex-col gap-2">
             <label htmlFor="source-bucket" className="text-subheadline font-semibold text-label">
               Bucket
