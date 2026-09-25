@@ -1,0 +1,174 @@
+# Mnemos — public demo deployment on one VM behind nginx (see docs/Deploy.md).
+#
+# An override of the root docker-compose.yml, never used on its own. Always run
+# it through deploy/gcp/compose.sh, which passes the project name, both files
+# and the env file in the right order:
+#
+#   deploy/gcp/compose.sh up -d
+#
+# What changes from the local stack, and only this:
+#   - no port is published except the four nginx proxies to, and those bind to
+#     127.0.0.1 — Postgres, Redis, MinIO, Ollama and demo-mcp stay on the compose
+#     network only;
+#   - every secret the base file hardcodes for development comes from
+#     deploy/gcp/.env.prod (never committed; deploy/gcp/gen-env.sh writes it);
+#   - Keycloak runs in production mode, persisted in Postgres, with a realm
+#     rendered at deploy time from the committed dev realm
+#     (deploy/gcp/render-realm.py);
+#   - the browser-facing URLs are the public HTTPS hostnames.
+#
+# Relative paths below resolve against the repository root (the directory of
+# the first compose file), not against this file.
+
+x-prod-backend-env: &prod-backend-env
+  MNEMOS_ENV: production
+  MNEMOS_DATABASE_URL: postgresql+asyncpg://mnemos_app:${MNEMOS_APP_DATABASE_PASSWORD:?}@postgres:5432/mnemos
+  MNEMOS_APP_DATABASE_PASSWORD: ${MNEMOS_APP_DATABASE_PASSWORD:?}
+  MNEMOS_ANALYTICS_DATABASE_URL: postgresql+asyncpg://mnemos_ro:${MNEMOS_RO_DATABASE_PASSWORD:?}@postgres:5432/mnemos_analytics
+  MNEMOS_OBJECT_ACCESS_KEY: ${MINIO_ROOT_USER:?}
+  MNEMOS_OBJECT_SECRET_KEY: ${MINIO_ROOT_PASSWORD:?}
+  MNEMOS_JWT_SECRET: ${MNEMOS_JWT_SECRET:?}
+  MNEMOS_DSN_ENCRYPTION_KEY: ${MNEMOS_DSN_ENCRYPTION_KEY:?}
+  MNEMOS_SOURCE_ENCRYPTION_KEY: ${MNEMOS_SOURCE_ENCRYPTION_KEY:?}
+  MNEMOS_TOOL_ENCRYPTION_KEY: ${MNEMOS_TOOL_ENCRYPTION_KEY:?}
+  MNEMOS_OIDC_ISSUER_PUBLIC: https://${MNEMOS_AUTH_HOST:?}/realms/mnemos
+  MNEMOS_OIDC_ISSUER_INTERNAL: http://keycloak:8080/realms/mnemos
+  MNEMOS_OIDC_REDIRECT_URI: https://${MNEMOS_API_HOST:?}/api/v1/auth/oidc/callback
+  MNEMOS_WEB_BASE_URL: https://${MNEMOS_WEB_HOST:?}
+  MNEMOS_CORS_ORIGINS: '["https://${MNEMOS_WEB_HOST:?}"]'
+  MNEMOS_REFRESH_COOKIE_SECURE: "true"
+  # Per-session log files hold visitors' chat content and grow without bound;
+  # a public demo keeps neither on disk.
+  MNEMOS_SESSION_LOG_ENABLED: "false"
+
+x-prod-web-env: &prod-web-env
+  NEXT_PUBLIC_API_URL: https://${MNEMOS_API_HOST:?}
+  NEXT_PUBLIC_WS_URL: wss://${MNEMOS_WS_HOST:?}
+  NEXT_PUBLIC_OIDC_ISSUER: https://${MNEMOS_AUTH_HOST:?}/realms/mnemos
+  NEXT_PUBLIC_OIDC_CLIENT_ID: mnemos-web
+
+services:
+  postgres:
+    environment:
+      # Only read when the data volume is first initialised.
+      POSTGRES_PASSWORD: ${POSTGRES_PASSWORD:?}
+    ports: !reset []
+
+  # The base init SQL creates `mnemos_ro` with a password that is public in this
+  # repository, and nothing creates Keycloak's database. This job fixes both on
+  # every start, idempotently, so rotating a value in .env.prod takes effect on
+  # the next `up` rather than only on a fresh volume.
+  db-prod-init:
+    image: pgvector/pgvector:pg16
+    depends_on:
+      postgres: {condition: service_healthy}
+    environment:
+      PGHOST: postgres
+      PGUSER: mnemos
+      PGDATABASE: mnemos
+      PGPASSWORD: ${POSTGRES_PASSWORD:?}
+      RO_PASSWORD: ${MNEMOS_RO_DATABASE_PASSWORD:?}
+      KC_DB_PASSWORD: ${KEYCLOAK_DB_PASSWORD:?}
+    entrypoint:
+      - /bin/sh
+      - -c
+      - |
+        psql -v ON_ERROR_STOP=1 -v ro_pw="$$RO_PASSWORD" -v kc_pw="$$KC_DB_PASSWORD" <<'SQL'
+        SELECT format('ALTER ROLE mnemos_ro PASSWORD %L', :'ro_pw') \gexec
+        SELECT 'CREATE ROLE keycloak LOGIN'
+         WHERE NOT EXISTS (SELECT FROM pg_roles WHERE rolname = 'keycloak') \gexec
+        SELECT format('ALTER ROLE keycloak PASSWORD %L', :'kc_pw') \gexec
+        SELECT 'CREATE DATABASE keycloak OWNER keycloak'
+         WHERE NOT EXISTS (SELECT FROM pg_database WHERE datname = 'keycloak') \gexec
+        SQL
+    restart: "no"
+
+  redis:
+    ports: !reset []
+
+  minio:
+    environment:
+      MINIO_ROOT_USER: ${MINIO_ROOT_USER:?}
+      MINIO_ROOT_PASSWORD: ${MINIO_ROOT_PASSWORD:?}
+    ports: !reset []
+
+  minio-init:
+    environment:
+      MINIO_ROOT_USER: ${MINIO_ROOT_USER:?}
+      MINIO_ROOT_PASSWORD: ${MINIO_ROOT_PASSWORD:?}
+    # The base entrypoint hardcodes the development credentials.
+    entrypoint: !override
+      - /bin/sh
+      - -c
+      - >-
+        mc alias set local http://minio:9000 "$$MINIO_ROOT_USER" "$$MINIO_ROOT_PASSWORD" &&
+        mc mb --ignore-existing local/mnemos-documents &&
+        mc mb --ignore-existing local/mnemos-uploads &&
+        echo 'buckets ready'
+
+  keycloak:
+    # Production mode, state in Postgres. The hostname stays dynamic
+    # (`hostname-strict=false`, as in dev) rather than pinned with KC_HOSTNAME:
+    # the API fetches OIDC discovery over http://keycloak:8080 and requires every
+    # discovered endpoint to sit under that issuer (providers/oidc.py), which a
+    # pinned public hostname would break. The browser still only ever sees the
+    # public https URL, because nginx forwards Host and X-Forwarded-Proto and
+    # Keycloak trusts them (`proxy-headers=xforwarded`, port bound to loopback).
+    command: !override ["start", "--import-realm", "--http-port=8080"]
+    depends_on:
+      db-prod-init: {condition: service_completed_successfully}
+    environment:
+      KC_DB: postgres
+      KC_DB_URL: jdbc:postgresql://postgres:5432/keycloak
+      KC_DB_USERNAME: keycloak
+      KC_DB_PASSWORD: ${KEYCLOAK_DB_PASSWORD:?}
+      KC_BOOTSTRAP_ADMIN_USERNAME: admin
+      # Only used the first time Keycloak starts against an empty database.
+      KC_BOOTSTRAP_ADMIN_PASSWORD: ${KEYCLOAK_ADMIN_PASSWORD:?}
+      KC_HTTP_ENABLED: "true"
+      KC_HOSTNAME_STRICT: "false"
+      KC_PROXY_HEADERS: xforwarded
+      KC_HEALTH_ENABLED: "true"
+    volumes: !override
+      # Written by render-realm.py, gitignored. Imported only while the realm
+      # does not yet exist in Keycloak's database; later edits need the admin
+      # console (see docs/Deploy.md).
+      - ./deploy/gcp/keycloak:/opt/keycloak/data/import:ro
+    ports: !override ["127.0.0.1:8080:8080"]
+
+  ollama:
+    ports: !reset []
+
+  demo-mcp:
+    ports: !reset []
+
+  migrate:
+    environment:
+      <<: *prod-backend-env
+      MNEMOS_DATABASE_URL: postgresql+asyncpg://mnemos:${POSTGRES_PASSWORD:?}@postgres:5432/mnemos
+
+  api:
+    environment:
+      <<: *prod-backend-env
+      # nginx reaches the container through the Docker bridge, not from
+      # 127.0.0.1, so uvicorn must trust X-Forwarded-* from any peer. Safe only
+      # because the port is published on loopback and nginx overwrites the
+      # headers it forwards.
+      FORWARDED_ALLOW_IPS: "*"
+    ports: !override ["127.0.0.1:8000:8000"]
+
+  worker:
+    environment:
+      <<: *prod-backend-env
+
+  realtime:
+    environment:
+      <<: *prod-backend-env
+      FORWARDED_ALLOW_IPS: "*"
+    ports: !override ["127.0.0.1:8001:8001"]
+
+  web:
+    build:
+      args: *prod-web-env
+    environment: *prod-web-env
+    ports: !override ["127.0.0.1:3000:3000"]
