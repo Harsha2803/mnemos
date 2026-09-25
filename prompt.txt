@@ -102,6 +102,16 @@ Important rules, unchanged:
     silently attaches to (and, on a bare `down`, can delete the containers of) the real
     dev-stack's shared project name. This happened once during `D1` before it was caught.
 
+Deployment (2026-09-26):
+
+  - The demo is live at https://mnemos.harsha2803.dev from GCP VM `mnemos-demo`, started
+    on demand. docs/Deploy.md is the runbook; deploy/gcp/ holds every file. Always drive
+    the production stack through deploy/gcp/compose.sh. Secrets live only in
+    deploy/gcp/.env.prod on the VM (gitignored) — never commit it or deploy/gcp/keycloak/.
+  - TRACKER §5 lists the follow-ups in order (replace MinIO — its images can no longer be
+    pulled, which fails CI's compose job; role binding without SQL; §4 item 40; dependency
+    pins) and §6 the blockers, including decisions only the owner can make.
+
 What is next:
 
   - Nothing is committed. If the project owner has not given a new task, stop here.

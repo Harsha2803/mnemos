@@ -6,28 +6,69 @@
 > **and [`docs/ADAPTATION.md`](docs/ADAPTATION.md)** *in the same commit* — a stale
 > tracker is worse than none.
 
-**Last updated:** 2026-08-23 — `C3` — conversation product depth — is **complete**, all five
-deliverables (folders, bookmarks, feedback, history search, audit log): backend vertical
-slices including a real migration (`0008`, full-text search column + GIN index) and a new
-`observability` feature (audit write path + 8 named call sites), 515 backend tests (0
-regressions), frontend UI for all five plus `/bookmarks` and `/audit` screens, 128 frontend
-Vitest tests (0 regressions), a new `organize.spec.ts` Playwright spec, and all 16 tests
-across all 8 Playwright specs green against a freshly rebuilt `api`/`web` stack. Four real
-bugs found and fixed across the milestone (a `ts_headline` options-string syntax error and a
-migrate/api separate-image rebuild gap, both deliverable 4; an audited-deny reason using the
-sanitized public message instead of the real diagnostic one, deliverable 5; a frontend race
-where a slow initial session fetch could silently wipe a just-sent first message, found by the
-new Playwright spec and fixed in `app/(app)/chat/[sessionId]/page.tsx`). Full evidence is in
-this file's 2026-08-22 and 2026-08-23 dated notes.
-**Phase:** **`C3` — conversation product depth — done.** Committed 2026-08-22 by explicit
-project-owner decision, reopening scope the 2026-08-18 reset had deferred; all five
-deliverables and every cross-cutting requirement in §5's brief are verified. `B4`, `C1`, `C2`
-stay deliberately deferred; do not start any of them without a separate explicit decision.
-**Next task:** none committed. Per §0/§7, the next milestone (`B4`, `C1`, or `C2`) needs a
-fresh explicit project-owner decision before any brief is written or any code changes —
-do not assume which one from this file alone.
-**Branch right now:** `agent/c3-conversation-depth`, PR #26 — ready to leave draft and merge
-once this update lands.
+**Last updated:** 2026-09-26 — **the public demo is deployed** at
+https://mnemos.harsha2803.dev (GCP VM `mnemos-demo`, on demand; see
+[`docs/Deploy.md`](docs/Deploy.md)). All 16 Playwright tests across all 8 specs pass against
+the public HTTPS URLs; backend CI's `mypy --strict` failure (SQLAlchemy 2.1 stub drift) is
+fixed. Not a milestone — deployment work the project owner asked for explicitly. Evidence in
+the 2026-09-26 dated note below; **what is left is in §5 and §6**.
+**Phase:** `C3` done (unchanged). Deployment: live, with the follow-ups in §6.
+**Next task:** §5 — the deployment follow-ups, starting with replacing MinIO (the images are
+no longer downloadable, which fails CI's compose job on every PR). `B4`, `C1`, `C2` stay
+deliberately deferred.
+**Branch right now:** `feat/gcp-deploy` — PR opened from this session.
+
+> ### 2026-09-26 — public demo deployed on GCP
+>
+> **What was built** (`deploy/gcp/`, `docs/Deploy.md`): a production compose override run
+> only through `deploy/gcp/compose.sh` (`-p mnemos`, both files, `.env.prod`); `gen-env.sh`
+> (random secrets, mode 600, refuses to overwrite); `render-realm.py`, which *derives* the
+> production realm from `deploy/keycloak/mnemos-realm.json` so the pinned user ids (D1 bug 1)
+> cannot drift; `demo-access.sql`; a systemd unit (enabled); the nginx site/snippet and the
+> VM startup script, copied from the VM. `.env.prod` and the rendered realm are gitignored.
+>
+> **Verified, not assumed:**
+> - `deploy/gcp/compose.sh config` resolves; only `127.0.0.1:{3000,8000,8001,8080}` are
+>   published. `ss -tlnp` on the VM: only nginx (80/443) and sshd (IAP-only by firewall)
+>   listen on a non-loopback address.
+> - `db-prod-init` rotated `mnemos_ro` off its public password and created Keycloak's
+>   database; `minio-init` created both buckets with the new root credentials;
+>   `mnemosctl datasource introspect` then connected as `mnemos_ro` (23 schema objects).
+> - Keycloak 26.0.8 in production mode (`start`), state in Postgres; the public discovery
+>   document reports `https://mnemos-auth.harsha2803.dev/realms/mnemos`; `/admin/` → 403 via
+>   nginx; master `admin`/`admin` → 401; the realm's password grant is off.
+> - `/readyz` over public HTTPS: `{"status":"ready", postgres/redis/ollama/objectstore ok}`.
+> - **Playwright, 16/16, against the public URLs** from a container on the compose network:
+>   Keycloak sign-in round trip, SSE streaming chat, upload + citation click, NL2SQL (rows,
+>   narration, write refused), memory/bundle inspector, organize, live connector ingestion
+>   over the WebSocket, and MCP register → grant → approve → run.
+> - `mnemos.service` enabled; a full `systemctl stop`/`start` brought every service back to
+>   `/readyz` ready and the web to 200 with no manual step, and Keycloak logged
+>   `Realm 'mnemos' already exists. Import skipped` (the rendered realm applies once).
+> - Backend: `pytest` 501 passed / 0 skipped (live Keycloak up), `ruff`, `ruff format`,
+>   `mypy --strict` clean after the one-line fix.
+>
+> **Real issues found and fixed on the way:**
+> 1. **Backend CI was red on every PR** (seen on PR #28): SQLAlchemy 2.1's stubs made
+>    `mnemosctl db doctor`'s `scalar_one()` untyped under `mypy --strict`. Fixed by
+>    annotating the local. The dependencies are floor-pinned only, so this class of drift
+>    will recur — §6.
+> 2. **The handoff's Keycloak plan would have broken login.** `KC_HOSTNAME=https://…` plus
+>    backchannel-dynamic puts a public `authorization_endpoint` into the discovery document
+>    the API fetches over `http://keycloak:8080`, and `providers/oidc.py` rejects any
+>    discovered endpoint outside that issuer. Production mode therefore keeps
+>    `hostname-strict=false` (as dev does) behind nginx's forwarded headers. Documented in
+>    the override and in `docs/Deploy.md`; no application change.
+> 3. **nginx appended to a client-supplied `X-Forwarded-For`** while uvicorn trusts forwarded
+>    headers from any peer, so a visitor could spoof the IP the audit log records. nginx now
+>    overwrites it with `$remote_addr` (committed and applied live).
+> 4. **A fresh org's analyst cannot use tools at all.** JIT provisioning grants no role (by
+>    design) and nothing maps realm roles or binds one; dev only worked because the analyst
+>    had once been hand-bound to an undocumented `b3-demo` role. `demo-access.sql` now binds
+>    `analyst` + a `demo` role (analyst + `tool:manage`), idempotently. The product gap
+>    itself is in §6.
+> 5. `tools.spec.ts` hardcoded `localhost:8100` for its demo-mcp preflight and silently
+>    skipped when it was not published; now `MNEMOS_E2E_DEMO_MCP_URL`, default unchanged.
 
 > ### 2026-08-22 — `D1` deliverable 1 done: a genuinely clean clone comes up ready
 >
@@ -3665,35 +3706,50 @@ Recorded so they are not rediscovered as surprises:
 
 ## 5. NEXT TASK
 
-**Nothing is committed.** `C3` — conversation product depth, the last item on the committed
-plan — is done (all five deliverables: folders, bookmarks, feedback, history search, audit
-log; this file's 2026-08-22 and 2026-08-23 dated notes have the full evidence, including the
-four real bugs the milestone found and fixed).
+**Deployment follow-ups** (2026-09-26). The demo is live; these are what remain, in order.
+Each is maintenance, not a milestone — follow §0/§7 exactly as for milestone work.
 
-**Do not start any of the following without an explicit decision from the project owner:**
-`B4` (multi-step agent plans, loops, checkpoints, crash recovery, replay), `C1` (API keys,
-full RBAC permission matrix, tag-scoped document ACL UI), `C2` (versioned prompt management,
-cost dashboard), any deployment breadth (Kubernetes, nginx, multi-node), or any new scope not
-already named in `docs/Roadmap.md` §2. All three remain valid future extensions with
-schema/architecture seams already preserved for them — see ADAPTATION §3 — but none is a
-promise.
-
-**If a future session is asked to add something not on this list:** read TRACKER §0-§4 and
-ADAPTATION in full first, exactly as this file has always instructed, then write a fresh
-brief in this section following the same level of detail C4's, D1's and C3's briefs were
-written at — do not silently resume an old, superseded plan.
-
-**If a future session is asked to fix a bug or make a small polish change with no new
-milestone attached:** that is fine and does not need a milestone id. Follow §0's rules
-(scoped commits, a PR immediately, full verification, this file and ADAPTATION updated in
-the same commit) exactly as if it were milestone work, because a maintenance change that
-skips verification is exactly how the bugs D1 and C3 each found would have shipped unnoticed.
-
----
+1. **Replace MinIO.** Docker Hub now answers "access denied" for `minio/minio` and
+   `minio/mc`, and quay.io has no tags, so a fresh machine — and CI's `compose` job on every
+   PR — cannot start the stack. The VM runs only because the owner's laptop cache was
+   loaded onto it (do not delete those images there). Swap in a maintained S3-compatible
+   server; Mnemos talks to it only through boto3, so `docker-compose.yml`, the bucket-init
+   job, `deploy/gcp/docker-compose.prod.yml` and the docs should be all that change. Prove
+   it with CI's compose job green and the Playwright suite green on the rebuilt stack.
+2. **Role binding without SQL.** Add realm-role → local-role mapping at OIDC provisioning
+   (the prefix strip `domain/roles.py` already describes) and/or a `mnemosctl role bind`
+   command, then delete `deploy/gcp/demo-access.sql`. Decide first whether registering an
+   MCP server should stay `tool:manage`-only, since `docs/Demo.md` has the analyst do it.
+3. **§4 item 40** — the bootstrap admin email collides with the realm's `admin@mnemos.local`,
+   so that Keycloak user cannot sign in, in production too.
+4. **Pin backend dependencies** (a lockfile or upper bounds) so CI stops breaking on
+   upstream releases.
+5. Everything in §6 that needs the owner.
 
 ## 6. Blockers
 
-*None.*
+Open as of 2026-09-26, from the deployment. Items 1-4 are also §5's list.
+
+1. **MinIO images are gone from every registry** — CI's `compose` job fails on every PR
+   (PR #28 and this deployment's PR alike); a fresh machine cannot start the stack.
+2. **No supported way to give a signed-in user a role** — `deploy/gcp/demo-access.sql` is
+   the stopgap.
+3. **§4 item 40** — Keycloak's `admin@mnemos.local` cannot sign in.
+4. **Floor-only dependency pins** — upstream releases break CI with no code change.
+5. **Laptop controls are not in the repo.** `init up down status extend ssh logs lib.sh`
+   live in `~/Desktop/mnemos-demo/` on the owner's laptop and were not reachable from the
+   VM; commit them under `deploy/gcp/laptop/` from the laptop.
+6. **Stale DNS after the 4-hour auto power-off** — the A records keep pointing at an IP
+   Google may reassign until the next `up`/`down`. Fix (free, needs the owner's yes): a
+   service account allowed to edit only this DNS zone plus a shutdown script that deletes
+   the records.
+7. **Owner decisions pending:** a shared demo login shown to interviewers vs. credentials
+   on request; whether `down` should snapshot-and-delete the disk (~₹290 → ~₹75/month
+   stopped, 2-4 min slower starts).
+8. **PR #28** (mobile-first) is unmerged; its backend failure is fixed by this deployment's
+   PR (rebase it), its compose failure is item 1.
+9. The Playwright verification left test conversations, documents and MCP servers in the
+   analyst's workspace on the VM; clear them before showing the demo if they distract.
 
 ---
 

@@ -172,7 +172,7 @@ async def _doctor() -> int:
             extensions = [r[0] for r in (await session.execute(text(EXTENSIONS_SQL))).all()]
             tables = (await session.execute(text(TABLES_SQL))).all()
             exclusions = (await session.execute(text(CONSTRAINTS_SQL))).all()
-            partitions = (await session.execute(text(PARTITIONS_SQL))).scalar_one()
+            partitions: int = (await session.execute(text(PARTITIONS_SQL))).scalar_one()
     finally:
         await db.dispose()
 

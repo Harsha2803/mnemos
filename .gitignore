@@ -63,3 +63,8 @@ Thumbs.db
 # Local venv and runtime data
 .venv/
 .data/
+
+# Production deployment state — secrets and the realm rendered from them.
+# Never committed; they live only on the deployment VM (docs/Deploy.md).
+/deploy/gcp/.env.prod
+/deploy/gcp/keycloak/
