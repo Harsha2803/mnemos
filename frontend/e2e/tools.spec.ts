@@ -5,6 +5,7 @@ import { expect, test, type Page } from "@playwright/test";
 const WEB = process.env.MNEMOS_E2E_WEB_URL ?? "http://localhost:3000";
 const API = process.env.MNEMOS_E2E_API_URL ?? "http://localhost:8000";
 const KEYCLOAK = process.env.MNEMOS_E2E_KEYCLOAK_URL ?? "http://localhost:8080";
+const DEMO_MCP = process.env.MNEMOS_E2E_DEMO_MCP_URL ?? "http://localhost:8100";
 
 const ORG = process.env.MNEMOS_E2E_ORG ?? "mnemos";
 const EMAIL = process.env.MNEMOS_E2E_EMAIL ?? "analyst@mnemos.local";
@@ -25,7 +26,7 @@ test.beforeAll(async () => {
   if (!(await reachable(`${KEYCLOAK}/realms/mnemos/.well-known/openid-configuration`))) {
     missing.push("keycloak");
   }
-  if (!(await reachable("http://localhost:8100/healthz"))) missing.push("demo-mcp");
+  if (!(await reachable(`${DEMO_MCP}/healthz`))) missing.push("demo-mcp");
   test.skip(
     missing.length > 0,
     `the B3 stack is not up: ${missing.join(", ")}. Run \`docker compose up -d --build\`.`,
