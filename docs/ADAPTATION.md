@@ -351,6 +351,17 @@ with forced RLS) all pass. No retrieval, compiler, security or database behavior
 the benchmark did not need a rerun. Chromium emulation does not certify physical iOS or
 Android software-keyboard and safe-area behavior; those remain manual release QA.
 
+### Deployment — public demo on GCP (2026-09-26, not a milestone)
+
+Live at https://mnemos.harsha2803.dev, on demand, from one GCP VM behind nginx + Let's
+Encrypt; [`docs/Deploy.md`](Deploy.md) is the runbook and `deploy/gcp/` holds every file.
+The override changes configuration only — no application code — apart from one `mypy`
+annotation and one Playwright preflight URL. Evidence: all 16 Playwright tests pass against
+the public HTTPS URLs; `pytest` 501/501 with live Keycloak; only nginx and IAP-only SSH
+listen publicly. One design note worth keeping: Keycloak's production hostname stays
+dynamic, because the API validates discovered endpoints against the *internal* issuer
+(`providers/oidc.py`), which a pinned public `KC_HOSTNAME` would break. Open follow-ups
+(MinIO replacement, role binding without SQL, item 40, dependency pins) are TRACKER §5/§6.
 
 ### Product polish — UI enhancement handoff (2026-08-17, not a milestone)
 
@@ -1543,6 +1554,9 @@ explicitly reopens scope — as happened for `C3` on 2026-08-22 (TRACKER §5).
 - **Milestone IDs are `A0`–`D1` now, not `M4`–`M14`.** If you find an old ID in a document,
   a docstring or a commit message, §7's mapping table is the translation — do not guess,
   and do not leave a reader holding a number that no longer names anything.
+- **The public demo is deployed (2026-09-26).** Its follow-ups are TRACKER §5, in order;
+  read [`docs/Deploy.md`](Deploy.md) before touching `deploy/gcp/`, and never commit
+  `deploy/gcp/.env.prod` or `deploy/gcp/keycloak/`.
 - **`D1` and `C3` are both done; nothing is committed next.** Do not resume the old phase
   sequence or invent new scope. `B4` and `C1`–`C2` were deliberately deferred on 2026-08-18,
   stayed deferred through `C3`'s 2026-08-22 reopening, and stay deferred pending a separate

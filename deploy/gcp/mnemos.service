@@ -1,0 +1,23 @@
+# Starts the Mnemos production stack when the VM boots, stops it cleanly on
+# shutdown. Install: sudo cp deploy/gcp/mnemos.service /etc/systemd/system/ &&
+# sudo systemctl daemon-reload && sudo systemctl enable mnemos
+[Unit]
+Description=Mnemos production stack (docker compose)
+Requires=docker.service
+After=docker.service network-online.target
+Wants=network-online.target
+
+[Service]
+Type=oneshot
+RemainAfterExit=yes
+User=cheellasreeharsha2803_gmail_com
+WorkingDirectory=/home/cheellasreeharsha2803_gmail_com/mnemos
+# `up -d` blocks until every depends_on health condition holds; Keycloak's first
+# start in production mode and the first model pull can take minutes.
+ExecStart=/home/cheellasreeharsha2803_gmail_com/mnemos/deploy/gcp/compose.sh up -d
+ExecStop=/home/cheellasreeharsha2803_gmail_com/mnemos/deploy/gcp/compose.sh stop
+TimeoutStartSec=900
+TimeoutStopSec=180
+
+[Install]
+WantedBy=multi-user.target
