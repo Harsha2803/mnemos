@@ -24,8 +24,10 @@ export default defineConfig({
   // other's sessions and the failure would look like a backend bug.
   workers: 1,
   fullyParallel: false,
-  // A real IdP round trip is several redirects and a Postgres write.
-  timeout: 60_000,
+  // A real IdP round trip is several redirects and a Postgres write. RAG and
+  // NL2SQL also run the 3B model on CPU; a cold long-context prompt can take
+  // about a minute before the browser receives its completion.
+  timeout: 120_000,
   expect: { timeout: 15_000 },
   reporter: [["list"]],
   use: {

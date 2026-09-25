@@ -1,5 +1,8 @@
 "use client";
 
+import type { ReactNode } from "react";
+
+import { ThemeToggle } from "@/components/theme/ThemeToggle";
 import { usePathname } from "next/navigation";
 
 import { ChatSessionList } from "@/components/chat/ChatSessionList";
@@ -9,14 +12,20 @@ import { AccountFooter } from "./AccountFooter";
 import { DESTINATIONS } from "./destinations";
 import { HealthIndicator } from "./HealthIndicator";
 
-export function SidebarContent() {
+export function SidebarContent({
+  headerAction,
+  mobile = false,
+}: { headerAction?: ReactNode; mobile?: boolean } = {}) {
   const pathname = usePathname();
 
   return (
     <div className="flex h-full flex-col gap-4 p-3">
-      <div className="px-2 pt-1">
-        <p className="text-title-3 font-semibold tracking-title text-label">Mnemos</p>
-        <p className="text-footnote text-label-secondary">Workspace</p>
+      <div className="flex shrink-0 items-start justify-between gap-2 px-2 pt-1">
+        <div>
+          <p className="text-title-3 font-semibold tracking-title text-label">Mnemos</p>
+          <p className="text-footnote text-label-secondary">Workspace</p>
+        </div>
+        {headerAction}
       </div>
 
       {/* `shrink-0` on the destinations, and the scroll on the conversations
@@ -39,7 +48,7 @@ export function SidebarContent() {
         ))}
       </List>
 
-      <div className="min-h-0 flex-1 overflow-y-auto">
+      <div className={mobile ? "flex-1" : "min-h-0 flex-1 overflow-y-auto"}>
         <ChatSessionList />
       </div>
 
@@ -49,6 +58,7 @@ export function SidebarContent() {
           and "you are signed out" send whoever reads them to different places,
           and collapsing the two would cost real debugging time. */}
       <div className="mt-auto flex flex-col gap-1 border-t border-separator pt-2">
+        {mobile && <div className="flex flex-wrap items-center justify-between gap-2 pb-2"><span className="text-footnote text-label-secondary">Appearance</span><ThemeToggle /></div>}
         <AccountFooter />
         <HealthIndicator />
       </div>

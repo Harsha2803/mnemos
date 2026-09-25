@@ -24,6 +24,7 @@ export default function SourcesPage() {
   const queryClient = useQueryClient();
   const [selectedSlug, setSelectedSlug] = useState<string | null>(null);
   const [jobs, setJobs] = useState<Record<string, FeedJob>>({});
+  const [registrationOpen, setRegistrationOpen] = useState(false);
 
   const sources = useQuery({
     queryKey: SOURCES_QUERY_KEY,
@@ -40,6 +41,10 @@ export default function SourcesPage() {
     queryKey: CONNECTOR_JOBS_QUERY_KEY,
     queryFn: ({ signal }) => fetchJobs(signal),
   });
+
+  useEffect(() => {
+    if (sources.data?.length === 0) setRegistrationOpen(true);
+  }, [sources.data]);
 
   useEffect(() => {
     if (!recentJobs.data) return;
@@ -130,16 +135,25 @@ export default function SourcesPage() {
         </p>
       </header>
 
-      <section className="flex flex-col gap-3" aria-labelledby="register-heading">
-        <h2 id="register-heading" className="text-title-3 font-semibold tracking-title">
+      <details
+        open={registrationOpen}
+        onToggle={(event) => setRegistrationOpen(event.currentTarget.open)}
+        className="rounded-lg border border-separator p-3"
+      >
+        <summary className="hit-target flex cursor-pointer items-center font-semibold text-accent">
           Connect a source
-        </h2>
-        <RegisterSourceForm
-          onRegistered={() => void queryClient.invalidateQueries({ queryKey: SOURCES_QUERY_KEY })}
-        />
-      </section>
+        </summary>
+        <section className="mt-3 flex flex-col gap-3" aria-labelledby="register-heading">
+          <h2 id="register-heading" className="text-title-3 font-semibold tracking-title">
+            Connect a source
+          </h2>
+          <RegisterSourceForm
+            onRegistered={() => void queryClient.invalidateQueries({ queryKey: SOURCES_QUERY_KEY })}
+          />
+        </section>
+      </details>
 
-      <div className="grid gap-8 lg:grid-cols-[minmax(0,1fr)_minmax(0,1.4fr)]">
+      <div className="grid grid-cols-1 gap-8 @xl/content:grid-cols-[minmax(0,1fr)_minmax(0,1.4fr)]">
         <section className="flex flex-col gap-3" aria-labelledby="sources-heading">
           <h2 id="sources-heading" className="text-title-3 font-semibold tracking-title">
             Registered sources
@@ -175,6 +189,7 @@ export default function SourcesPage() {
             </div>
           ) : (
             <ItemBrowser
+              key={selectedSlug}
               sourceName={selectedSource?.name ?? selectedSlug}
               items={items.data ?? []}
               onIngest={(uris) => ingest.mutateAsync(uris)}

@@ -1,3 +1,22 @@
+Current task update — 2026-09-26
+
+Read TRACKER.md first. Two pieces of owner-requested maintenance have landed since the
+2026-09-10 note:
+
+- The public demo is deployed at https://mnemos.harsha2803.dev on an on-demand GCP VM
+  (PR #29). docs/Deploy.md is the runbook; deploy/gcp/ holds every file. The owner operates
+  the VM only from laptop commands (~/Desktop/mnemos-demo: up, down, status, extend,
+  redeploy, ssh, logs) and does not develop on the VM.
+- The mobile-first frontend pass (verified 2026-09-10; TRACKER §3, docs/DesignSystem §7)
+  merges via PR #28. Physical iOS/Android keyboard and safe-area checks remain manual
+  release QA; Chromium viewport emulation is not device certification.
+
+Next task: TRACKER §5, the deployment follow-ups, starting with replacing MinIO (its images
+are no longer downloadable, so CI's compose job fails on every PR). B4/C1/C2 remain
+deferred. Follow TRACKER §0/§7 through personal-account PR closure for every change.
+
+--- Historical D1 handoff (superseded by the task update above) ---
+
 You are picking up Mnemos at:
 
   /home/shreeharsha/Personal/Projects/Resume_001/mnemos

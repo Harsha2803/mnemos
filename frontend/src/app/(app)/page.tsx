@@ -31,24 +31,24 @@ export default function OverviewPage() {
         <p className="text-callout text-label-secondary">What Mnemos can use, what is processing, and where to continue.</p>
       </header>
 
-      <section className="grid grid-cols-2 gap-px overflow-hidden rounded-lg border border-separator bg-separator sm:grid-cols-4" aria-label="Workspace summary">
-        <SummaryMetric label="Ready documents" value={readyDocuments.length} pending={documents.isPending} />
-        <SummaryMetric label="Enabled sources" value={enabledSources.length} pending={sources.isPending} />
-        <SummaryMetric label="Active jobs" value={activeJobs.length} pending={jobs.isPending} />
-        <SummaryMetric label="Conversations" value={conversations.data?.sessions.length ?? 0} pending={conversations.isPending} />
-      </section>
-
       <section className="flex flex-col gap-3" aria-labelledby="quick-actions-heading">
         <h2 id="quick-actions-heading" className="text-title-3 font-semibold tracking-title">Quick actions</h2>
-        <div className="grid gap-2 sm:grid-cols-3">
+        <div className="grid grid-cols-1 gap-2 @xl/content:grid-cols-3">
           <QuickAction href="/chat" icon={MessageCircle} label="New chat" detail="Ask Mnemos a question" />
           <QuickAction href="/knowledge" icon={Upload} label="Upload documents" detail="Add knowledge to search" />
           <QuickAction href="/sources" icon={Plug} label="Connect source" detail="Browse and ingest a source" />
         </div>
       </section>
 
-      <div className="grid gap-8 lg:grid-cols-2">
-        <section className="flex flex-col gap-3" aria-labelledby="recent-ingestion-heading">
+      <section className="grid grid-cols-2 gap-px overflow-hidden rounded-lg border border-separator bg-separator @xl/content:grid-cols-4" aria-label="Workspace summary">
+        <SummaryMetric label="Ready documents" value={readyDocuments.length} pending={documents.isPending} />
+        <SummaryMetric label="Enabled sources" value={enabledSources.length} pending={sources.isPending} />
+        <SummaryMetric label="Active jobs" value={activeJobs.length} pending={jobs.isPending} />
+        <SummaryMetric label="Conversations" value={conversations.data?.sessions.length ?? 0} pending={conversations.isPending} />
+      </section>
+
+      <div className="grid grid-cols-1 gap-8 @xl/content:grid-cols-2">
+        <section className="flex min-w-0 flex-col gap-3" aria-labelledby="recent-ingestion-heading">
           <h2 id="recent-ingestion-heading" className="text-title-3 font-semibold tracking-title">Recent ingestion</h2>
           {jobs.isPending ? <Skeleton className="h-24 w-full" /> : (jobs.data ?? []).length === 0 ? (
             <CompactEmpty icon={Plug} text="No ingestion activity yet." href="/sources" action="Connect a source" />
@@ -64,7 +64,7 @@ export default function OverviewPage() {
           )}
         </section>
 
-        <section className="flex flex-col gap-3" aria-labelledby="recent-conversations-heading">
+        <section className="flex min-w-0 flex-col gap-3" aria-labelledby="recent-conversations-heading">
           <h2 id="recent-conversations-heading" className="text-title-3 font-semibold tracking-title">Recent conversations</h2>
           {conversations.isPending ? <Skeleton className="h-24 w-full" /> : (conversations.data?.sessions.length ?? 0) === 0 ? (
             <CompactEmpty icon={MessageCircle} text="No conversations yet." href="/chat" action="Start a chat" />

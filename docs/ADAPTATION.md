@@ -290,8 +290,9 @@ authoritative for sequencing, not these tables' phase grouping.
 
 ### Old milestone numbers, mapped
 
-This mapping is historical. The 2026-08-18 scope reset deliberately deferred `B4` and
-`C1`–`C3`; an old design reference does not reopen them:
+This mapping is historical. The 2026-08-18 scope reset deferred `B4` and `C1`–`C3`; the
+owner reopened and completed `C3` on 2026-08-23, while the others remain deferred. An old
+design reference does not reopen them:
 
 | Old | New | Note |
 |---|---|---|
@@ -301,7 +302,7 @@ This mapping is historical. The 2026-08-18 scope reset deliberately deferred `B4
 | `M5` objectstore/connectors/events | `B1` | Minimal upload lands in `A2`; the connector *abstraction* is `B1` |
 | `M6` knowledge + jobs | split — extract/chunk/embed to `A2`, job machinery to `B2` | |
 | `M7` LLM gateway + prompts + cost | split — gateway to `A1`, prompts + cost to `C2` | The gateway shipped; prompt/cost management is deliberately deferred |
-| `M8` chat | split — sessions/messages/streaming to `A1`, folders/bookmarks/feedback to `C3` | Core chat shipped; conversation-product depth is deliberately deferred |
+| `M8` chat | split — sessions/messages/streaming to `A1`, folders/bookmarks/feedback to `C3` | Core chat shipped in `A1`; conversation-product depth completed in `C3` (PR #26) |
 | `M9` RAG | `A2` | |
 | `M10` NL2SQL | `A3` | |
 | `M11` MCP tools | `B3` | |
@@ -329,6 +330,26 @@ merely untested; that is written up in §8 and in
 ---
 
 ## 8. Current state
+
+### Mobile-first polish — verified locally (2026-09-10)
+
+Owner-authorized frontend maintenance on `feat/mobile-first`, following the BrowserStack
+mobile-first guide. The shell starts with a single column, uses accessible closable
+navigation/inspector sheets, opens selected evidence and restores focus. Content-container
+grids and labelled narrow-table rows cover the existing screens, including C3. The composer
+uses the remaining viewport height; inputs use body-size text; safe areas and long content
+are handled. Source selection resets when changing source and its action stays reachable.
+
+Evidence: frontend lint/typecheck and the production Next build pass; 131/131 Vitest tests;
+12/12 deterministic Chromium cases at 320px, 390px, 768px, and 1440px with long content and
+a 400px-tall chat viewport; and 16/16 Playwright journeys against the rebuilt Compose stack.
+The full run exposed a pre-existing impossible timeout budget: model waits allowed 90 seconds
+inside a 60-second test. The test budget is now 120 seconds; Ollama recorded the cold RAG
+prompt at 59.2 seconds, and the final full suite passed. Backend ruff lint/format, strict mypy
+(228 sources), 501/501 tests, Alembic drift, readiness, and database doctor (42 tables, 41
+with forced RLS) all pass. No retrieval, compiler, security or database behavior changed;
+the benchmark did not need a rerun. Chromium emulation does not certify physical iOS or
+Android software-keyboard and safe-area behavior; those remain manual release QA.
 
 ### Deployment — public demo on GCP (2026-09-26, not a milestone)
 

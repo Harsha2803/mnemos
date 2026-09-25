@@ -78,7 +78,7 @@ export default function ToolsPage() {
         {(tools.data?.length ?? 0) === 0 ? (
           <p className="text-callout text-label-secondary">Discover a registered server to cache its tools here.</p>
         ) : (
-          <div className="grid gap-3">
+          <div className="grid grid-cols-1 gap-3">
             {tools.data?.map((tool) => <ToolCard key={tool.id} tool={tool} onComplete={(message) => { setNotice(message); void refresh(); }} />)}
           </div>
         )}
@@ -131,11 +131,11 @@ function RegisterServer({ onComplete }: { onComplete: (message: string) => void 
   return (
     <section className="flex flex-col gap-3" aria-labelledby="register-tool-heading">
       <h2 id="register-tool-heading" className="text-title-3 font-semibold tracking-title">Register a server</h2>
-      <form onSubmit={submit} className="grid gap-3 rounded-lg bg-bg-secondary p-4 md:grid-cols-3">
+      <form onSubmit={submit} className="grid grid-cols-1 gap-3 rounded-lg bg-bg-secondary p-4 @xl/content:grid-cols-3">
         <label className="flex flex-col gap-1 text-footnote font-semibold">Slug<input className={INPUT} name="slug" defaultValue="demo" required /></label>
         <label className="flex flex-col gap-1 text-footnote font-semibold">Name<input className={INPUT} name="name" defaultValue="Mnemos demo" required /></label>
         <label className="flex flex-col gap-1 text-footnote font-semibold">Streamable HTTP endpoint<input className={INPUT} name="endpoint" defaultValue="http://demo-mcp:8100/mcp" required /></label>
-        <div className="md:col-span-3"><Button type="submit" rank="filled" disabled={mutation.isPending}>Register server</Button></div>
+        <div className="@xl/content:col-span-3"><Button type="submit" rank="filled" disabled={mutation.isPending}>Register server</Button></div>
       </form>
       {error !== null && <p role="alert" className="text-callout text-danger">{error}</p>}
     </section>
@@ -156,7 +156,7 @@ function ServerRow({ server, onComplete }: { server: Awaited<ReturnType<typeof f
         <span className="text-footnote text-label-secondary">{server.credential_configured ? "Credential configured" : "No credential"}</span>
         <Button rank="tinted" onClick={() => discover.mutate()} disabled={discover.isPending}>Discover</Button>
       </div>
-      <div className="grid gap-2 md:grid-cols-[10rem_minmax(0,1fr)_auto]">
+      <div className="grid grid-cols-1 gap-2 @xl/content:grid-cols-[10rem_minmax(0,1fr)_auto]">
         <label className="flex flex-col gap-1 text-footnote font-semibold">Credential scheme<select className={INPUT} value={scheme} onChange={(event) => setScheme(event.target.value as typeof scheme)}><option value="none">None</option><option value="bearer">Bearer</option><option value="api_key">API key</option></select></label>
         <label className="flex flex-col gap-1 text-footnote font-semibold">Secret<input className={INPUT} type="password" value={secret} onChange={(event) => setSecret(event.target.value)} disabled={scheme === "none"} autoComplete="off" /></label>
         <Button className="self-end" onClick={() => credential.mutate()} disabled={credential.isPending}>Save for me</Button>

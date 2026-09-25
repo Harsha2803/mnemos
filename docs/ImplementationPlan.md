@@ -1,7 +1,7 @@
 # Implementation Plan
 
-**Last revised:** 2026-08-22 — reduced `D1` is complete on PR #25. The committed plan is
-finished; no milestone remains.
+**Last revised:** 2026-09-10 — reduced `D1` is complete on PR #25 and the owner-reopened
+`C3` is complete on PR #26. The committed plan is finished; no milestone remains.
 
 This is the committed implementation plan that turned Mnemos into a focused, resume-ready
 portfolio project. Live status remains in [`TRACKER.md`](../TRACKER.md); architecture and
@@ -9,7 +9,7 @@ the milestone ledger remain in [`ADAPTATION.md`](ADAPTATION.md).
 
 The plan intentionally optimized for evidence of engineering depth, not feature count.
 Completed capabilities stay supported and tested. `B3` is complete on PR #23, `C4` on
-PR #24, and reduced `D1` — the plan's last committed milestone — on PR #25.
+PR #24, reduced `D1` on PR #25, and the later owner-reopened `C3` on PR #26.
 
 ## 1. Current baseline
 
@@ -95,20 +95,21 @@ demo problem requires them. They are no longer independent completion requiremen
 documented walkthrough, and reproduce every material claim shown in the README. Verified
 2026-08-22 against migrated Postgres, rebuilt Compose, and 14/14 Chromium tests; PR #25.
 
-## 3. Deliberately deferred
+## 3. Deferred and reopened scope
 
-These are valid future extensions, but they are not part of the committed portfolio finish:
+These were removed from the original finish. `C3` was later reopened and completed; the
+remaining three are valid future extensions but are not committed:
 
-| ID | Deferred capability | Why it is not required now |
+| ID | Capability | Status or reason |
 |---|---|---|
-| `B4` | Multi-step agent plans, loops, checkpoints, recovery, and replay | Large reliability surface; B3 already demonstrates tool use and approval safety clearly. |
-| `C1` | API keys, full permission matrix, tag-scoped ACL UI | Existing OIDC, live roles, forced RLS, and scan-time authorization already demonstrate the core security depth. |
-| `C2` | Versioned prompt manager and cost dashboard | Useful operations breadth, but weaker resume signal than MCP safety or governed context. |
-| `C3` | Folders, bookmarks, feedback, history search, expanded audit UI | Conventional product CRUD with limited differentiation. |
+| `B4` | Multi-step agent plans, loops, checkpoints, recovery, and replay | Deferred — large reliability surface; B3 already demonstrates tool use and approval safety clearly. |
+| `C1` | API keys, full permission matrix, tag-scoped ACL UI | Deferred — existing OIDC, live roles, forced RLS, and scan-time authorization already demonstrate the core security depth. |
+| `C2` | Versioned prompt manager and cost dashboard | Deferred — useful operations breadth, but weaker resume signal than MCP safety or governed context. |
+| `C3` | Folders, bookmarks, feedback, history search, expanded audit UI | ✅ Reopened 2026-08-22 and completed on PR #26 (2026-08-23). |
 
 Deferred means **not promised**, not partially implemented. Existing schema columns or design
-documents may preserve extension seams, but no agent should start these IDs unless the project
-owner explicitly reopens scope after `D1`.
+documents may preserve extension seams, but no agent should start `B4`, `C1`, or `C2` unless
+the project owner explicitly reopens scope.
 
 ## 4. Delivery rules
 

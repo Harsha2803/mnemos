@@ -11,10 +11,12 @@ export const metadata: Metadata = {
 };
 
 export const viewport: Viewport = {
-  // The shell is a desktop layout that reflows; it must never be zoomed to fit,
+  // Start at the device width; it must never be zoomed to fit,
   // and pinch-zoom must stay available — disabling it fails WCAG 1.4.4.
   width: "device-width",
   initialScale: 1,
+  viewportFit: "cover",
+  interactiveWidget: "resizes-content",
 };
 
 export default function RootLayout({

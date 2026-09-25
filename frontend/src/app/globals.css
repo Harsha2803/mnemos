@@ -386,6 +386,19 @@
     line-height: var(--leading-normal);
     letter-spacing: var(--tracking-body);
     -webkit-font-smoothing: antialiased;
+    overflow-wrap: anywhere;
+  }
+
+  input,
+  select,
+  textarea {
+    min-width: 0;
+    max-width: 100%;
+  }
+  img,
+  video,
+  svg {
+    max-width: 100%;
   }
 
   /* DesignSystem §3: focus is always visible. `outline: none` with no
@@ -404,6 +417,87 @@
 
 /* ======================================================= component layer */
 @layer components {
+  .workspace-shell {
+    padding-left: env(safe-area-inset-left);
+    padding-right: env(safe-area-inset-right);
+  }
+  .workspace-toolbar {
+    padding-top: env(safe-area-inset-top);
+  }
+  .workspace-sheet {
+    padding: env(safe-area-inset-top) env(safe-area-inset-right) env(safe-area-inset-bottom) env(safe-area-inset-left);
+    overscroll-behavior: contain;
+  }
+  .composer,
+  .selection-bar {
+    padding-bottom: max(var(--space-3), env(safe-area-inset-bottom));
+  }
+  .sidebar-column {
+    max-width: min(36vw, calc(100vw - 30rem));
+  }
+  .inspector-column {
+    max-width: 30vw;
+  }
+  .dialog-content {
+    max-height: calc(100dvh - var(--space-8));
+    overflow-y: auto;
+  }
+
+  /* Each table responds to its own pane, including a narrow desktop inspector.
+     Keep one semantic table and one set of controls at every width. */
+  .table-region {
+    container-type: inline-size;
+  }
+  .responsive-table,
+  .responsive-table tbody {
+    display: block;
+  }
+  .responsive-table thead {
+    position: absolute;
+    width: 1px;
+    height: 1px;
+    overflow: hidden;
+    clip-path: inset(50%);
+  }
+  .responsive-table tbody tr {
+    display: block;
+    padding-block: var(--space-2);
+  }
+  .responsive-table td {
+    display: grid;
+    grid-template-columns: minmax(0, 1fr) minmax(0, 2fr);
+    gap: var(--space-3);
+    padding: var(--space-2) var(--space-3);
+  }
+  .table-field-label {
+    display: block;
+  }
+  @container (min-width: 40rem) {
+    .responsive-table {
+      display: table;
+    }
+    .responsive-table tbody {
+      display: table-row-group;
+    }
+    .responsive-table thead {
+      display: table-header-group;
+      position: static;
+      width: auto;
+      height: auto;
+      overflow: visible;
+      clip-path: none;
+    }
+    .responsive-table tbody tr {
+      display: table-row;
+    }
+    .responsive-table td {
+      display: table-cell;
+    }
+    .table-field-label {
+      display: none;
+    }
+  }
+
   /* The 44x44 floor from DesignSystem §3, in one place. A 24px icon button
      needs padding, not a smaller target. */
   .hit-target {
@@ -549,4 +643,9 @@
     transition-duration: 0.01ms !important;
     scroll-behavior: auto !important;
   }
+}
+
+/* Input legibility is an accessibility floor, independent of utility text sizes. */
+:where(input:not([type="checkbox"]):not([type="radio"]), select, textarea) {
+  font-size: var(--text-body);
 }

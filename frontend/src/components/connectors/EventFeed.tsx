@@ -128,7 +128,7 @@ function JobDetails({ job, copied, onCopy }: { job: FeedJob; copied: boolean; on
           {copied ? <Check className="size-4" aria-hidden="true" /> : <Copy className="size-4" aria-hidden="true" />}{copied ? "Copied" : "Copy ID"}
         </Button>
       </div>
-      <dl className="mb-4 grid gap-3 text-footnote sm:grid-cols-2">
+      <dl className="mb-4 grid gap-3 text-footnote @xl/content:grid-cols-2">
         <Detail label="Owner" value={job.ownerId ?? "Unassigned"} />
         <Detail label="Started" value={formatTimestamp(job.startedAt)} />
         <Detail label="Last heartbeat" value={formatTimestamp(job.heartbeatAt)} />

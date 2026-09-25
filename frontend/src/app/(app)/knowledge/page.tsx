@@ -24,9 +24,7 @@ export default function KnowledgePage() {
       <header className="flex flex-col gap-2">
         <h1 className="text-large-title font-semibold tracking-title text-label">Knowledge</h1>
         <p className="text-callout leading-relaxed text-label-secondary">
-          Upload a document, then ask about it in a chat with{" "}
-          <span className="font-semibold">Use documents</span> turned on. Answers cite the
-          passages they drew from, and the citation opens the source.
+          Upload documents, then ask about them in chat. Open an answer’s citations to read its sources.
         </p>
       </header>
 

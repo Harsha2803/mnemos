@@ -48,7 +48,7 @@ export function SourceList({ sources, selectedSlug, onSelect, lastActivityBySlug
               type="button"
               onClick={() => onSelect(source.slug)}
               aria-current={source.slug === selectedSlug ? "true" : undefined}
-              className="block w-full text-left"
+              className="hit-target block w-full text-left"
             >
               <span className="block truncate font-medium text-label">{source.name}</span>
               <span className="block text-footnote text-label-secondary">

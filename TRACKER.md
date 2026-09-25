@@ -8,15 +8,17 @@
 
 **Last updated:** 2026-09-26 — **the public demo is deployed** at
 https://mnemos.harsha2803.dev (GCP VM `mnemos-demo`, on demand; see
-[`docs/Deploy.md`](docs/Deploy.md)). All 16 Playwright tests across all 8 specs pass against
-the public HTTPS URLs; backend CI's `mypy --strict` failure (SQLAlchemy 2.1 stub drift) is
-fixed. Not a milestone — deployment work the project owner asked for explicitly. Evidence in
-the 2026-09-26 dated note below; **what is left is in §5 and §6**.
-**Phase:** `C3` done (unchanged). Deployment: live, with the follow-ups in §6.
+[`docs/Deploy.md`](docs/Deploy.md); PR #29, merged as `e38e8ef`). All 16 Playwright tests
+across all 8 specs pass against the public HTTPS URLs; backend CI's `mypy --strict` failure
+(SQLAlchemy 2.1 stub drift) is fixed. The owner-authorized mobile-first frontend polish
+(verified locally 2026-09-10, evidence in §3 and the ADAPTATION note) merges on top of it via
+PR #28. Neither is a milestone. **What is left is in §5 and §6.**
+**Phase:** `C3` done (unchanged). Mobile-first maintenance: merging (PR #28). Deployment:
+live, with the follow-ups in §6.
 **Next task:** §5 — the deployment follow-ups, starting with replacing MinIO (the images are
 no longer downloadable, which fails CI's compose job on every PR). `B4`, `C1`, `C2` stay
 deliberately deferred.
-**Branch right now:** `feat/gcp-deploy` — PR opened from this session.
+**Branch right now:** `feat/mobile-first` (PR #28), updated with `main` after PR #29 merged.
 
 > ### 2026-09-26 — public demo deployed on GCP
 >
@@ -1508,7 +1510,7 @@ reduced `D1` are the plan; larger architecture seams are optional extensions, no
 
 | Area | What ships |
 |---|---|
-| **Conversation** | Sessions, messages, token-by-token streaming, and automatic flow routing |
+| **Conversation** | Sessions, messages, token-by-token streaming, automatic flow routing, folders, bookmarks, feedback, and history search |
 | **RAG** | Upload → extract → chunk → embed → hybrid retrieval → answer with click-through citations |
 | **NL2SQL** | Schema introspection, business glossary, generated SQL, AST read-only guard, read-only DB role, result grid, narration |
 | **Tools** | MCP registry, per-user credentials, approval gates, trust tiers, and one auditable tool call |
@@ -1517,10 +1519,11 @@ reduced `D1` are the plan; larger architecture seams are optional extensions, no
 | **Identity** | OIDC + internal auth, platform JWT with refresh rotation, live role bindings, and per-tenant row-level security |
 | **Governed context** | Bitemporal memory with supersession, a budgeted context compiler, and an inspector that shows what was admitted, what was excluded and why |
 | **Operations** | Reproducible Compose, migrations, CI, critical-path end-to-end tests, and measured documentation |
+| **Audit** | Eight security-relevant event types and an administrator-only audit screen |
 
-Multi-step agent orchestration, API keys/full RBAC/tag ACLs, prompt/cost management, and
-conversation-product depth remain valid future extensions but are deliberately deferred from
-the resume-focused finish line. See §3.0 and [`docs/Roadmap.md`](docs/Roadmap.md).
+Multi-step agent orchestration, API keys/full RBAC/tag ACLs, and prompt/cost management
+remain valid future extensions but are deliberately deferred from the resume-focused finish
+line. See §3.0 and [`docs/Roadmap.md`](docs/Roadmap.md).
 
 The milestone plan is §3.0 here; the architecture, schema and design rationale are in
 **[`docs/ADAPTATION.md`](docs/ADAPTATION.md)**. Read that next.
@@ -1577,6 +1580,33 @@ port in `C4`. Until then the README must say so.
 Milestone ledger and exit criteria live in [ADAPTATION §7](docs/ADAPTATION.md#7-milestones).
 Detailed evidence for each ✅ is in [ADAPTATION §8](docs/ADAPTATION.md#8-current-state).
 
+### ✅ Mobile-first product polish — verified locally 2026-09-10
+
+**You can now navigate, send, inspect evidence, and use every existing management screen
+at 320px without page-wide horizontal scrolling; desktop retains the three-column
+workspace.** The server renders one content column first. Navigation moves inline at 768px
+and the context inspector at 1280px; below those points, explicit close controls, focus
+containment, and focus restoration make both available as sheets. Selecting an answer or
+citation opens its evidence automatically.
+
+Content-container breakpoints keep forms and grids responsive to their actual pane. The
+shared semantic `Table` stacks labelled fields below 40rem and restores columns above it,
+covering documents, source items, SQL results, and audit. Inputs stay at 16px, controls keep
+their 44px floor, safe areas and long content are handled, and the chat transcript owns the
+scroll while its composer remains reachable. Source registration is disclosed when sources
+exist; selections survive filtering, reset on source changes, and keep a sticky ingest action.
+
+**Evidence:** frontend lint and typecheck clean; 131/131 Vitest tests; production Next build
+clean; 12/12 deterministic Chromium layout/interaction cases at 320px, 390px, 768px, and
+1440px including long content and a 400px-tall chat; 16/16 Playwright journeys against the
+rebuilt Compose stack. Backend regression gates stayed green: ruff lint/format, strict mypy
+(228 sources), 501/501 tests, Alembic drift check, ready dependencies, and database doctor
+(42 tables, 41 with forced RLS). The full browser run exposed an impossible timeout budget:
+model-backed waits allowed 90 seconds inside a 60-second test. It now allows 120 seconds;
+Ollama logs showed the cold RAG prompt itself taking 59.2 seconds, and the final suite passed.
+Emulated Chromium coverage is not physical-device certification; iOS Safari and Android
+keyboard/safe-area behavior remain manual release QA. No benchmark rerun was needed.
+
 ### 3.0 The plan — completed foundation and the resume-focused finish
 
 Every milestone ships its backend *and* its UI (C12), and every milestone ends with a
@@ -1617,7 +1647,7 @@ order" list is the authoritative next-up sequence; the note above it explains wh
 |---|---|---|---|
 | **C1** | API keys (old `M3.5`) · full RBAC permission matrix + tag-scoped document ACLs (old `M3.6`) · keys UI + real 403 states | **issue an API key, call the API with it, and watch a user without the permission be refused** — in the UI and at the wire | ⏸ deferred — existing OIDC/JWT/RLS already carries the core security signal |
 | **C2** | Versioned prompt store (diff, activate) · cost + token ledger · prompt manager + cost dashboard | **change the prompt behind a flow, activate the new version, and see what every answer cost** | ⏸ deferred — operations breadth, not a finish-line differentiator |
-| **C3** | Chat history depth: folders, bookmarks, feedback · audit log · search over history | **organise, bookmark, rate and search your conversations, and read the audit trail of who did what** | ⏸ deferred — conventional product depth |
+| **C3** | Chat history depth: folders, bookmarks, feedback · audit log · search over history | **organise, bookmark, rate and search your conversations, and read the audit trail of who did what** | ✅ 2026-08-23 — PR #26, all five deliverables verified against the rebuilt stack |
 | **C4** | **The context layer.** Bitemporal memory + supersession · the budgeted context compiler · the context inspector · re-run the benchmark on Postgres | **open any answer and see its compiled context** — what was admitted, what was excluded and why, and the token spend against budget | ✅ 2026-08-18 (PR #24) — Postgres, Compose and Chromium verified |
 
 **Phase D — ship it.**
@@ -1640,9 +1670,9 @@ order" list is the authoritative next-up sequence; the note above it explains wh
 | **F0a** | CI — pytest, ruff, mypy `--strict`, `alembic check`, and the frontend gate on every PR | ✅ |
 
 **Old milestone numbers, mapped.** This translation is historical. The 2026-08-18 scope
-reset deliberately deferred `B4` and `C1`–`C3`; an old design reference does not reopen
-them. If you find an old ID anywhere, use this table to understand it rather than treating
-it as committed work:
+reset deferred `B4` and `C1`–`C3`; the owner reopened and completed `C3` on 2026-08-23,
+while the others remain deferred. An old design reference does not reopen them. If you find
+an old ID anywhere, use this table to understand it rather than treating it as committed work:
 
 | Old | New | Note |
 |---|---|---|
@@ -1652,7 +1682,7 @@ it as committed work:
 | `M5` objectstore/connectors/events | `B1` | Minimal upload lands in `A2`; the connector *abstraction* is `B1` |
 | `M6` knowledge + jobs | split — extract/chunk/embed to `A2`, job machinery to `B2` | |
 | `M7` LLM gateway + prompts + cost | split — gateway to `A1`, prompts + cost to `C2` | The gateway shipped; prompt/cost management is deliberately deferred |
-| `M8` chat | split — sessions/messages/streaming to `A1`, folders/bookmarks/feedback to `C3` | Core chat shipped; conversation-product depth is deliberately deferred |
+| `M8` chat | split — sessions/messages/streaming to `A1`, folders/bookmarks/feedback to `C3` | Core chat shipped in `A1`; conversation-product depth completed in `C3` (PR #26) |
 | `M9` RAG | `A2` | |
 | `M10` NL2SQL | `A3` | |
 | `M11` MCP tools | `B3` | |
@@ -3746,8 +3776,9 @@ Open as of 2026-09-26, from the deployment. Items 1-4 are also §5's list.
 7. **Owner decisions pending:** a shared demo login shown to interviewers vs. credentials
    on request; whether `down` should snapshot-and-delete the disk (~₹290 → ~₹75/month
    stopped, 2-4 min slower starts).
-8. **PR #28** (mobile-first) is unmerged; its backend failure is fixed by this deployment's
-   PR (rebase it), its compose failure is item 1.
+8. **PR #28** (mobile-first) merges `main` in this update, which clears its backend failure;
+   its compose failure is item 1. Once merged, the live VM still serves the pre-mobile build
+   until it is redeployed (laptop: `./up`, then `./redeploy main`).
 9. The Playwright verification left test conversations, documents and MCP servers in the
    analyst's workspace on the VM; clear them before showing the demo if they distract.
 

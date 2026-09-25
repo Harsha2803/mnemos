@@ -16,13 +16,14 @@ import {
 import { useInspectorSelection, type InspectorMessage } from "@/lib/inspector/SelectionProvider";
 import type { Citation } from "@/lib/knowledge/api";
 
-export function InspectorContent() {
+export function InspectorContent({ headerAction }: { headerAction?: ReactNode } = {}) {
   const { selection, select } = useInspectorSelection();
 
   return (
     <div className="flex h-full flex-col">
       <div className="flex h-14 shrink-0 items-center border-b border-separator px-4">
         <h2 className="text-subheadline font-semibold text-label">Context</h2>
+        <div className="ml-auto">{headerAction}</div>
       </div>
 
       {selection === null ? (
@@ -36,7 +37,7 @@ export function InspectorContent() {
         </div>
       ) : (
         <div className="flex min-h-0 flex-1 flex-col">
-          <nav aria-label="Inspector sections" className="flex shrink-0 gap-1 border-b border-separator p-2">
+          <nav aria-label="Inspector sections" className="flex shrink-0 flex-wrap gap-1 border-b border-separator p-2">
             <InspectorTab
               label="Evidence"
               active={selection.kind === "message" || selection.kind === "citation"}
@@ -112,7 +113,7 @@ function EvidenceView({ message }: { message: InspectorMessage }) {
           <span className="mt-1 line-clamp-3 text-footnote leading-relaxed text-label-secondary">
             {citation.quoted_text}
           </span>
-          <span className="mt-2 text-caption text-label-tertiary">{citationMetadata(citation)}</span>
+          <span className="mt-2 text-caption text-label-secondary">{citationMetadata(citation)}</span>
         </button>
       ))}
     </div>
@@ -266,11 +267,11 @@ function PersistedBundle({ bundle }: { bundle: ContextBundle }) {
                     {item.tokens} tokens
                   </span>
                 </div>
-                <p className="mt-1 text-caption text-label-tertiary">
+                <p className="mt-1 text-caption text-label-secondary">
                   {item.section} · {item.operator} · trust {item.trust_tier} · utility {item.utility.toFixed(3)} · density {item.density.toFixed(4)}
                 </p>
                 <p className="mt-2 line-clamp-5 whitespace-pre-wrap text-footnote leading-relaxed text-label-secondary">{item.text}</p>
-                <p className="mt-2 text-caption text-label-tertiary">Authorization: {item.acl_rule}</p>
+                <p className="mt-2 text-caption text-label-secondary">Authorization: {item.acl_rule}</p>
               </li>
             ))}
           </ol>
@@ -323,7 +324,7 @@ function PersistedBundle({ bundle }: { bundle: ContextBundle }) {
       </BundleSection>
 
       <details className="rounded-md border border-separator bg-bg-secondary p-3">
-        <summary className="cursor-pointer text-footnote font-semibold text-label">Compiled prompt</summary>
+        <summary className="hit-target flex cursor-pointer items-center text-footnote font-semibold text-label">Compiled prompt</summary>
         <pre className="mt-3 overflow-x-auto whitespace-pre-wrap text-caption leading-relaxed text-label-secondary"><code>{bundle.compiled_prompt}</code></pre>
       </details>
     </div>
