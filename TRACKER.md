@@ -18,7 +18,27 @@ live, with the follow-ups in §6.
 **Next task:** §5 — the deployment follow-ups, starting with replacing MinIO (the images are
 no longer downloadable, which fails CI's compose job on every PR). `B4`, `C1`, `C2` stay
 deliberately deferred.
-**Branch right now:** `feat/mobile-first` (PR #28), updated with `main` after PR #29 merged.
+**Branch right now:** `feat/vm-managed-dns` (VM-managed DNS: Start/Stop from the Cloud
+console is enough). PRs #28 and #29 are merged.
+
+> ### 2026-09-26 — the VM manages its own DNS (owner priority P1, not a milestone)
+>
+> Start in the Cloud console (phone included) now makes the demo live and Stop takes it
+> down, with no laptop. `deploy/gcp/vm-startup-script.sh` upserts the four A records from
+> the metadata server's external IP through the Cloud DNS REST API; the new
+> `deploy/gcp/vm-shutdown-script.sh` deletes them on every stop (console, laptop `down`,
+> 4-hour power-off). The VM's service account `mnemos-dns` has no project roles: a custom
+> role with record-edit permissions only is bound on the `harsha2803-dev` zone, and the
+> VM's access scope is Cloud DNS only. `deploy/gcp/setup-vm-dns.sh` creates all of it
+> idempotently and installs both scripts as instance metadata. This reverses "no service
+> account" in `docs/Deploy.md` deliberately; the trade-off is that a compromised VM can
+> rewrite this one zone's records. Closes §6 item 6.
+>
+> **Verified so far:** both scripts pass `bash -n`; the jq that builds each Cloud DNS change
+> was exercised against sample `rrsets` responses (no records → 4 additions; 2 stale →
+> 2 deletions + 4 additions; already correct → no change; shutdown with none → no-op).
+> **Not yet verified:** the live Start → records → Stop → no records cycle, which needs the
+> owner to run `setup-vm-dns.sh` first (it creates IAM, which is theirs to approve).
 
 > ### 2026-09-26 — public demo deployed on GCP
 >
@@ -3769,10 +3789,10 @@ Open as of 2026-09-26, from the deployment. Items 1-4 are also §5's list.
 5. **Laptop controls are not in the repo.** `init up down status extend ssh logs lib.sh`
    live in `~/Desktop/mnemos-demo/` on the owner's laptop and were not reachable from the
    VM; commit them under `deploy/gcp/laptop/` from the laptop.
-6. **Stale DNS after the 4-hour auto power-off** — the A records keep pointing at an IP
-   Google may reassign until the next `up`/`down`. Fix (free, needs the owner's yes): a
-   service account allowed to edit only this DNS zone plus a shutdown script that deletes
-   the records.
+6. ~~**Stale DNS after the 4-hour auto power-off**~~ — fixed 2026-09-26: the VM's
+   shutdown script deletes the records on every stop and its startup script writes them,
+   through a service account that can edit only this zone (`deploy/gcp/setup-vm-dns.sh`).
+   A host crash that skips the shutdown script still leaves them until the next start.
 7. **Owner decisions pending:** a shared demo login shown to interviewers vs. credentials
    on request; whether `down` should snapshot-and-delete the disk (~₹290 → ~₹75/month
    stopped, 2-4 min slower starts).
