@@ -115,7 +115,7 @@ the same corpus, same budget, same embedder.
 > Reproduce the zero-download hashing arm:
 >
 > ```bash
-> python3 -m venv .venv && .venv/bin/pip install -e "./backend[dev]"
+> make install    # a .venv with every dependency pinned by backend/requirements-dev.lock
 > make bench
 > ```
 
