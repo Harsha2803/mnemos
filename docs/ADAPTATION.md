@@ -362,6 +362,10 @@ listen publicly. One design note worth keeping: Keycloak's production hostname s
 dynamic, because the API validates discovered endpoints against the *internal* issuer
 (`providers/oidc.py`), which a pinned public `KC_HOSTNAME` would break. Open follow-ups
 (MinIO replacement, role binding without SQL, item 40, dependency pins) are TRACKER §5/§6.
+Since the same day the VM also keeps its own DNS: its startup script points the four A
+records at each boot's ephemeral IP and its shutdown script deletes them, through a service
+account whose only grant is a record-edit role on the one Cloud DNS zone
+(`deploy/gcp/setup-vm-dns.sh`). Start/Stop in the Cloud console alone therefore runs the demo.
 
 ### Product polish — UI enhancement handoff (2026-08-17, not a milestone)
 

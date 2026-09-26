@@ -29,14 +29,26 @@ Browser ──HTTPS──► nginx on the VM (:443, Let's Encrypt; :80 → 301)
                    demo-mcp, and the migrate / init jobs
 ```
 
-- **VM:** `mnemos-demo`, `asia-south2-a`, e2-standard-4, Ubuntu 24.04, 30 GB disk, no
-  service account, SSH only through IAP. Firewall opens 80/443 and nothing else.
-- **IP is ephemeral.** It changes on every start; the laptop's `up` command repoints
-  the four DNS A records (Cloud DNS zone `harsha2803-dev`, TTL 60).
+- **VM:** `mnemos-demo`, `asia-south2-a`, e2-standard-4, Ubuntu 24.04, 30 GB disk, SSH
+  only through IAP. Firewall opens 80/443 and nothing else. Its one service account,
+  `mnemos-dns`, has **no project roles**: a custom role (`mnemosDnsRecordEditor`, record
+  edits only) is bound on the Cloud DNS zone `harsha2803-dev` alone, and the VM's access
+  scope is Cloud DNS only. A compromised VM can change this zone's records and nothing else.
+- **IP is ephemeral.** It changes on every start. The VM keeps the four DNS A records
+  (zone `harsha2803-dev`, TTL 60) in step itself: the startup script points them at the
+  new IP, the shutdown script deletes them. So Start and Stop in the Cloud console (or
+  the phone app) are all it takes; the laptop's `up`/`down` write the same records too.
 - **Boot:** the instance startup script ([`vm-startup-script.sh`](../deploy/gcp/vm-startup-script.sh))
   arms a power-off 4 hours after boot (cost safety net; `sudo shutdown -c` cancels),
-  installs Docker on first boot, and runs `certbot renew` 10 minutes after boot. Then
+  installs Docker on first boot, upserts the DNS records from the metadata server's
+  external IP, and runs `certbot renew` 10 minutes after boot. Then
   [`mnemos.service`](../deploy/gcp/mnemos.service) brings the stack up.
+- **Shutdown:** [`vm-shutdown-script.sh`](../deploy/gcp/vm-shutdown-script.sh) deletes the
+  records on every stop: console Stop, the laptop's `down`, and the 4-hour power-off alike.
+- **Setup:** [`setup-vm-dns.sh`](../deploy/gcp/setup-vm-dns.sh), run once from the laptop
+  with the VM stopped, creates the role and account, binds it on the zone, attaches it,
+  and installs both scripts as instance metadata. Re-run it after editing either script;
+  the VM runs the metadata copies, not the repository's.
 
 ## What the production override changes
 
@@ -78,6 +90,10 @@ run through [`compose.sh`](../deploy/gcp/compose.sh), which fixes the project na
   `next build`.
 
 ## First deploy on a fresh VM
+
+From the laptop, with the new VM stopped once after creation, run
+`deploy/gcp/setup-vm-dns.sh` so it gets its DNS service account and both boot scripts.
+Then, on the VM:
 
 ```bash
 git clone https://github.com/Harsha2803/mnemos.git ~/mnemos && cd ~/mnemos
@@ -164,5 +180,6 @@ on the owner's laptop and pin every gcloud call to the personal account and proj
 
 ## Known limitations
 
-See TRACKER §6 — the MinIO images are no longer downloadable, DNS goes stale after the
-automatic power-off, and the link is dead while the VM is off.
+See TRACKER §6 — the MinIO images are no longer downloadable, and the link is dead while
+the VM is off. If the VM dies without a clean shutdown (a host crash), its shutdown script
+does not run and the records stay until the next start or `down`.
