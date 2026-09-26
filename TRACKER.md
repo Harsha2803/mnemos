@@ -18,8 +18,8 @@ live, with the follow-ups in §6.
 **Next task:** §5 — the deployment follow-ups, starting with replacing MinIO (the images are
 no longer downloadable, which fails CI's compose job on every PR). `B4`, `C1`, `C2` stay
 deliberately deferred.
-**Branch right now:** `feat/vm-managed-dns` (VM-managed DNS: Start/Stop from the Cloud
-console is enough). PRs #28 and #29 are merged.
+**Branch right now:** `docs/vm-dns-verified` (records the live Start/Stop check of the
+VM-managed DNS). PRs #28, #29 and #30 are merged.
 
 > ### 2026-09-26 — the VM manages its own DNS (owner priority P1, not a milestone)
 >
@@ -37,8 +37,16 @@ console is enough). PRs #28 and #29 are merged.
 > **Verified so far:** both scripts pass `bash -n`; the jq that builds each Cloud DNS change
 > was exercised against sample `rrsets` responses (no records → 4 additions; 2 stale →
 > 2 deletions + 4 additions; already correct → no change; shutdown with none → no-op).
-> **Not yet verified:** the live Start → records → Stop → no records cycle, which needs the
-> owner to run `setup-vm-dns.sh` first (it creates IAM, which is theirs to approve).
+> **Verified live 2026-09-26** (PR #30, `3a95ad3`; the owner ran `setup-vm-dns.sh`, and the
+> VM's metadata scripts are identical to `main`), with no laptop command in either step:
+> - **Start** from the phone's Cloud console: the startup log says
+>   `mnemos-dns: 4 A records -> 34.131.66.234`; `/readyz` ready; web 200;
+>   `analyst@mnemos.local` signs in.
+> - **Stop** from the phone: while `STOPPING` the 4 records were still present; once
+>   `TERMINATED`, the Cloud DNS API listed 0 A records and the authoritative server
+>   (`ns-cloud-c1.googledomains.com`) returned nothing for all 4 names, so the shutdown
+>   script removed them. The laptop's read-only `status` agreed afterwards
+>   (`TERMINATED`, "(no record)" ×4).
 
 > ### 2026-09-26 — public demo deployed on GCP
 >

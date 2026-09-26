@@ -366,6 +366,10 @@ Since the same day the VM also keeps its own DNS: its startup script points the 
 records at each boot's ephemeral IP and its shutdown script deletes them, through a service
 account whose only grant is a record-edit role on the one Cloud DNS zone
 (`deploy/gcp/setup-vm-dns.sh`). Start/Stop in the Cloud console alone therefore runs the demo.
+Verified live the same day from a phone with no laptop command: Start wrote the four records
+(startup log `mnemos-dns: 4 A records -> <ip>`, `/readyz` ready, sign-in works), and Stop
+left 0 A records in the Cloud DNS API and none on the authoritative server once the VM was
+`TERMINATED`.
 
 ### Product polish — UI enhancement handoff (2026-08-17, not a milestone)
 
