@@ -1,0 +1,13 @@
+#!/usr/bin/env bash
+# ./extend [hours|off] — show or change the VM's auto power-off timer.
+set -euo pipefail
+cd "$(dirname "$0")" && source ./lib.sh
+require_login
+[[ "$(vm_status)" == "RUNNING" ]] || { fail "VM is not running."; exit 1; }
+
+case "${1:-}" in
+  "")  vm_ssh "$SHOW_POWEROFF" ;;
+  off) vm_ssh 'sudo shutdown -c' && warn "Auto power-off cancelled. Remember ./down when finished." ;;
+  *[!0-9]*) fail "Usage: ./extend | ./extend <hours> | ./extend off"; exit 2 ;;
+  *)   vm_ssh "sudo shutdown -c 2>/dev/null; sudo shutdown -h +$(( $1 * 60 )) 'mnemos-demo auto power-off' >/dev/null 2>&1; $SHOW_POWEROFF" ;;
+esac

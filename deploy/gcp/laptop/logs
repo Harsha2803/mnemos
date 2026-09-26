@@ -1,0 +1,7 @@
+#!/usr/bin/env bash
+# ./logs [service] — follow the app's container logs on the VM (Ctrl+C to stop).
+set -euo pipefail
+cd "$(dirname "$0")" && source ./lib.sh
+require_login
+[[ "$(vm_status)" == "RUNNING" ]] || { fail "VM is not running."; exit 1; }
+g compute ssh "$VM" --zone="$ZONE" --tunnel-through-iap -- -t "cd ~/mnemos && docker compose -p mnemos logs -f --tail=100 ${1:-}"

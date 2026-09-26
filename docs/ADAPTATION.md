@@ -377,6 +377,8 @@ images can no longer be pulled anywhere. Configuration only: compose, the bucket
 Evidence: every boto3 call the adapters make checked against RustFS; the rebuilt stack
 reports `objectstore: ok`; Playwright 16/16 locally with the uploaded object seen in the
 bucket; `deploy/gcp/migrate-minio-objects.sh` copied and checked an old volume's 8 objects.
+The owner's laptop controls (`up`, `down`, `status`, `redeploy`, …) are committed under
+`deploy/gcp/laptop/` as a record of the copy the owner runs.
 
 ### Product polish — UI enhancement handoff (2026-08-17, not a milestone)
 

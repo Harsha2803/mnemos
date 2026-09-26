@@ -1,0 +1,6 @@
+#!/usr/bin/env bash
+# ./ssh [command] — shell on the VM through Google IAP.
+set -euo pipefail
+cd "$(dirname "$0")" && source ./lib.sh
+require_login
+g compute ssh "$VM" --zone="$ZONE" --tunnel-through-iap -- "$@"

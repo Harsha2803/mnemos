@@ -1,0 +1,2 @@
+# The demo password lives only on the owner's laptop and in .env.prod on the VM.
+demo-password.txt

@@ -182,11 +182,12 @@ it, apply the same edit to the installed file rather than overwriting it.
 
 ## Laptop controls
 
-`init`, `up`, `down`, `status`, `extend`, `ssh`, `logs` (and the shared `lib.sh`) live
-on the owner's laptop and pin every gcloud call to the personal account and project.
-`up` treats the app as ready when `https://mnemos-api.harsha2803.dev/readyz` reports
-`"status":"ready"`, so that endpoint stays public. They belong in
-`deploy/gcp/laptop/`; see TRACKER §6 for their status.
+[`deploy/gcp/laptop/`](../deploy/gcp/laptop/README.md): `init`, `up`, `down`, `status`,
+`extend`, `redeploy`, `ssh`, `logs`, `guide` and the shared `lib.sh`, which pins every
+gcloud call to the personal account and project. The owner runs the copy at
+`~/Desktop/mnemos-demo/`; the repo holds an identical record of it. `up` treats the app
+as ready when `https://mnemos-api.harsha2803.dev/readyz` reports `"status":"ready"`, so
+that endpoint stays public.
 
 ## Known limitations
 

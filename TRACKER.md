@@ -18,7 +18,8 @@ live, with the follow-ups in §6.
 **Next task:** §5 — the deployment follow-ups, now starting with role binding without SQL
 (MinIO is replaced; moving the live VM onto RustFS waits for the owner to allow the VM
 time). `B4`, `C1`, `C2` stay deliberately deferred.
-**Branch right now:** `fix/replace-minio-rustfs` (MinIO → RustFS). PRs #28 to #31 are merged.
+**Branch right now:** `feat/laptop-controls` (the laptop controls, committed). PRs #28 to #32
+are merged.
 
 > ### 2026-09-26 — MinIO replaced by RustFS (deployment follow-up, not a milestone)
 >
@@ -3831,9 +3832,10 @@ Open as of 2026-09-26, from the deployment. Items 1-4 are also §5's list.
    the stopgap.
 3. **§4 item 40** — Keycloak's `admin@mnemos.local` cannot sign in.
 4. **Floor-only dependency pins** — upstream releases break CI with no code change.
-5. **Laptop controls are not in the repo.** `init up down status extend ssh logs lib.sh`
-   live in `~/Desktop/mnemos-demo/` on the owner's laptop and were not reachable from the
-   VM; commit them under `deploy/gcp/laptop/` from the laptop.
+5. ~~**Laptop controls are not in the repo.**~~ — fixed 2026-09-26: `deploy/gcp/laptop/`
+   is an identical copy of `~/Desktop/mnemos-demo/` (`diff -r` clean), without
+   `demo-password.txt`, which its `.gitignore` also keeps out. A comment naming the work
+   GCP project was reworded in both copies before the copy.
 6. ~~**Stale DNS after the 4-hour auto power-off**~~ — fixed 2026-09-26: the VM's
    shutdown script deletes the records on every stop and its startup script writes them,
    through a service account that can edit only this zone (`deploy/gcp/setup-vm-dns.sh`).

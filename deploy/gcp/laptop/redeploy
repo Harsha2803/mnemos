@@ -1,0 +1,38 @@
+#!/usr/bin/env bash
+# ./redeploy [branch] — ship the latest code to the running VM from this laptop.
+#   ./redeploy          pull the branch the VM is already on, rebuild, restart
+#   ./redeploy main     switch the VM to `main` first (use after merging PRs)
+# Merge on GitHub first; the VM only pulls (it has no GitHub credentials).
+set -euo pipefail
+cd "$(dirname "$0")" && source ./lib.sh
+require_login
+[[ "$(vm_status)" == "RUNNING" ]] || { fail "VM is not running — ./up first."; exit 1; }
+target="${1:-}"
+
+bold "Updating code on the VM${target:+ (switching to $target)}..."
+vm_ssh "set -e; cd ~/mnemos
+  prev=\$(git rev-parse --abbrev-ref HEAD)
+  git fetch -q origin
+  branch='${target}'; [ -n \"\$branch\" ] || branch=\$prev
+  # Check GitHub's copy first: the VM's local branch may be an old checkout that only
+  # gets the deploy files after the pull below.
+  if ! git cat-file -e \"origin/\$branch:deploy/gcp/compose.sh\" 2>/dev/null; then
+    echo \"origin/\$branch has no deploy/gcp/compose.sh (deploy PR not merged into it?) - nothing changed.\" >&2
+    exit 1
+  fi
+  [ \"\$branch\" = \"\$prev\" ] || git checkout -q \"\$branch\"
+  git pull -q --ff-only origin \"\$branch\"
+  echo \"  on \$(git rev-parse --abbrev-ref HEAD) at \$(git log --oneline -1)\"
+  df -h / | awk 'NR==2{print \"  disk free before build: \"\$4}'"
+
+bold "Rebuilding and restarting (a few minutes)..."
+vm_ssh "set -e; cd ~/mnemos && deploy/gcp/compose.sh up -d --build --remove-orphans >/dev/null 2>&1 \
+  && docker builder prune -f >/dev/null && df -h / | awk 'NR==2{print \"  disk free after prune: \"\$4}'"
+
+ip=$(vm_ip)
+bold "Waiting for the app..."
+for i in $(seq 1 60); do
+  if api_ready "$ip"; then echo; ok "Redeployed: https://mnemos.$DOMAIN"; exit 0; fi
+  printf '.'; sleep 5
+done
+echo; fail "Not ready after 5 minutes — ./logs api"; exit 1
