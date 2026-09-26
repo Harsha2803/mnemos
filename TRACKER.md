@@ -18,8 +18,29 @@ live, with the follow-ups in §6.
 **Next task:** §5 — the deployment follow-ups, now starting with role binding without SQL
 (MinIO is replaced; moving the live VM onto RustFS waits for the owner to allow the VM
 time). `B4`, `C1`, `C2` stay deliberately deferred.
-**Branch right now:** `feat/laptop-controls` (the laptop controls, committed). PRs #28 to #32
+**Branch right now:** `chore/pin-backend-deps` (hash-pinned backend lockfiles). PRs #28 to #33
 are merged.
+
+> ### 2026-09-26 — backend dependencies pinned (deployment follow-up, not a milestone)
+>
+> CI broke once already on an upstream release with no change in the repo (SQLAlchemy 2.1's
+> stubs under `mypy --strict`), because `pyproject.toml` only sets floors. Now
+> `backend/requirements.lock` (56 packages, runtime) and `requirements-dev.lock` (76, with the
+> `dev` extra) pin every package by version **and hash**, resolved by `uv pip compile
+> --universal` for Python 3.12. The Dockerfile, CI's backend job and `make install` install
+> from them with `--require-hashes`, then install `mnemos` itself with `--no-deps`. `make lock`
+> keeps existing pins and resolves only what `pyproject.toml` changed; `make lock-upgrade`
+> takes new releases on purpose. `backend/tests/test_lockfile.py` fails, naming the package,
+> when a declared dependency is missing from a lock or a pin has no hash. The optional
+> `neural` extra is not locked. Frontend dependencies were already pinned by
+> `package-lock.json`.
+>
+> **Verified:** a fresh venv from `requirements-dev.lock` alone (`--require-hashes`, then
+> `pip check`: no broken requirements); CI's exact `ruff check`, `ruff format --check` and
+> `mypy --strict` scope (228 files) clean in it; `test_invariants.py` + `test_lockfile.py`
+> green; `make lock` reproduces the committed files byte for byte; `docker compose build api`
+> installs from the lock (fastapi 0.141.1, sqlalchemy 2.1.1, pydantic 2.13.5, boto3
+> 1.43.103, the same versions CI resolved unpinned today). The full suite runs in CI.
 
 > ### 2026-09-26 — MinIO replaced by RustFS (deployment follow-up, not a milestone)
 >
@@ -2889,7 +2910,7 @@ they do not expand the committed finish line.
 |---|---|
 | Repo | `/home/shreeharsha/Personal/Projects/Resume_001/mnemos` |
 | Python | 3.12.3, venv at `.venv` |
-| Install | `.venv/bin/pip install -e "./backend[dev]"` |
+| Install | `make install` (from `backend/requirements-dev.lock`, hash-pinned; `make lock` / `make lock-upgrade` re-pin, needs uv) |
 | Stack up | `docker compose up -d` — ten long-running services including `web` and `demo-mcp`; no profile flag |
 | Schema report | `docker compose exec api mnemosctl db doctor` |
 | Migrations | `cd backend && MNEMOS_DATABASE_URL=postgresql+asyncpg://mnemos:mnemos@localhost:15432/mnemos ../.venv/bin/alembic upgrade head \| downgrade base \| check`. The DSN is explicit because the default in `core/config.py` names `mnemos_app` on `:5432`, which from the host is the machine's own Postgres and not the compose one |
@@ -3818,9 +3839,8 @@ Each is maintenance, not a milestone — follow §0/§7 exactly as for milestone
    MCP server should stay `tool:manage`-only, since `docs/Demo.md` has the analyst do it.
 3. **§4 item 40** — the bootstrap admin email collides with the realm's `admin@mnemos.local`,
    so that Keycloak user cannot sign in, in production too.
-4. **Pin backend dependencies** (a lockfile or upper bounds) so CI stops breaking on
-   upstream releases.
-5. Everything in §6 that needs the owner.
+4. Everything in §6 that needs the owner. (Backend dependency pinning, formerly item 4, was
+   done on 2026-09-26; dated note at the top.)
 
 ## 6. Blockers
 
@@ -3831,7 +3851,8 @@ Open as of 2026-09-26, from the deployment. Items 1-4 are also §5's list.
 2. **No supported way to give a signed-in user a role** — `deploy/gcp/demo-access.sql` is
    the stopgap.
 3. **§4 item 40** — Keycloak's `admin@mnemos.local` cannot sign in.
-4. **Floor-only dependency pins** — upstream releases break CI with no code change.
+4. ~~**Floor-only dependency pins**~~ — fixed 2026-09-26: hash-pinned lockfiles
+   (`backend/requirements*.lock`) feed the image, CI and `make install`.
 5. ~~**Laptop controls are not in the repo.**~~ — fixed 2026-09-26: `deploy/gcp/laptop/`
    is an identical copy of `~/Desktop/mnemos-demo/` (`diff -r` clean), without
    `demo-password.txt`, which its `.gitignore` also keeps out. A comment naming the work

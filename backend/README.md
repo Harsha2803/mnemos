@@ -25,7 +25,10 @@ work against it directly:
 
 ```bash
 python3.12 -m venv ../.venv
-../.venv/bin/pip install -e ".[dev]"
+# Every dependency is pinned by version and hash; `make lock` / `make lock-upgrade`
+# (repository root, needs uv) regenerate the lockfiles.
+../.venv/bin/pip install --require-hashes -r requirements-dev.lock
+../.venv/bin/pip install --no-deps -e .
 
 export MNEMOS_DATABASE_URL="postgresql+asyncpg://mnemos:mnemos@localhost:15432/mnemos"
 alembic upgrade head

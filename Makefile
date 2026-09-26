@@ -11,7 +11,7 @@ PY   := $(VENV)/bin/python
 PIP  := $(VENV)/bin/pip
 
 .DEFAULT_GOAL := help
-.PHONY: help venv install install-neural up wait down logs ps rebuild bootstrap demo-seed \
+.PHONY: help venv install install-neural lock lock-upgrade up wait down logs ps rebuild bootstrap demo-seed \
         doctor migrate migrate-down check test test-fast lint types web-install web-dev \
         web-test web-build bench ask clean
 
@@ -24,12 +24,26 @@ help: ## Show available targets
 venv: ## Create the virtualenv
 	python3 -m venv $(VENV)
 
-install: venv ## Install the backend in editable mode with dev extras
+install: venv ## Install the backend in editable mode with dev extras, from the lockfile
 	$(PIP) install -q --upgrade pip
-	$(PIP) install -q -e "./backend[dev]"
+	$(PIP) install -q --require-hashes -r backend/requirements-dev.lock
+	$(PIP) install -q --no-deps -e ./backend
 
-install-neural: install ## Also install sentence-transformers (~2.5GB, optional)
+install-neural: install ## Also install sentence-transformers (~2.5GB, optional; not locked)
 	$(PIP) install -q -e "./backend[neural]"
+
+# Pin every backend dependency by version and hash, for Python 3.12 on any platform.
+# `lock` keeps existing pins and only resolves what changed in backend/pyproject.toml;
+# `lock-upgrade` takes new releases. Run either on purpose, then run the gate and commit
+# both files. Needs uv (https://docs.astral.sh/uv/).
+LOCK := uv pip compile pyproject.toml --universal --python-version 3.12 --generate-hashes \
+        --custom-compile-command "make lock" --quiet
+lock: ## Re-pin backend dependencies into backend/requirements*.lock (needs uv)
+	cd backend && $(LOCK) -o requirements.lock
+	cd backend && $(LOCK) --extra dev -o requirements-dev.lock
+lock-upgrade: ## Like lock, but move every pin to the newest version pyproject allows
+	cd backend && $(LOCK) --upgrade -o requirements.lock
+	cd backend && $(LOCK) --upgrade --extra dev -o requirements-dev.lock
 
 # ------------------------------------------------------------------ the stack
 
