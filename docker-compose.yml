@@ -23,7 +23,7 @@ x-backend-env: &backend-env
   # one line; the two must agree.
   MNEMOS_APP_DATABASE_PASSWORD: mnemos-app-dev
   MNEMOS_REDIS_URL: redis://redis:6379/0
-  MNEMOS_OBJECT_ENDPOINT: http://minio:9000
+  MNEMOS_OBJECT_ENDPOINT: http://rustfs:9000
   MNEMOS_OBJECT_ACCESS_KEY: mnemos
   MNEMOS_OBJECT_SECRET_KEY: mnemos-dev-secret
   MNEMOS_OBJECT_BUCKET: mnemos-documents
@@ -108,35 +108,61 @@ services:
       retries: 20
     restart: unless-stopped
 
-  minio:
+  rustfs:
     # S3-compatible object storage. This is what makes the cloud-connector
-    # abstraction exercisable for free: the S3 adapter talks to MinIO locally
+    # abstraction exercisable for free: the S3 adapter talks to RustFS locally
     # and to AWS in production without a code change.
-    image: minio/minio:latest
-    command: server /data --console-address ":9001"
+    #
+    # RustFS replaced MinIO on 2026-09-26: Docker Hub stopped serving
+    # `minio/minio` and `minio/mc`, and quay.io has no tags, so a fresh machine
+    # could not start the stack at all. RustFS is Apache-2.0, speaks the same S3
+    # API on the same ports, and every call the adapters make (put, get, delete,
+    # paginated list_objects_v2, head_bucket, NoSuchKey on a miss) was checked
+    # against it with boto3 before the swap. Pinned, so the next upstream
+    # change is a deliberate edit rather than a surprise.
+    image: rustfs/rustfs:1.0.0
     environment:
-      MINIO_ROOT_USER: mnemos
-      MINIO_ROOT_PASSWORD: mnemos-dev-secret
-    volumes: [miniodata:/data]
+      RUSTFS_ACCESS_KEY: mnemos
+      RUSTFS_SECRET_KEY: mnemos-dev-secret
+      RUSTFS_CONSOLE_ENABLE: "true"
+      # Empty = log to stdout, where `docker compose logs` sees it. The image's
+      # default is a file under /logs inside the container, which nothing reads
+      # and which grows in the container layer.
+      RUSTFS_OBS_LOG_DIRECTORY: ""
+    volumes: [rustfsdata:/data]
     ports: ["9000:9000", "9001:9001"]
     healthcheck:
-      test: ["CMD", "mc", "ready", "local"]
+      test: ["CMD", "curl", "-fsS", "-o", "/dev/null", "http://localhost:9000/health"]
       interval: 5s
       timeout: 3s
       retries: 20
     restart: unless-stopped
 
-  minio-init:
-    image: minio/mc:latest
+  rustfs-init:
+    # Creates the buckets. The RustFS image has no S3 CLI, but its curl signs
+    # requests itself (`--aws-sigv4`), so no second image is pulled for this.
+    # HEAD first, PUT only on a miss: idempotent without relying on how the
+    # server answers a repeated CreateBucket. Credentials come from the
+    # environment so the production override changes only `environment`.
+    image: rustfs/rustfs:1.0.0
     depends_on:
-      minio: {condition: service_healthy}
-    entrypoint: >
-      /bin/sh -c "
-      mc alias set local http://minio:9000 mnemos mnemos-dev-secret &&
-      mc mb --ignore-existing local/mnemos-documents &&
-      mc mb --ignore-existing local/mnemos-uploads &&
-      echo 'buckets ready'
-      "
+      rustfs: {condition: service_healthy}
+    environment:
+      RUSTFS_ACCESS_KEY: mnemos
+      RUSTFS_SECRET_KEY: mnemos-dev-secret
+    entrypoint:
+      - /bin/sh
+      - -c
+      - |
+        set -e
+        sign="aws:amz:us-east-1:s3"
+        creds="$$RUSTFS_ACCESS_KEY:$$RUSTFS_SECRET_KEY"
+        for bucket in mnemos-documents mnemos-uploads; do
+          url="http://rustfs:9000/$$bucket"
+          curl -fs -o /dev/null -I --aws-sigv4 "$$sign" --user "$$creds" "$$url" ||
+            curl -fsS -o /dev/null -X PUT --aws-sigv4 "$$sign" --user "$$creds" "$$url"
+        done
+        echo 'buckets ready'
     restart: "no"
 
   logs-init:
@@ -144,7 +170,7 @@ services:
     # commits it), so Docker auto-creates it on first mount, owned by root. `api`
     # runs as an unprivileged image user (`Dockerfile`'s `USER mnemos`, uid 10001)
     # and cannot then write into it — the same "bind mount source must exist with
-    # the right ownership first" problem `minio-init` solves for the bucket, one
+    # the right ownership first" problem `rustfs-init` solves for the bucket, one
     # layer down at the filesystem instead of the object store.
     image: busybox:latest
     volumes:
@@ -253,8 +279,8 @@ services:
     depends_on:
       postgres: {condition: service_healthy}
       redis: {condition: service_healthy}
-      minio: {condition: service_healthy}
-      minio-init: {condition: service_completed_successfully}
+      rustfs: {condition: service_healthy}
+      rustfs-init: {condition: service_completed_successfully}
       migrate: {condition: service_completed_successfully}
       logs-init: {condition: service_completed_successfully}
     command: ["uvicorn", "mnemos.entrypoints.api.main:app",
@@ -279,7 +305,7 @@ services:
     depends_on:
       postgres: {condition: service_healthy}
       redis: {condition: service_healthy}
-      minio: {condition: service_healthy}
+      rustfs: {condition: service_healthy}
       migrate: {condition: service_completed_successfully}
     command: ["python", "-m", "mnemos.entrypoints.worker.main"]
     restart: unless-stopped
@@ -330,5 +356,5 @@ services:
 volumes:
   pgdata:
   redisdata:
-  miniodata:
+  rustfsdata:
   ollamadata:
