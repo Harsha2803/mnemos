@@ -15,11 +15,51 @@ across all 8 specs pass against the public HTTPS URLs; backend CI's `mypy --stri
 PR #28. Neither is a milestone. **What is left is in §5 and §6.**
 **Phase:** `C3` done (unchanged). Mobile-first maintenance: merging (PR #28). Deployment:
 live, with the follow-ups in §6.
-**Next task:** §5 — the deployment follow-ups, starting with replacing MinIO (the images are
-no longer downloadable, which fails CI's compose job on every PR). `B4`, `C1`, `C2` stay
-deliberately deferred.
-**Branch right now:** `docs/vm-dns-verified` (records the live Start/Stop check of the
-VM-managed DNS). PRs #28, #29 and #30 are merged.
+**Next task:** §5 — the deployment follow-ups, now starting with role binding without SQL
+(MinIO is replaced; moving the live VM onto RustFS waits for the owner to allow the VM
+time). `B4`, `C1`, `C2` stay deliberately deferred.
+**Branch right now:** `fix/replace-minio-rustfs` (MinIO → RustFS). PRs #28 to #31 are merged.
+
+> ### 2026-09-26 — MinIO replaced by RustFS (deployment follow-up, not a milestone)
+>
+> Docker Hub answers "access denied" for `minio/minio` and `minio/mc` and quay.io has no
+> tags, so no fresh machine (CI's `compose` job included) could start the stack. The
+> object store is now **RustFS `1.0.0`** (`rustfs/rustfs`, Apache-2.0, pinned): same S3
+> API, same ports 9000/9001, credentials from `RUSTFS_ACCESS_KEY`/`RUSTFS_SECRET_KEY`, a
+> fresh `rustfsdata` volume, logs to stdout. Considered and not chosen: SeaweedFS 4.47
+> (mature, but a 532 MB image with its own master/volume/filer model) and Versity Gateway
+> (small, but a younger project for this use). `rustfs-init` creates both buckets with
+> the curl already inside the RustFS image (`--aws-sigv4`), HEAD before PUT, so no second
+> image is pulled. Credentials are read from the environment, so the production override
+> now changes only `environment`; `.env.prod`'s `MINIO_ROOT_*` became
+> `OBJECT_STORE_ACCESS_KEY`/`OBJECT_STORE_SECRET_KEY`. No application code changed
+> (comments only); the `minio` connector kind stays, since it names any S3-compatible
+> source. `deploy/gcp/migrate-minio-objects.sh` copies an old MinIO volume's objects
+> into RustFS once; `docs/Deploy.md` has the three-step VM move.
+>
+> **Verified, not assumed** (laptop, 2026-09-26):
+> - Against a bare `rustfs/rustfs:1.0.0` with boto3 and the adapter's exact client config:
+>   `head_bucket`; `put_object`/`get_object` byte-exact with content type kept; a
+>   paginated `list_objects_v2` returned all 1,105 keys; `NoSuchKey` on a missing and a
+>   deleted key; 404 on a missing bucket. Signed-curl bucket create works, and a wrong
+>   secret is refused.
+> - `docker compose up -d --build` on this branch: `rustfs` healthy, `rustfs-init`
+>   "buckets ready" (and again on a re-run), `/readyz`
+>   `{"postgres":"ok","redis":"ok","ollama":"ok","objectstore":"ok"}`, web 200.
+> - **Playwright 16/16** (`cd frontend && npx playwright test`, 3.6 min). While
+>   `knowledge.spec.ts` ran, a 235-byte object appeared under the org's prefix in
+>   `mnemos-documents`, so uploads really land in RustFS.
+> - `COMPOSE="docker compose" deploy/gcp/migrate-minio-objects.sh` against the laptop's
+>   old `mnemos_miniodata`: "mnemos-documents: 8 objects copied and checked" (key and
+>   size), temporary container removed; a second run gave the same result.
+> - `docker compose config` for the base file and for base + production override (dummy
+>   `.env.prod`): valid, the override publishes no RustFS port, nothing named `minio`
+>   is left.
+> - **CI on PR #32: all three jobs green**, the `compose` job for the first time since the
+>   images disappeared; its `/readyz` reported `"objectstore":"ok"`.
+> - **Not done here:** the live VM still runs MinIO from its cached images. Moving it
+>   needs `./up`, the `.env.prod` rename, `./redeploy main` and the copy script — VM
+>   time the owner approves first.
 
 > ### 2026-09-26 — the VM manages its own DNS (owner priority P1, not a milestone)
 >
@@ -2824,7 +2864,7 @@ the boundary, not at the raise site.
 | `features/*/adapters/models.py` | 41 tables across nine groups |
 | `migrations/` | `0001` schema · `0002` bitemporal EXCLUDE + cycle trigger · `0003` monthly partitions · `0004` FORCE RLS · `0005` unprivileged app role · `0006` RLS policy tolerates a reverted GUC |
 | `entrypoints/` | api (`/healthz` vs `/readyz` split), worker (stuck-job reaper), realtime (WS over Redis pub/sub), `mnemosctl db doctor` |
-| Stack | postgres · redis · minio · keycloak · ollama (`qwen2.5:3b-instruct`) · migrate · api · worker · realtime |
+| Stack | postgres · redis · rustfs · keycloak · ollama (`qwen2.5:3b-instruct`) · migrate · api · worker · realtime |
 
 ### ✅ v0.1 kernel, quarantined in `_v1/` (23 tests passing)
 
@@ -2859,8 +2899,8 @@ they do not expand the committed finish line.
 | Signing in through the browser | org slug `mnemos`, then Keycloak wants a **realm** credential — `analyst@mnemos.local` / `analyst` or `user@mnemos.local` / `user`, **not** `admin@mnemos.local`, whose realm and internal-provider identities collide on email and are denied by design (§4 items 37 and **40**) |
 | Type check | `make types` — `mypy --strict` clean across 204 source files |
 | DB roles | `migrate` connects as `mnemos` (owner). api/worker/realtime connect as `mnemos_app` |
-| Host ports | postgres `15432`, redis `6380`, api `8000`, realtime `8001`, demo MCP `8100`, keycloak `8080`, minio `9000/9001`, ollama `11434` |
-| UI | **The app shell at `http://localhost:3000`** (F0). Also Swagger `http://localhost:8000/docs` · Keycloak `:8080` (`admin`/`admin`) · MinIO `:9001` (`mnemos`/`mnemos-dev-secret`) |
+| Host ports | postgres `15432`, redis `6380`, api `8000`, realtime `8001`, demo MCP `8100`, keycloak `8080`, rustfs `9000/9001`, ollama `11434` |
+| UI | **The app shell at `http://localhost:3000`** (F0). Also Swagger `http://localhost:8000/docs` · Keycloak `:8080` (`admin`/`admin`) · RustFS `:9001/rustfs/console/` (`mnemos`/`mnemos-dev-secret`) |
 | Frontend gate | `cd frontend && npm ci && npm run lint && npx tsc --noEmit && npm run test && npm run build` → **114 tests pass**, all four clean |
 | Browser end-to-end | `cd frontend && npx playwright test e2e/tools.spec.ts --project=chromium` — the B3 register → discover → grant → propose → approve → result journey passed against rebuilt Compose. Needs `npx playwright install chromium` once. Browser tests are not in CI (§4 item 39) |
 | Regenerate API types | `cd frontend && npm run generate:api` against a running api. `src/lib/api/schema.ts` is committed and never hand-edited |
@@ -3767,13 +3807,10 @@ Recorded so they are not rediscovered as surprises:
 **Deployment follow-ups** (2026-09-26). The demo is live; these are what remain, in order.
 Each is maintenance, not a milestone — follow §0/§7 exactly as for milestone work.
 
-1. **Replace MinIO.** Docker Hub now answers "access denied" for `minio/minio` and
-   `minio/mc`, and quay.io has no tags, so a fresh machine — and CI's `compose` job on every
-   PR — cannot start the stack. The VM runs only because the owner's laptop cache was
-   loaded onto it (do not delete those images there). Swap in a maintained S3-compatible
-   server; Mnemos talks to it only through boto3, so `docker-compose.yml`, the bucket-init
-   job, `deploy/gcp/docker-compose.prod.yml` and the docs should be all that change. Prove
-   it with CI's compose job green and the Playwright suite green on the rebuilt stack.
+1. **Move the live VM onto RustFS** (owner approves the VM time first): `./up`, the
+   `.env.prod` rename, `./redeploy main`, `deploy/gcp/migrate-minio-objects.sh`, check a
+   document opens, `./down` (`docs/Deploy.md`, "Moving an existing VM from MinIO to
+   RustFS"). MinIO itself was replaced on 2026-09-26 (dated note at the top).
 2. **Role binding without SQL.** Add realm-role → local-role mapping at OIDC provisioning
    (the prefix strip `domain/roles.py` already describes) and/or a `mnemosctl role bind`
    command, then delete `deploy/gcp/demo-access.sql`. Decide first whether registering an
@@ -3788,8 +3825,8 @@ Each is maintenance, not a milestone — follow §0/§7 exactly as for milestone
 
 Open as of 2026-09-26, from the deployment. Items 1-4 are also §5's list.
 
-1. **MinIO images are gone from every registry** — CI's `compose` job fails on every PR
-   (PR #28 and this deployment's PR alike); a fresh machine cannot start the stack.
+1. ~~**MinIO images are gone from every registry**~~ — fixed 2026-09-26: the stack uses
+   RustFS. The live VM still runs its cached MinIO until it is moved (§5 item 1).
 2. **No supported way to give a signed-in user a role** — `deploy/gcp/demo-access.sql` is
    the stopgap.
 3. **§4 item 40** — Keycloak's `admin@mnemos.local` cannot sign in.

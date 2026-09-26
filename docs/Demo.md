@@ -154,6 +154,6 @@ docker compose down -v      # drops all volumes — a genuinely empty next start
 docker compose up -d && make wait && make demo-seed
 ```
 
-Or, to keep infrastructure state (Postgres/Redis/MinIO/Ollama already primed) and only
+Or, to keep infrastructure state (Postgres/Redis/RustFS/Ollama already primed) and only
 clear conversations/documents/memory created *during* a take, sign out and use a second
 seeded user (`user@mnemos.local` / `user`) for the next run instead of tearing anything down.

@@ -11,9 +11,12 @@ Read TRACKER.md first. Two pieces of owner-requested maintenance have landed sin
   merges via PR #28. Physical iOS/Android keyboard and safe-area checks remain manual
   release QA; Chromium viewport emulation is not device certification.
 
-Next task: TRACKER §5, the deployment follow-ups, starting with replacing MinIO (its images
-are no longer downloadable, so CI's compose job fails on every PR). B4/C1/C2 remain
-deferred. Follow TRACKER §0/§7 through personal-account PR closure for every change.
+- MinIO is replaced by RustFS 1.0.0 (TRACKER dated note "MinIO replaced by RustFS"). The
+  live VM still runs its cached MinIO until the owner allows the VM time to move it
+  (docs/Deploy.md, "Moving an existing VM from MinIO to RustFS").
+
+Next task: TRACKER §5, the deployment follow-ups: item 1 (move the VM) only with the owner's
+yes, otherwise item 2, role binding without SQL. B4/C1/C2 remain deferred. Follow TRACKER §0/§7 through personal-account PR closure for every change.
 
 --- Historical D1 handoff (superseded by the task update above) ---
 

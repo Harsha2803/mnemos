@@ -678,7 +678,7 @@ context — and from there to `EXPLAIN`.
 
 | Not doing | Why |
 |---|---|
-| Multi-cloud storage/messaging abstraction | Solved problem, already proven in prior work, dilutes focus. One S3-compatible port against MinIO. |
+| Multi-cloud storage/messaging abstraction | Solved problem, already proven in prior work, dilutes focus. One S3-compatible port against a self-hosted server (MinIO until 2026-09-26, RustFS since). |
 | Model training / fine-tuning / eval harness | Different problem domain. |
 | Its own vector database | pgvector until measurements justify otherwise; the `VectorIndex` port makes that a contained change. |
 | Kubernetes operators / Terraform | Deployment detail, not architecture. Compose proves the design. |

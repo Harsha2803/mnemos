@@ -25,7 +25,7 @@ Browser ──HTTPS──► nginx on the VM (:443, Let's Encrypt; :80 → 301)
                      ├─ mnemos-api.…   → 127.0.0.1:8000  api (SSE, buffering off)
                      ├─ mnemos-ws.…    → 127.0.0.1:8001  realtime (WebSocket)
                      └─ mnemos-auth.…  → 127.0.0.1:8080  keycloak (/admin/ → 403)
-                   compose network only: postgres, redis, minio, ollama, worker,
+                   compose network only: postgres, redis, rustfs, ollama, worker,
                    demo-mcp, and the migrate / init jobs
 ```
 
@@ -57,7 +57,7 @@ run through [`compose.sh`](../deploy/gcp/compose.sh), which fixes the project na
 (`-p mnemos`), both files and the env file:
 
 - **Ports:** only the four above are published, on `127.0.0.1`. Postgres, Redis,
-  MinIO, Ollama and demo-mcp publish nothing.
+  RustFS, Ollama and demo-mcp publish nothing.
 - **Secrets:** every development credential in the base file is replaced from
   `deploy/gcp/.env.prod` (gitignored, mode 600, written by
   [`gen-env.sh`](../deploy/gcp/gen-env.sh); names in
@@ -164,7 +164,17 @@ it, apply the same edit to the installed file rather than overwriting it.
   `gcloud compute ssh mnemos-demo --tunnel-through-iap -- -L 8080:127.0.0.1:8080`, then
   http://localhost:8080/admin as `admin` / `KEYCLOAK_ADMIN_PASSWORD`.
 - **Logs / state:** `deploy/gcp/compose.sh ps`, `deploy/gcp/compose.sh logs -f api`.
-- **Update the code:** `git pull && deploy/gcp/compose.sh up -d --build && docker builder prune -f`.
+- **Update the code:** `git pull && deploy/gcp/compose.sh up -d --build --remove-orphans && docker builder prune -f`.
+- **Moving an existing VM from MinIO to RustFS (once).** The object store changed on
+  2026-09-26 because the MinIO images can no longer be pulled. A VM deployed before then
+  needs three steps, in this order. First rename the two credentials in `.env.prod`
+  (their values stay; nothing is printed):
+  `sed -i 's/^MINIO_ROOT_USER=/OBJECT_STORE_ACCESS_KEY=/; s/^MINIO_ROOT_PASSWORD=/OBJECT_STORE_SECRET_KEY=/' deploy/gcp/.env.prod`.
+  Then update the code as above (`--remove-orphans` stops and removes the old `minio`
+  containers). Then run [`migrate-minio-objects.sh`](../deploy/gcp/migrate-minio-objects.sh),
+  which starts the old server once more from the image still on the VM and copies every
+  object into RustFS, checking each key and size. Once the demo's documents open, free
+  the disk: `docker volume rm mnemos_miniodata` and remove the `minio/*` images.
 - **Work session longer than 4 hours:** `sudo shutdown -c`, then re-arm with
   `sudo shutdown -h +240`.
 - **Disk:** 30 GB, of which the Ollama image and model take ~11 GB. Prune the build
@@ -180,6 +190,5 @@ on the owner's laptop and pin every gcloud call to the personal account and proj
 
 ## Known limitations
 
-See TRACKER §6 — the MinIO images are no longer downloadable, and the link is dead while
-the VM is off. If the VM dies without a clean shutdown (a host crash), its shutdown script
+See TRACKER §6. The link is dead while the VM is off. If the VM dies without a clean shutdown (a host crash), its shutdown script
 does not run and the records stay until the next start or `down`.

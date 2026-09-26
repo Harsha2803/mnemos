@@ -1,7 +1,7 @@
-"""`ObjectStore` over S3-compatible storage (MinIO locally, S3 in production).
+"""`ObjectStore` over S3-compatible storage (RustFS locally, S3 in production).
 
 `boto3` has no async client, so every call goes through
-`anyio.to_thread.run_sync` (CodingStandards §3) — inline, a slow MinIO request
+`anyio.to_thread.run_sync` (CodingStandards §3) — inline, a slow storage request
 would stall the event loop for every other concurrent request, the same
 argument `PasswordHasher` makes for argon2id.
 """
@@ -20,7 +20,7 @@ from mnemos.platform.objectstore.port import ObjectMeta
 
 
 class S3ObjectStore:
-    """`ObjectStore` over `boto3`'s S3 client, pointed at MinIO by default."""
+    """`ObjectStore` over `boto3`'s S3 client, pointed at the compose stack's RustFS by default."""
 
     def __init__(
         self,
@@ -38,7 +38,7 @@ class S3ObjectStore:
             aws_access_key_id=access_key,
             aws_secret_access_key=secret_key,
             region_name=region,
-            # Path-style addressing: MinIO does not do virtual-hosted-style
+            # Path-style addressing: MinIO and RustFS do not do virtual-hosted-style
             # buckets by default, and a signature mismatch there is a cryptic
             # 403 rather than an obviously wrong URL.
             config=Config(s3={"addressing_style": "path"}, signature_version="s3v4"),

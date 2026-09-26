@@ -8,7 +8,7 @@
 #
 # What changes from the local stack, and only this:
 #   - no port is published except the four nginx proxies to, and those bind to
-#     127.0.0.1 — Postgres, Redis, MinIO, Ollama and demo-mcp stay on the compose
+#     127.0.0.1 — Postgres, Redis, RustFS, Ollama and demo-mcp stay on the compose
 #     network only;
 #   - every secret the base file hardcodes for development comes from
 #     deploy/gcp/.env.prod (never committed; deploy/gcp/gen-env.sh writes it);
@@ -25,8 +25,8 @@ x-prod-backend-env: &prod-backend-env
   MNEMOS_DATABASE_URL: postgresql+asyncpg://mnemos_app:${MNEMOS_APP_DATABASE_PASSWORD:?}@postgres:5432/mnemos
   MNEMOS_APP_DATABASE_PASSWORD: ${MNEMOS_APP_DATABASE_PASSWORD:?}
   MNEMOS_ANALYTICS_DATABASE_URL: postgresql+asyncpg://mnemos_ro:${MNEMOS_RO_DATABASE_PASSWORD:?}@postgres:5432/mnemos_analytics
-  MNEMOS_OBJECT_ACCESS_KEY: ${MINIO_ROOT_USER:?}
-  MNEMOS_OBJECT_SECRET_KEY: ${MINIO_ROOT_PASSWORD:?}
+  MNEMOS_OBJECT_ACCESS_KEY: ${OBJECT_STORE_ACCESS_KEY:?}
+  MNEMOS_OBJECT_SECRET_KEY: ${OBJECT_STORE_SECRET_KEY:?}
   MNEMOS_JWT_SECRET: ${MNEMOS_JWT_SECRET:?}
   MNEMOS_DSN_ENCRYPTION_KEY: ${MNEMOS_DSN_ENCRYPTION_KEY:?}
   MNEMOS_SOURCE_ENCRYPTION_KEY: ${MNEMOS_SOURCE_ENCRYPTION_KEY:?}
@@ -86,25 +86,17 @@ services:
   redis:
     ports: !reset []
 
-  minio:
+  rustfs:
     environment:
-      MINIO_ROOT_USER: ${MINIO_ROOT_USER:?}
-      MINIO_ROOT_PASSWORD: ${MINIO_ROOT_PASSWORD:?}
+      RUSTFS_ACCESS_KEY: ${OBJECT_STORE_ACCESS_KEY:?}
+      RUSTFS_SECRET_KEY: ${OBJECT_STORE_SECRET_KEY:?}
     ports: !reset []
 
-  minio-init:
+  rustfs-init:
+    # The base entrypoint reads these, so only the credentials change here.
     environment:
-      MINIO_ROOT_USER: ${MINIO_ROOT_USER:?}
-      MINIO_ROOT_PASSWORD: ${MINIO_ROOT_PASSWORD:?}
-    # The base entrypoint hardcodes the development credentials.
-    entrypoint: !override
-      - /bin/sh
-      - -c
-      - >-
-        mc alias set local http://minio:9000 "$$MINIO_ROOT_USER" "$$MINIO_ROOT_PASSWORD" &&
-        mc mb --ignore-existing local/mnemos-documents &&
-        mc mb --ignore-existing local/mnemos-uploads &&
-        echo 'buckets ready'
+      RUSTFS_ACCESS_KEY: ${OBJECT_STORE_ACCESS_KEY:?}
+      RUSTFS_SECRET_KEY: ${OBJECT_STORE_SECRET_KEY:?}
 
   keycloak:
     # Production mode, state in Postgres. The hostname stays dynamic

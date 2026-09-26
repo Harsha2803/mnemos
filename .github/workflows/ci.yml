@@ -364,7 +364,7 @@ jobs:
       - name: Build and start the stack
         run: |
           docker compose up -d --build \
-            postgres redis minio keycloak ollama migrate api worker realtime web
+            postgres redis rustfs keycloak ollama migrate api worker realtime web
 
       # Blocking and separate from the `/readyz` wait below, so a slow model
       # pull cannot be mistaken for a wedged API — the two failure modes get

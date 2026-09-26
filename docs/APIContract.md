@@ -403,7 +403,7 @@ would cost 19 seconds by waiting 19 seconds — is not acceptable during develop
 
 | Endpoint | Purpose |
 |---|---|
-| `POST /v1/documents:upload-url` | Presigned MinIO upload URL carrying metadata |
+| `POST /v1/documents:upload-url` | Presigned object-store upload URL carrying metadata |
 | `POST /v1/documents` | Register an uploaded object; enqueues ingestion |
 | `GET /v1/documents/{id}` | Metadata + ingestion status + error detail |
 | `GET /v1/documents/{id}/chunks` | Chunks with `char_start`/`char_end` for highlighting |

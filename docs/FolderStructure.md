@@ -58,7 +58,7 @@ src/mnemos/
 │   ├── db/                      # engine, async session, UnitOfWork, RLS GUC binding
 │   ├── redis/
 │   ├── broker/                  # RabbitMQ publisher/consumer, outbox relay
-│   ├── objectstore/             # S3-compatible (MinIO)
+│   ├── objectstore/             # S3-compatible (RustFS locally)
 │   └── inference/               # LiteLLM/Ollama/sentence-transformers adapters
 │
 ├── features/                    # ── THE KERNEL ──
