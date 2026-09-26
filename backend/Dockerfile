@@ -13,14 +13,16 @@ RUN apt-get update \
  && apt-get install -y --no-install-recommends build-essential \
  && rm -rf /var/lib/apt/lists/*
 
-# Dependency layer is keyed on pyproject alone, so editing source does not
-# invalidate the (slow) install layer.
-COPY pyproject.toml README.md ./
+# Dependency layer is keyed on the lockfile alone, so editing source does not
+# invalidate the (slow) install layer. Every package is pinned by version and
+# hash (`make lock` writes requirements.lock), so an upstream release cannot
+# change what an image contains or break a build that worked yesterday.
+COPY requirements.lock ./
 RUN python -m venv /opt/venv \
  && /opt/venv/bin/pip install --upgrade pip \
- && mkdir -p src/mnemos && touch src/mnemos/__init__.py \
- && /opt/venv/bin/pip install .
+ && /opt/venv/bin/pip install --require-hashes -r requirements.lock
 
+COPY pyproject.toml README.md ./
 COPY src/ ./src/
 RUN /opt/venv/bin/pip install --no-deps .
 
