@@ -55,6 +55,8 @@ time). `B4`, `C1`, `C2` stay deliberately deferred.
 > - `docker compose config` for the base file and for base + production override (dummy
 >   `.env.prod`): valid, the override publishes no RustFS port, nothing named `minio`
 >   is left.
+> - **CI on PR #32: all three jobs green**, the `compose` job for the first time since the
+>   images disappeared; its `/readyz` reported `"objectstore":"ok"`.
 > - **Not done here:** the live VM still runs MinIO from its cached images. Moving it
 >   needs `./up`, the `.env.prod` rename, `./redeploy main` and the copy script — VM
 >   time the owner approves first.
