@@ -37,7 +37,7 @@ graph TB
         RD[("Redis<br/>cache · locks · buckets · working memory")]
         NEO[("Neo4j<br/>knowledge + claim graph")]
         MQ[("RabbitMQ<br/>event backbone")]
-        OBJ[("MinIO<br/>S3-compatible")]
+        OBJ[("RustFS<br/>S3-compatible")]
         SQLT[("SQLite / Postgres<br/>NL2SQL target warehouses")]
     end
 
@@ -59,7 +59,7 @@ graph TB
     API & WC & WA -.llm spans.-> LF
 ```
 
-**Every component above is free and self-hostable.** Langfuse, MinIO, Neo4j Community,
+**Every component above is free and self-hostable.** Langfuse, RustFS, Neo4j Community,
 Ollama, and the sentence-transformers models are all open source. No component in the
 default path requires an account, a key, or a credit card. Adding a hosted provider is
 a change to `MNEMOS_MODEL_TIER` and a key in the environment — never a code change.
@@ -361,7 +361,7 @@ project claiming to be validated at a million users would be a claim nobody shou
 believe.
 
 ### Stage 0 — Single node ✅ **built and exercised**
-Docker Compose. One Postgres, one Redis, one Neo4j CE, one RabbitMQ, one MinIO, one
+Docker Compose. One Postgres, one Redis, one Neo4j CE, one RabbitMQ, one RustFS, one
 Ollama. Workers as separate processes. Target: correctness, observability, and the
 performance envelope in §2 on a single developer machine. This is what M0–M11 build.
 

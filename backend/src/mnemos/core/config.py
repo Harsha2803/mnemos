@@ -71,7 +71,7 @@ class Settings(BaseSettings):
     # that has no org to scope to yet.
     admin_database_role: str = "mnemos_admin"
 
-    # -- object storage (S3-compatible: MinIO locally, S3 in a real deployment) --
+    # -- object storage (S3-compatible: RustFS locally, S3 in a real deployment) --
     object_endpoint: str = "http://localhost:9000"
     object_access_key: str = "mnemos"
     object_secret_key: SecretStr = SecretStr("mnemos-dev-secret")

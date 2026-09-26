@@ -46,7 +46,7 @@ graph TB
         PG[(Postgres)]
         RD[(Redis)]
         NEO[(Neo4j)]
-        OBJ[(MinIO)]
+        OBJ[(RustFS)]
     end
     subgraph tb6["⑥ Third parties — UNTRUSTED"]
         RMCP[Remote MCP servers]

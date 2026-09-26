@@ -99,8 +99,8 @@ rows are marked and are not promises in the portfolio plan.
 | **Pluggable authentication** — more than one way to prove who you are, chosen per tenant rather than compiled in | `features/identity/providers/`: a Strategy + Factory over **two** protocols — a credential the caller knows, and a token another system minted. Internal password auth + OIDC on Keycloak. SAML is dropped (§9): it is a third adapter behind the same seam and proves nothing the second one did not | `M3.1`–`M3.3` ✅ |
 | **A session that survives a reload, and a door that is shut by default** | Platform JWT (HS256) with refresh-token rotation and family revocation; a fail-closed route dependency where an undecorated route is authenticated, and public routes are an enumerated allow-list rather than a prefix match | `M3.4` ✅ backend · `A0` |
 | **Users, roles, and per-document access that is not all-or-nothing** | Built: users, orgs, protected system roles, scan-time document authorization, and per-tenant RLS. Extension seam: API keys, an exhaustive permission matrix, and tag-scoped ACL UI | `M2a` ✅ RLS · `M3.7` ✅ roles · `C1` deferred |
-| **Object storage behind a port**, so the deployment target is a config choice | `platform/objectstore/`: port + S3 adapter on **MinIO** rather than S3 itself — same API, no bill, and the constraint that keeps the benchmark reproducible on any machine (C1) | `A2` upload · `B1` |
-| **Source connectors** — content arrives from somewhere that is not an upload form | `features/connectors/`: a `SourceConnector` port + factory, with MinIO/S3, local filesystem and HTTP URL adapters. The abstraction is the deliverable; the adapter count is not | `B1` |
+| **Object storage behind a port**, so the deployment target is a config choice | `platform/objectstore/`: port + S3 adapter on **RustFS** (MinIO until 2026-09-26) rather than S3 itself — same API, no bill, and the constraint that keeps the benchmark reproducible on any machine (C1) | `A2` upload · `B1` |
+| **Source connectors** — content arrives from somewhere that is not an upload form | `features/connectors/`: a `SourceConnector` port + factory, with S3-compatible (RustFS/MinIO/AWS), local filesystem and HTTP URL adapters. The abstraction is the deliverable; the adapter count is not | `B1` |
 | **An event bus** decoupling ingestion from the request that triggered it | `platform/events/`: an `EventBus` port with a **Redis Streams** adapter. No cloud pub/sub — it costs money and it is the same port shape, so paying for it would buy nothing the port does not already give | `B1` |
 | **Document ingestion** — extract, chunk, embed | `features/knowledge/`: extraction, structure-aware chunking with **char offsets retained** so a citation can highlight the exact span in the source PDF, and embedding into pgvector | `A2` |
 | **Ingestion that survives failure at scale** | `features/knowledge/jobs`: heartbeat, attempt counting, status history, and a reaper that surfaces a **stuck** job rather than losing it silently. A job that dies quietly is the failure mode that makes an ingestion pipeline untrustworthy | `B2` |
@@ -132,7 +132,7 @@ rows are marked and are not promises in the portfolio plan.
 |---|---|---|---|
 | `postgres` | `pgvector/pgvector:pg16` | 5432 | System of record + vectors. Second DB `mnemos_analytics` for NL2SQL |
 | `redis` | `redis:7-alpine` | 6379 | Cache, locks, Streams event bus |
-| `minio` | `minio/minio` | 9000/9001 | S3-compatible object storage |
+| `rustfs` | `rustfs/rustfs:1.0.0` | 9000/9001 | S3-compatible object storage (replaced MinIO 2026-09-26) |
 | `keycloak` | `quay.io/keycloak/keycloak:26.0` | 8080 | Real OIDC. Realm auto-imported |
 | `ollama` | `ollama/ollama` | 11434 | Qwen2.5 3B instruct |
 | `demo-mcp` | backend fixture | 8100 | Deterministic streamable-HTTP MCP server; no account or API key |
@@ -361,7 +361,8 @@ the public HTTPS URLs; `pytest` 501/501 with live Keycloak; only nginx and IAP-o
 listen publicly. One design note worth keeping: Keycloak's production hostname stays
 dynamic, because the API validates discovered endpoints against the *internal* issuer
 (`providers/oidc.py`), which a pinned public `KC_HOSTNAME` would break. Open follow-ups
-(MinIO replacement, role binding without SQL, item 40, dependency pins) are TRACKER §5/§6.
+(moving the live VM onto RustFS, role binding without SQL, item 40, dependency pins) are
+TRACKER §5/§6.
 Since the same day the VM also keeps its own DNS: its startup script points the four A
 records at each boot's ephemeral IP and its shutdown script deletes them, through a service
 account whose only grant is a record-edit role on the one Cloud DNS zone
@@ -370,6 +371,12 @@ Verified live the same day from a phone with no laptop command: Start wrote the 
 (startup log `mnemos-dns: 4 A records -> <ip>`, `/readyz` ready, sign-in works), and Stop
 left 0 A records in the Cloud DNS API and none on the authoritative server once the VM was
 `TERMINATED`.
+Also on 2026-09-26 the object store changed from MinIO to RustFS `1.0.0`, because the MinIO
+images can no longer be pulled anywhere. Configuration only: compose, the bucket-init job
+(signed curl inside the RustFS image), the production override and `.env.prod` names.
+Evidence: every boto3 call the adapters make checked against RustFS; the rebuilt stack
+reports `objectstore: ok`; Playwright 16/16 locally with the uploaded object seen in the
+bucket; `deploy/gcp/migrate-minio-objects.sh` copied and checked an old volume's 8 objects.
 
 ### Product polish — UI enhancement handoff (2026-08-17, not a milestone)
 

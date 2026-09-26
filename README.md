@@ -9,7 +9,7 @@ Every answer carries a persisted, governed context bundle that can be inspected 
 recompiling it. Underneath it is per-tenant row-level security and real OIDC; broader agent
 and SaaS product features are deliberately deferred rather than implied to be next.
 
-Everything is free and self-hosted: Postgres + pgvector, Redis, MinIO, Keycloak and Ollama
+Everything is free and self-hosted: Postgres + pgvector, Redis, RustFS (S3), Keycloak and Ollama
 in containers. No API key is required for any capability.
 
 It carries **one deep technical claim, and it is measured rather than asserted**: the
@@ -27,7 +27,7 @@ for you to discover. This is the honest status.
 
 | | |
 |---|---|
-| **The stack** | Ten containers — postgres (pgvector), redis, minio, keycloak, ollama, api, worker, realtime, web, and a deterministic demo MCP server — plus a one-shot `migrate` that runs `alembic upgrade head` and must exit successfully before the API starts. Healthchecks on eight serving dependencies |
+| **The stack** | Ten containers — postgres (pgvector), redis, rustfs (S3-compatible), keycloak, ollama, api, worker, realtime, web, and a deterministic demo MCP server — plus a one-shot `migrate` that runs `alembic upgrade head` and must exit successfully before the API starts. Healthchecks on eight serving dependencies |
 | **The schema** | 42 tables across identity, memory, knowledge, chat, context, datasources, tools, prompts and observability. **41 with `FORCE` row-level security**, enforced against an unprivileged app role and proven by a test against a real Postgres — not merely declared in the catalogue |
 | **Identity** | Full OIDC round trip against Keycloak (PKCE S256, split-horizon issuers), internal password auth behind the same provider seam, platform JWT with refresh-token rotation and family revocation, and `mnemosctl bootstrap` to create the first org and admin |
 | **CI** | Every PR runs pytest against a real Postgres and a real Keycloak, ruff, `mypy --strict`, `alembic check`, and a frontend gate of lint + `tsc` + tests + a real `next build` |
@@ -37,7 +37,7 @@ for you to discover. This is the honest status.
 | **RAG** | Upload → extract → chunk → embed onto pgvector HNSW → hybrid retrieval (vector + trigram, RRF-fused, deduplicated) → an answer with citations you click into. **Authorization is a predicate inside the scan and superseded revisions are excluded there too**, both pinned by tests rather than asserted |
 | **NL2SQL** | Schema introspection + business glossary → Ollama SQL generation → AST read-only allowlist → execution as `mnemos_ro` → narration and a visible SQL/result/denial panel. The parser guard and database role are independent defences |
 | **Automatic routing** | A deterministic, local-first classifier selects chat, RAG, NL2SQL, or one MCP tool call for every message. The stream and persisted assistant turn carry a compact reason shown beside the answer; there is no manual mode selector |
-| **Source ingestion** | MinIO/S3, local-filesystem, and curated-HTTP connectors feed durable Redis Streams jobs. Workers heartbeat, retry with backoff, surface stuck leases, and publish per-job progress/history to the Sources screen |
+| **Source ingestion** | S3-compatible (RustFS, MinIO, AWS), local-filesystem, and curated-HTTP connectors feed durable Redis Streams jobs. Workers heartbeat, retry with backoff, surface stuck leases, and publish per-job progress/history to the Sources screen |
 | **MCP tools** | Register and discover one self-hosted streamable-HTTP server, keep credentials encrypted per user, re-authorize against live roles/grants and the motivating trust tier, persist approval before dispatch, and inspect every result or denial in the Tool console. Retrieved content cannot trigger a user-tier tool; its denial names the source |
 | **Governed context** | Immutable bitemporal memory with supersession/retraction and two-clock history; a deterministic compiler with trust fences, section floors/ceilings and exact hard-budget verification; atomic Postgres bundle persistence attached to every answer flow; and a Bundle inspector showing admissions, exclusions, conflicts, lineage, provenance and token spend |
 | **Conversation management** | Organize conversations into folders, search titles and message bodies, bookmark and rate answers, and inspect the administrator-only audit trail for security-relevant actions |
@@ -75,7 +75,7 @@ nothing that exists.
 | The app | `http://localhost:3000` |
 | API + Swagger | `http://localhost:8000` · `http://localhost:8000/docs` |
 | Keycloak | `http://localhost:8080` (`admin`/`admin`) |
-| MinIO console | `http://localhost:9001` (`mnemos`/`mnemos-dev-secret`) |
+| RustFS console | `http://localhost:9001/rustfs/console/` (`mnemos`/`mnemos-dev-secret`) |
 | Postgres · Redis | `localhost:15432` · `localhost:6380` — shifted off the default ports so they do not clash with a host installation |
 
 Check it came up:
