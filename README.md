@@ -360,7 +360,7 @@ bench_results/    the JSON behind the tables above
 Run the gates the way CI does:
 
 ```bash
-cd backend  && ../.venv/bin/python -m pytest      # 501 passed (needs Docker + Keycloak)
+cd backend  && ../.venv/bin/python -m pytest      # 504 passed (needs Docker + Keycloak)
 cd frontend && npm ci && npm run lint && npx tsc --noEmit && npm run test && npm run build
                                                    # 131 passed
 ```
