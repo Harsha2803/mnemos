@@ -1,0 +1,28 @@
+#!/usr/bin/env bash
+# ./up — start the VM, repoint DNS to its new IP, wait until the app is ready.
+set -euo pipefail
+cd "$(dirname "$0")" && source ./lib.sh
+require_login
+
+s=$(vm_status)
+if [[ "$s" != "RUNNING" ]]; then
+  bold "Starting $VM (was $s)..."
+  g compute instances start "$VM" --zone="$ZONE" --quiet >/dev/null
+fi
+ip=$(vm_ip)
+bold "VM running at $ip. Pointing DNS at it:"
+dns_upsert "$ip"
+
+bold "Waiting for the app (first boot of the day takes a few minutes)..."
+for i in $(seq 1 120); do
+  if api_ready "$ip"; then
+    echo
+    ok "Ready: https://mnemos.$DOMAIN"
+    warn "The VM powers itself off 4h after boot. ./extend to change, ./down when finished."
+    exit 0
+  fi
+  printf '.'; sleep 5
+done
+echo
+fail "Not ready after 10 minutes. Check ./status and ./logs."
+exit 1

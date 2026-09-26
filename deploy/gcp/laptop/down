@@ -1,0 +1,14 @@
+#!/usr/bin/env bash
+# ./down — remove DNS records, then stop the VM.
+set -euo pipefail
+cd "$(dirname "$0")" && source ./lib.sh
+require_login
+
+bold "Removing DNS records (so the names never point at an IP Google may reuse):"
+dns_delete
+s=$(vm_status)
+if [[ "$s" == "RUNNING" ]]; then
+  bold "Stopping $VM..."
+  g compute instances stop "$VM" --zone="$ZONE" --quiet >/dev/null
+fi
+ok "VM is $(vm_status). Only the disk is billed while stopped."

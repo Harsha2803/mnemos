@@ -1,0 +1,68 @@
+#!/usr/bin/env bash
+# ./init — check that this laptop can control the Mnemos demo, log in if needed,
+# then list every command with what it does.
+set -uo pipefail
+cd "$(dirname "$0")" && source ./lib.sh
+
+bold "Mnemos demo — setup check"
+
+if command -v gcloud >/dev/null 2>&1; then ok "gcloud installed ($(gcloud version 2>/dev/null | head -1))"
+else fail "gcloud not found. Install the Google Cloud SDK first."; exit 1; fi
+
+if gcloud auth print-access-token --account="$ACCOUNT" >/dev/null 2>&1; then
+  ok "Logged in as $ACCOUNT"
+else
+  warn "Not logged in as $ACCOUNT — opening the browser for gcloud auth login..."
+  gcloud auth login "$ACCOUNT" --brief || { fail "Login failed."; exit 1; }
+  ok "Logged in as $ACCOUNT"
+fi
+
+if s=$(vm_status 2>/dev/null); then ok "Project $PROJECT reachable; VM $VM is $s"
+else fail "Cannot read VM $VM in project $PROJECT (permissions or network)."; exit 1; fi
+
+if grep -q '^Host mnemos-demo$' ~/.ssh/config 2>/dev/null; then ok "~/.ssh/config has 'mnemos-demo' (for Cursor Remote-SSH / ssh mnemos-demo)"
+else warn "~/.ssh/config has no 'mnemos-demo' entry — ./ssh still works; Cursor Remote-SSH will not."; fi
+
+for t in curl dig openssl; do command -v "$t" >/dev/null 2>&1 || warn "'$t' not found — ./status will show less."; done
+
+cat <<'MENU'
+
+Commands (run from this folder)
+───────────────────────────────────────────────────────────────────────────────
+  ./up            Start the VM, point the 4 hostnames at its new IP, and wait
+                  until https://mnemos.harsha2803.dev is ready (3-10 min).
+                  Run this before an interview. Billing: ~Rs 13/hour while up.
+
+  ./down          Remove the DNS records, then stop the VM. Run this when you
+                  are done. Stopped, only the disk is billed (~Rs 290/month).
+
+  ./status        VM state, IP, DNS, HTTPS certificate expiry, and whether the
+                  app answers. Safe to run any time; changes nothing.
+
+  ./extend        Show when the VM will power itself off (it auto-stops 4h
+  ./extend 2      after every boot as a cost safety net). With a number, reset
+  ./extend off    the timer to that many hours from now; 'off' cancels it
+                  (then remember ./down, or it bills until you stop it).
+
+  ./ssh           Open a shell on the VM (through Google IAP; no public SSH).
+                  Same as 'ssh mnemos-demo'. The app lives in ~/mnemos.
+
+  ./redeploy      Ship new code to the running VM: pull, rebuild, restart,
+  ./redeploy main wait until ready. Merge the PR on GitHub first. 'main'
+                  switches the VM to main (use once the deploy PR is merged).
+
+  ./logs          Tail the app logs on the VM (all services).
+  ./logs api      ...or one service: api, web, worker, realtime, keycloak,
+                  postgres, redis, rustfs, ollama.
+
+  ./guide         Open guide.html: the full visual guide (interview-day steps,
+                  costs, what happens automatically, troubleshooting).
+
+  ./init          This check and this list again.
+
+URLs when up
+  https://mnemos.harsha2803.dev        the app
+  https://mnemos-api.harsha2803.dev    API   (/readyz, /docs)
+  https://mnemos-auth.harsha2803.dev   sign-in (Keycloak)
+───────────────────────────────────────────────────────────────────────────────
+MENU

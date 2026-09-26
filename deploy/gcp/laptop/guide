@@ -1,0 +1,5 @@
+#!/usr/bin/env bash
+# ./guide — open the visual reference for these commands in the browser.
+cd "$(dirname "$0")"
+xdg-open "$PWD/guide.html" >/dev/null 2>&1 &
+echo "Opened guide.html (file://$PWD/guide.html)"

@@ -1,0 +1,21 @@
+#!/usr/bin/env bash
+# ./status — read-only overview. Changes nothing.
+set -uo pipefail
+cd "$(dirname "$0")" && source ./lib.sh
+require_login
+
+s=$(vm_status); ip=$(vm_ip 2>/dev/null || true)
+bold "VM $VM: $s${ip:+ ($ip)}"
+bold "DNS (authoritative):"
+for h in "${HOSTS[@]}"; do
+  a=$(dig +short "$h.$DOMAIN" @ns-cloud-c1.googledomains.com 2>/dev/null | tr '\n' ' ')
+  printf '  %-28s %s\n' "$h.$DOMAIN" "${a:-(no record)}"
+done
+if [[ "$s" == "RUNNING" && -n "$ip" ]]; then
+  exp=$(echo | openssl s_client -connect "$ip:443" -servername "mnemos.$DOMAIN" 2>/dev/null | openssl x509 -noout -enddate 2>/dev/null | cut -d= -f2)
+  bold "HTTPS certificate expires: ${exp:-unavailable}"
+  if api_ready "$ip"; then ok "App is up: https://mnemos.$DOMAIN"
+  else warn "App not answering yet (nginx is up; containers may be starting or not deployed)"; fi
+else
+  echo "  VM is not running — ./up to start it."
+fi

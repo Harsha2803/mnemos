@@ -1,0 +1,288 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Mnemos Demo Controls</title>
+<style>
+  :root {
+    --bg: #f6f7f9; --card: #ffffff; --text: #1d2330; --muted: #5d6677;
+    --line: #e3e6ec; --code-bg: #f0f2f6; --accent: #2f6fdb; --accent-soft: #e8f0fd;
+    --green: #1f8a4c; --green-soft: #e6f5ec; --amber: #a86400; --amber-soft: #fdf3e2;
+    --red: #b3261e; --red-soft: #fdeceb;
+  }
+  @media (prefers-color-scheme: dark) {
+    :root {
+      --bg: #12151b; --card: #1a1e26; --text: #e6e9ef; --muted: #9aa3b2;
+      --line: #2a303b; --code-bg: #232833; --accent: #7aa7f5; --accent-soft: #1f2b40;
+      --green: #6fcf97; --green-soft: #17291f; --amber: #f2b45a; --amber-soft: #2d2415;
+      --red: #f28b82; --red-soft: #2e1a19;
+    }
+  }
+  * { box-sizing: border-box; }
+  body {
+    margin: 0; background: var(--bg); color: var(--text);
+    font: 15px/1.55 system-ui, -apple-system, "Segoe UI", Roboto, Ubuntu, sans-serif;
+  }
+  main { max-width: 940px; margin: 0 auto; padding: 28px 16px 64px; }
+  h1 { font-size: 26px; margin: 0 0 4px; }
+  h2 { font-size: 19px; margin: 36px 0 12px; }
+  p { margin: 6px 0; }
+  .lead { color: var(--muted); margin-bottom: 18px; }
+  code, pre { font-family: ui-monospace, "SFMono-Regular", Menlo, Consolas, monospace; font-size: 13.5px; }
+  code { background: var(--code-bg); padding: 1px 6px; border-radius: 5px; }
+  pre {
+    background: var(--code-bg); padding: 12px 14px; border-radius: 8px; margin: 8px 0;
+    overflow-x: auto; white-space: pre;
+  }
+  .card {
+    background: var(--card); border: 1px solid var(--line); border-radius: 12px;
+    padding: 16px 18px; margin: 12px 0;
+  }
+  .flow { display: grid; gap: 10px; grid-template-columns: repeat(auto-fit, minmax(160px, 1fr)); }
+  .step { background: var(--card); border: 1px solid var(--line); border-radius: 12px; padding: 12px 14px; }
+  .step .n { color: var(--accent); font-weight: 700; font-size: 13px; }
+  .step .c { font-family: ui-monospace, Menlo, Consolas, monospace; font-weight: 600; margin: 2px 0; }
+  .step p { color: var(--muted); font-size: 13.5px; }
+  .cmd-head { display: flex; flex-wrap: wrap; align-items: center; gap: 10px; }
+  .cmd-name {
+    font-family: ui-monospace, Menlo, Consolas, monospace; font-size: 18px; font-weight: 700;
+    background: var(--accent-soft); color: var(--accent); padding: 2px 10px; border-radius: 8px;
+  }
+  .tag { font-size: 12px; font-weight: 600; padding: 2px 8px; border-radius: 999px; }
+  .safe { background: var(--green-soft); color: var(--green); }
+  .cost { background: var(--amber-soft); color: var(--amber); }
+  .save { background: var(--green-soft); color: var(--green); }
+  .what { font-size: 16px; margin: 8px 0 4px; }
+  dl { display: grid; grid-template-columns: 110px 1fr; gap: 4px 14px; margin: 8px 0 0; }
+  dt { color: var(--muted); font-size: 13.5px; }
+  dd { margin: 0; }
+  .note { border-left: 3px solid var(--amber); background: var(--amber-soft); padding: 10px 14px; border-radius: 0 8px 8px 0; margin: 10px 0; }
+  .ok { border-left-color: var(--green); background: var(--green-soft); }
+  table { width: 100%; border-collapse: collapse; background: var(--card); border: 1px solid var(--line); border-radius: 12px; overflow: hidden; }
+  th, td { text-align: left; padding: 9px 12px; border-bottom: 1px solid var(--line); vertical-align: top; }
+  th { font-size: 13px; color: var(--muted); font-weight: 600; }
+  tr:last-child td { border-bottom: none; }
+  .copy {
+    margin-left: auto; border: 1px solid var(--line); background: var(--card); color: var(--muted);
+    border-radius: 7px; padding: 3px 10px; font-size: 12.5px; cursor: pointer;
+  }
+  .copy:hover { color: var(--accent); border-color: var(--accent); }
+  a { color: var(--accent); }
+  footer { color: var(--muted); font-size: 13px; margin-top: 40px; }
+  @media (max-width: 560px) { dl { grid-template-columns: 1fr; } dt { margin-top: 6px; } }
+</style>
+</head>
+<body>
+<main>
+
+<h1>Mnemos demo controls</h1>
+<p class="lead">
+  Mnemos runs on a Google Cloud VM that is <strong>switched off by default</strong> and started
+  only when you need it, for an interview or a demo. Everything here runs from one folder
+  on this laptop: <code>~/Desktop/mnemos-demo</code>.
+</p>
+
+<div class="card">
+  <strong>Start here, every time</strong>
+  <pre>cd ~/Desktop/mnemos-demo
+./init</pre>
+  <p><code>./init</code> checks that you're logged in to Google Cloud (it opens the browser
+  to log you in if not), confirms it can reach the VM, and prints the list of commands.</p>
+</div>
+
+<h2>Interview day in five steps</h2>
+<div class="flow">
+  <div class="step"><div class="n">1 · 30 min before</div><div class="c">./init</div><p>Log in if asked. Confirms everything is reachable.</p></div>
+  <div class="step"><div class="n">2</div><div class="c">./up</div><p>Starts the VM and waits until the site works. Takes 3–10 minutes.</p></div>
+  <div class="step"><div class="n">3</div><div class="c">open the link</div><p><a href="https://mnemos.harsha2803.dev">mnemos.harsha2803.dev</a>: sign in once to warm it up.</p></div>
+  <div class="step"><div class="n">4 · if it runs long</div><div class="c">./extend 2</div><p>The VM switches itself off 4 h after starting. This moves that time.</p></div>
+  <div class="step"><div class="n">5 · when done</div><div class="c">./down</div><p>Stops the VM so you stop paying for it.</p></div>
+</div>
+
+<h2>From your phone (no laptop)</h2>
+<div class="card">
+  <p>The VM points the web addresses at itself when it starts and removes them when it stops,
+  so the Google Cloud console's <strong>Start</strong> and <strong>Stop</strong> buttons do the same as <code>./up</code> and <code>./down</code>.</p>
+  <table>
+    <tr><th>To</th><th>On the phone</th></tr>
+    <tr><td>Make the link live</td><td>console.cloud.google.com (or the Google Cloud app) → Compute Engine → VM instances → <code>mnemos-demo</code> → <strong>Start</strong>. Wait 5–10 minutes, then open <a href="https://mnemos.harsha2803.dev">mnemos.harsha2803.dev</a>.</td></tr>
+    <tr><td>Take it down</td><td>Same screen → <strong>Stop</strong>. The web addresses are removed as it shuts down.</td></tr>
+    <tr><td>Forgot to stop</td><td>It switches itself off 4 h after Start, and the addresses are removed then too.</td></tr>
+    <tr><td>Need more than 4 h</td><td>Stop, then Start again for a fresh 4 h. The timer can only be moved from the laptop (<code>./extend</code>).</td></tr>
+  </table>
+  <p>Make sure the console's project picker says <strong>Harsha-Dev</strong> (<code>gmail-mcp-466813</code>) and you are signed in as <code>cheellasreeharsha2803@gmail.com</code>.</p>
+</div>
+
+<h2>Every command</h2>
+
+<div class="card">
+  <div class="cmd-head"><span class="cmd-name">./init</span><span class="tag safe">safe · changes nothing on the VM</span><button class="copy" data-copy="./init">copy</button></div>
+  <p class="what">Checks your setup, logs you in if needed, and lists all commands.</p>
+  <dl>
+    <dt>Use it when</dt><dd>You open this folder after a while, or anything says "not logged in".</dd>
+    <dt>What happens</dt><dd>Checks <code>gcloud</code> is installed. If your Google login for <code>cheellasreeharsha2803@gmail.com</code> has expired, runs <code>gcloud auth login</code> and a browser tab opens. Then confirms the VM is reachable, checks the <code>mnemos-demo</code> SSH entry that Cursor uses, and prints the menu.</dd>
+  </dl>
+</div>
+
+<div class="card">
+  <div class="cmd-head"><span class="cmd-name">./up</span><span class="tag cost">starts billing · ~₹13 per hour</span><button class="copy" data-copy="./up">copy</button></div>
+  <p class="what">Turns Mnemos on and tells you when it's ready.</p>
+  <dl>
+    <dt>Use it when</dt><dd>Before an interview or demo.</dd>
+    <dt>What happens</dt><dd>Starts the VM, which gets a <em>new</em> IP each time. Points all four web addresses at that IP. Waits until the app reports "ready", printing dots, then shows the link.</dd>
+    <dt>Takes</dt><dd>3–10 minutes. The AI model has to load, so start it before the call, not during.</dd>
+    <dt>If it fails</dt><dd>"Not ready after 10 minutes": run <code>./status</code>, then <code>./logs</code> to see which part is stuck.</dd>
+  </dl>
+  <pre>./up
+VM running at 34.131.x.x. Pointing DNS at it:
+  ✓ mnemos.harsha2803.dev -> 34.131.x.x   (… and 3 more)
+Waiting for the app ..........
+  ✓ Ready: https://mnemos.harsha2803.dev</pre>
+</div>
+
+<div class="card">
+  <div class="cmd-head"><span class="cmd-name">./down</span><span class="tag save">stops billing</span><button class="copy" data-copy="./down">copy</button></div>
+  <p class="what">Turns Mnemos off.</p>
+  <dl>
+    <dt>Use it when</dt><dd>You're finished. Always, even if the VM already switched itself off.</dd>
+    <dt>What happens</dt><dd>First removes the four web addresses, so they never point at an IP Google may give to someone else. Then stops the VM. Your data, the app and the AI model all stay on the disk, and the next <code>./up</code> brings back exactly what was there.</dd>
+    <dt>Cost after</dt><dd>Only the disk, about ₹290 a month.</dd>
+  </dl>
+</div>
+
+<div class="card">
+  <div class="cmd-head"><span class="cmd-name">./status</span><span class="tag safe">safe · read-only</span><button class="copy" data-copy="./status">copy</button></div>
+  <p class="what">One-glance health check.</p>
+  <dl>
+    <dt>Use it when</dt><dd>You're unsure whether it's on, or you want to check before sharing the link.</dd>
+    <dt>Shows</dt><dd>Whether the VM is running and its IP · where each web address points · when the HTTPS certificate expires · whether the app itself answers.</dd>
+  </dl>
+  <pre>VM mnemos-demo: RUNNING (34.131.66.234)
+DNS: mnemos.harsha2803.dev  34.131.66.234   (… 3 more)
+HTTPS certificate expires: Dec 24 2026
+  ✓ App is up: https://mnemos.harsha2803.dev</pre>
+</div>
+
+<div class="card">
+  <div class="cmd-head"><span class="cmd-name">./extend</span><span class="tag safe">safe to look</span><span class="tag cost">longer time = more cost</span><button class="copy" data-copy="./extend">copy</button></div>
+  <p class="what">Controls the automatic switch-off timer.</p>
+  <p>Every time the VM starts, it plans to switch itself off <strong>4 hours later</strong>, so
+  forgetting <code>./down</code> can never cost more than a few hours.</p>
+  <table>
+    <tr><th>Type</th><th>Result</th></tr>
+    <tr><td><code>./extend</code></td><td>Shows when it will switch off, in IST: "Powers off at Sat 26 Sep, 06:13 IST".</td></tr>
+    <tr><td><code>./extend 2</code></td><td>Switch off 2 hours from <em>now</em>. Any whole number of hours works.</td></tr>
+    <tr><td><code>./extend off</code></td><td>Cancels the timer. It then runs and bills until you run <code>./down</code>.</td></tr>
+  </table>
+</div>
+
+<div class="card">
+  <div class="cmd-head"><span class="cmd-name">./ssh</span><span class="tag safe">no cost by itself</span><button class="copy" data-copy="./ssh">copy</button></div>
+  <p class="what">Opens a terminal on the VM.</p>
+  <dl>
+    <dt>Use it when</dt><dd>You want to look around on the server or fix something by hand. The app's code is in <code>~/mnemos</code>.</dd>
+    <dt>Good to know</dt><dd>The VM has no public SSH port. This goes through Google's secure tunnel (IAP), so it works from anywhere once you're logged in. <code>ssh mnemos-demo</code> does the same.</dd>
+    <dt>Cursor</dt><dd>To edit on the VM in Cursor: Remote-SSH → connect to host <code>mnemos-demo</code>. The VM must be running (<code>./up</code> first).</dd>
+  </dl>
+</div>
+
+<div class="card">
+  <div class="cmd-head"><span class="cmd-name">./redeploy</span><span class="tag cost">VM must be up</span><button class="copy" data-copy="./redeploy main">copy</button></div>
+  <p class="what">Ships new code to the live demo, without you touching the VM.</p>
+  <dl>
+    <dt>Use it when</dt><dd>You merged a change into Mnemos on GitHub and want the demo to show it.</dd>
+    <dt>What happens</dt><dd>On the VM: pulls the latest code, rebuilds the containers, restarts them, clears the build cache (the disk is small), then waits until the app is ready again.</dd>
+    <dt>Variants</dt><dd><code>./redeploy</code> updates the branch the VM is on. <code>./redeploy main</code> switches the VM to <code>main</code> first. It refuses a branch that lacks the deploy files.</dd>
+    <dt>Takes</dt><dd>A few minutes. Don't run it during an interview.</dd>
+  </dl>
+</div>
+
+<div class="card">
+  <div class="cmd-head"><span class="cmd-name">./logs</span><span class="tag safe">read-only</span><button class="copy" data-copy="./logs api">copy</button></div>
+  <p class="what">Shows the live logs of the running app. Ctrl+C to stop.</p>
+  <dl>
+    <dt>Use it when</dt><dd>Something in the demo doesn't work and you want to see why.</dd>
+    <dt>Variants</dt><dd><code>./logs</code> shows every service. <code>./logs api</code> shows one: <code>api</code>, <code>web</code>, <code>worker</code>, <code>realtime</code>, <code>keycloak</code> (sign-in), <code>postgres</code>, <code>redis</code>, <code>rustfs</code> (files), <code>ollama</code> (AI model).</dd>
+  </dl>
+</div>
+
+<div class="card">
+  <div class="cmd-head"><span class="cmd-name">./guide</span><span class="tag safe">safe</span><button class="copy" data-copy="./guide">copy</button></div>
+  <p class="what">Opens this page.</p>
+</div>
+
+<h2>Web addresses (only while the VM is up)</h2>
+<table>
+  <tr><th>Address</th><th>What it is</th></tr>
+  <tr><td><a href="https://mnemos.harsha2803.dev">mnemos.harsha2803.dev</a></td><td>The app, the link to share</td></tr>
+  <tr><td><a href="https://mnemos-api.harsha2803.dev/readyz">mnemos-api.harsha2803.dev</a></td><td>The API. <code>/readyz</code> = health, <code>/docs</code> = interactive API docs</td></tr>
+  <tr><td><a href="https://mnemos-auth.harsha2803.dev">mnemos-auth.harsha2803.dev</a></td><td>Sign-in server (Keycloak)</td></tr>
+  <tr><td>mnemos-ws.harsha2803.dev</td><td>Live updates (WebSocket). Used by the app, not opened directly</td></tr>
+</table>
+<div class="note">While the VM is off these addresses don't exist, and a browser shows "site can't be reached".
+That's expected, not broken.</div>
+
+<h2>Things that happen on their own</h2>
+<table>
+  <tr><th>Automatic</th><th>Why</th></tr>
+  <tr><td>Auto switch-off 4 h after every start</td><td>A forgotten VM can't run up a bill. Change it with <code>./extend</code>.</td></tr>
+  <tr><td>HTTPS certificate renewal (Let's Encrypt, free)</td><td>Renewed while the VM runs and 10 minutes after each start. Valid 90 days at a time. <code>./status</code> shows the expiry.</td></tr>
+  <tr><td>Web addresses follow the new IP</td><td>The VM points them at its new IP on every start and removes them on every stop (console, phone, <code>./down</code> or the 4-hour timer). <code>./up</code> and <code>./down</code> also do it, which is harmless. The VM's service account <code>mnemos-dns</code> can edit only these DNS records, nothing else in the account.</td></tr>
+  <tr><td>Budget e-mail alerts</td><td>Google e-mails you at 50%, 90% and 100% of ₹1,000 in a month. Alerts only, they never switch anything off.</td></tr>
+</table>
+
+<h2>What it costs</h2>
+<table>
+  <tr><th>Item</th><th>Approx. (before GST)</th></tr>
+  <tr><td>VM while running</td><td>~₹13–14 per hour. A 3-hour interview ≈ ₹40</td></tr>
+  <tr><td>Disk while stopped</td><td>~₹290 per month</td></tr>
+  <tr><td>DNS for the domain</td><td>~₹20 per month</td></tr>
+  <tr><td>Domain <code>harsha2803.dev</code></td><td>~₹1,100 per year, renews automatically</td></tr>
+  <tr><td>HTTPS certificate, secure tunnel</td><td>Free</td></tr>
+</table>
+<div class="note ok">Until <strong>25 Dec 2026</strong> the free Google Cloud credit (₹28,663) covers all of this.</div>
+
+<h2>If something goes wrong</h2>
+<table>
+  <tr><th>You see</th><th>Do this</th></tr>
+  <tr><td>"Not logged in" / "Reauthentication required"</td><td><code>./init</code>, which logs you in again.</td></tr>
+  <tr><td>Site can't be reached</td><td><code>./status</code>. If the VM is TERMINATED or stopped, run <code>./up</code> (or Start it from the phone). If the VM is running but the addresses show "(no record)", run <code>./up</code>: it rewrites them.</td></tr>
+  <tr><td>"502 Bad Gateway"</td><td>The server is up but the app isn't (yet). Wait a minute, then <code>./logs</code>.</td></tr>
+  <tr><td><code>./up</code> says "not ready after 10 minutes"</td><td><code>./logs</code> to find the failing part. <code>./ssh</code> to look closer.</td></tr>
+  <tr><td>The VM switched off during a session</td><td>The 4-hour timer. <code>./up</code> again, then <code>./extend 3</code>.</td></tr>
+  <tr><td>Forgot to run <code>./down</code></td><td>It switched itself off anyway and removed the web addresses. <code>./status</code> confirms; <code>./down</code> is a safe extra clean-up.</td></tr>
+  <tr><td>Browser warns about the certificate</td><td><code>./status</code> shows the expiry. If it's past, <code>./ssh</code> then <code>sudo certbot renew</code>.</td></tr>
+</table>
+
+<h2>Where things live</h2>
+<table>
+  <tr><th>What</th><th>Where</th></tr>
+  <tr><td>These commands</td><td><code>~/Desktop/mnemos-demo/</code>. Settings are in <code>lib.sh</code></td></tr>
+  <tr><td>Google account / project</td><td><code>cheellasreeharsha2803@gmail.com</code> · <code>gmail-mcp-466813</code> ("Harsha-Dev"). Personal only, never the work account.</td></tr>
+  <tr><td>VM</td><td><code>mnemos-demo</code>, Delhi (<code>asia-south2-a</code>), 4 CPU / 16 GB RAM / 30 GB disk</td></tr>
+  <tr><td>App code on the VM</td><td><code>~/mnemos</code> (GitHub <code>Harsha2803/mnemos</code>)</td></tr>
+  <tr><td>Web server + HTTPS on the VM</td><td>nginx, config in <code>/etc/nginx/sites-available/mnemos</code>. Certificates by certbot.</td></tr>
+  <tr><td>Tracker &amp; notes</td><td><code>~/Personal/Projects/Resume_001/TRACKER.md</code> (to-do) · <code>docs/Infrastructure.md</code> · Mnemos repo <code>docs/Deploy.md</code></td></tr>
+  <tr><td>Google Cloud console</td><td><a href="https://console.cloud.google.com/compute/instances?project=gmail-mcp-466813">VM instances</a> · <a href="https://console.cloud.google.com/billing">Billing</a></td></tr>
+</table>
+
+<footer>Mnemos demo controls · written 26 Sep 2026.</footer>
+</main>
+<script>
+  document.querySelectorAll('.copy').forEach(function (b) {
+    b.addEventListener('click', function () {
+      var text = 'cd ~/Desktop/mnemos-demo && ' + b.dataset.copy;
+      var done = function () { b.textContent = 'copied'; setTimeout(function () { b.textContent = 'copy'; }, 1200); };
+      if (navigator.clipboard && window.isSecureContext) {
+        navigator.clipboard.writeText(text).then(done, function () { fallback(text); done(); });
+      } else { fallback(text); done(); }
+    });
+  });
+  function fallback(text) {
+    var t = document.createElement('textarea'); t.value = text; document.body.appendChild(t);
+    t.select(); try { document.execCommand('copy'); } catch (e) {} document.body.removeChild(t);
+  }
+</script>
+</body>
+</html>
