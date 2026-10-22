@@ -1,7 +1,8 @@
 "use client";
 
 import * as Dialog from "@radix-ui/react-dialog";
-import { PanelLeft, PanelRight, X } from "lucide-react";
+import { useQuery } from "@tanstack/react-query";
+import { PanelLeft, PanelRight, PanelRightOpen, X } from "lucide-react";
 import { usePathname } from "next/navigation";
 import {
   useEffect,
@@ -13,8 +14,10 @@ import {
   type ReactNode,
 } from "react";
 
-import { ThemeToggle } from "@/components/theme/ThemeToggle";
+import { CHAT_SESSIONS_QUERY_KEY } from "@/components/chat/ChatSessionList";
 import { Button } from "@/components/ui/Button";
+import { Truncate } from "@/components/ui/Truncate";
+import { fetchSessions } from "@/lib/chat/api";
 import { readLayoutPreferences, writeLayoutPreferences } from "@/lib/layoutPreferences";
 import { useInspectorSelection } from "@/lib/inspector/SelectionProvider";
 
@@ -60,7 +63,7 @@ export function AppShell({ children }: { children: ReactNode }) {
   const pathname = usePathname();
   const inspectorIsInline = useMediaQuery(INSPECTOR_INLINE, false);
   const sidebarIsInline = useMediaQuery(SIDEBAR_INLINE, false);
-  const { selection } = useInspectorSelection();
+  const { selection, select } = useInspectorSelection();
   const navigationTrigger = useRef<HTMLButtonElement>(null);
   const inspectorTrigger = useRef<HTMLButtonElement>(null);
   const inspectorReturnFocus = useRef<HTMLElement | null>(null);
@@ -80,6 +83,9 @@ export function AppShell({ children }: { children: ReactNode }) {
   const [sidebarSheetOpen, setSidebarSheetOpen] = useState(false);
   const [inspectorPinned, setInspectorPinned] = useState(true);
   const [inspectorSheetOpen, setInspectorSheetOpen] = useState(false);
+  // With nothing selected, the inline inspector is a slim rail rather than an
+  // empty 320px column. A person can still open it to read what it is for.
+  const [emptyInspectorExpanded, setEmptyInspectorExpanded] = useState(false);
 
   const [sidebarWidth, setSidebarWidth] = useState(DEFAULT_SIDEBAR_WIDTH);
   const [inspectorWidth, setInspectorWidth] = useState(DEFAULT_INSPECTOR_WIDTH);
@@ -89,6 +95,9 @@ export function AppShell({ children }: { children: ReactNode }) {
   // reopen a dismissed sheet or resurrect an old selection.
   useEffect(() => {
     if (selection !== previousSelection.current && selection !== null) {
+      // A real selection supersedes "opened while empty": when it is cleared
+      // again the inspector goes back to being a rail.
+      setEmptyInspectorExpanded(false);
       if (inspectorIsInline) setInspectorPinned(true);
       else {
         if (!inspectorSheetOpen) {
@@ -100,10 +109,13 @@ export function AppShell({ children }: { children: ReactNode }) {
     previousSelection.current = selection;
   }, [selection, inspectorIsInline, inspectorSheetOpen]);
 
+  // A selection belongs to the conversation it was made in; carrying one
+  // message's evidence onto the next page would describe the wrong thing.
   useEffect(() => {
     setSidebarSheetOpen(false);
     setInspectorSheetOpen(false);
-  }, [pathname]);
+    select(null);
+  }, [pathname, select]);
 
   useEffect(() => {
     if (sidebarIsInline) setSidebarSheetOpen(false);
@@ -130,6 +142,7 @@ export function AppShell({ children }: { children: ReactNode }) {
 
   const sidebarShowing = sidebarIsInline ? sidebarPinned : sidebarSheetOpen;
   const inspectorShowing = inspectorIsInline ? inspectorPinned : inspectorSheetOpen;
+  const inspectorIsRail = inspectorPinned && selection === null && !emptyInspectorExpanded;
 
   return (
     <div className="workspace-shell flex h-dvh overflow-hidden bg-bg text-label">
@@ -139,7 +152,7 @@ export function AppShell({ children }: { children: ReactNode }) {
           aria-label="Workspace"
           style={{ "--sidebar-width": `${sidebarWidth}px` } as CSSProperties}
           className={[
-            "material-chrome shrink-0 overflow-hidden border-separator",
+            "shrink-0 overflow-hidden border-separator bg-bg-secondary",
             "transition-[width] duration-250 ease-spring",
             sidebarPinned ? "sidebar-column w-[var(--sidebar-width)] border-r" : "w-0",
           ].join(" ")}
@@ -183,14 +196,9 @@ export function AppShell({ children }: { children: ReactNode }) {
             <PanelLeft className="size-[18px]" strokeWidth={1.5} aria-hidden="true" />
           </Button>
 
-          {/* Read from the same list the sidebar renders, so the bar and the nav
-              cannot disagree. A literal here is a lie waiting for the second route. */}
-          <span className="min-w-0 flex-1 truncate text-subheadline font-semibold text-label">
-            {destinationFor(pathname)?.label ?? "Mnemos"}
-          </span>
+          <ToolbarTitle pathname={pathname} />
 
           <div className="ml-auto flex shrink-0 items-center gap-2">
-            {sidebarIsInline && <ThemeToggle />}
             <Button
               ref={inspectorTrigger}
               aria-label={inspectorShowing ? "Hide context inspector" : "Show context inspector"}
@@ -226,7 +234,7 @@ export function AppShell({ children }: { children: ReactNode }) {
         </main>
       </div>
 
-      {inspectorIsInline && inspectorPinned && (
+      {inspectorIsInline && inspectorPinned && !inspectorIsRail && (
         <ResizeHandle
           label="Resize the context inspector"
           width={inspectorWidth}
@@ -244,13 +252,33 @@ export function AppShell({ children }: { children: ReactNode }) {
           style={{ "--inspector-width": `${inspectorWidth}px` } as CSSProperties}
           className={[
             "shrink-0 overflow-hidden border-separator bg-bg-secondary",
-            "transition-[width] duration-250 ease-spring",
-            inspectorPinned ? "inspector-column w-[var(--inspector-width)] border-l" : "w-0",
+            "transition-[width] duration-250 ease-out",
+            !inspectorPinned
+              ? "w-0"
+              : inspectorIsRail
+                ? "w-12 border-l"
+                : "inspector-column w-[var(--inspector-width)] border-l",
           ].join(" ")}
         >
-          {inspectorPinned && (
+          {inspectorPinned && inspectorIsRail && (
+            <InspectorRail onExpand={() => setEmptyInspectorExpanded(true)} />
+          )}
+          {inspectorPinned && !inspectorIsRail && (
             <div className="h-full">
-              <InspectorContent />
+              <InspectorContent
+                focusOnMount={selection === null}
+                headerAction={
+                  selection === null ? (
+                    <Button
+                      aria-label="Collapse context inspector to a rail"
+                      className="!px-0"
+                      onClick={() => setEmptyInspectorExpanded(false)}
+                    >
+                      <X className="size-4" strokeWidth={1.5} aria-hidden="true" />
+                    </Button>
+                  ) : undefined
+                }
+              />
             </div>
           )}
         </aside>
@@ -289,6 +317,61 @@ export function AppShell({ children }: { children: ReactNode }) {
         </Sheet>
       )}
     </div>
+  );
+}
+
+/**
+ * Where you are, in words: the section, and inside a conversation, which one.
+ * Read from the same list the sidebar renders, so the bar and the nav cannot
+ * disagree, and from the same cached session list, so naming the conversation
+ * costs no request of its own.
+ */
+function ToolbarTitle({ pathname }: { pathname: string | null }) {
+  const section = destinationFor(pathname)?.label ?? "Mnemos";
+  const sessionId = pathname?.startsWith("/chat/") === true ? pathname.slice("/chat/".length) : null;
+  const sessions = useQuery({
+    queryKey: CHAT_SESSIONS_QUERY_KEY,
+    queryFn: ({ signal }) => fetchSessions(signal),
+    enabled: sessionId !== null,
+  });
+  const title = sessions.data?.sessions?.find((session) => session.id === sessionId)?.title;
+
+  if (title === undefined) {
+    return (
+      <span className="min-w-0 flex-1 truncate text-subheadline font-semibold text-label">{section}</span>
+    );
+  }
+  return (
+    <span className="group/truncate flex min-w-0 flex-1 items-baseline gap-2 text-subheadline">
+      <span className="shrink-0 text-label-secondary">{section}</span>
+      <span aria-hidden="true" className="shrink-0 text-label-tertiary">/</span>
+      <Truncate text={title} className="flex-1 font-semibold text-label" />
+    </span>
+  );
+}
+
+/**
+ * The inspector with nothing to show: a 48px rail on the edge it lives on,
+ * rather than 320px saying "nothing here". One control — the whole rail — opens
+ * it, for anyone who wants to read what it will show.
+ */
+function InspectorRail({ onExpand }: { onExpand: () => void }) {
+  return (
+    <button
+      type="button"
+      onClick={onExpand}
+      aria-label="Expand context inspector"
+      aria-expanded={false}
+      className={[
+        "hit-target group flex h-full w-full flex-col items-center gap-3 pt-4",
+        "text-label-secondary transition-colors duration-150 ease-standard hover:bg-fill-tertiary hover:text-label",
+      ].join(" ")}
+    >
+      <PanelRightOpen className="size-4" strokeWidth={1.5} aria-hidden="true" />
+      <span className="font-mono text-caption uppercase tracking-caps [writing-mode:vertical-rl]">
+        Context
+      </span>
+    </button>
   );
 }
 

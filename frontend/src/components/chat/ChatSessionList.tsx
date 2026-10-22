@@ -2,16 +2,16 @@
 
 import * as Dialog from "@radix-ui/react-dialog";
 import { useQuery, useQueryClient } from "@tanstack/react-query";
-import { FolderInput, FolderPlus, MessageCircle, Pencil, Plus, Search, Trash2 } from "lucide-react";
+import { FolderInput, MessageCircle, Pencil, Search, Trash2 } from "lucide-react";
 import Link from "next/link";
 import { usePathname, useRouter } from "next/navigation";
 import { useEffect, useMemo, useRef, useState, type KeyboardEvent } from "react";
 
 import { Button } from "@/components/ui/Button";
 import { EmptyState } from "@/components/ui/EmptyState";
-import { List } from "@/components/ui/List";
-import { MarqueeText } from "@/components/ui/MarqueeText";
+import { RelativeTime } from "@/components/ui/RelativeTime";
 import { Skeleton } from "@/components/ui/Skeleton";
+import { Truncate } from "@/components/ui/Truncate";
 import {
   CHAT_FOLDERS_QUERY_KEY,
   createFolder,
@@ -29,6 +29,24 @@ import {
 
 export const CHAT_SESSIONS_QUERY_KEY = ["chat", "sessions"] as const;
 
+/**
+ * A row's move/rename/delete controls. With a fine pointer they sit over the
+ * row's trailing edge (covering its timestamp) and appear on hover or when
+ * focus enters the row — keyboard users reveal them by tabbing to them. With a
+ * coarse pointer there is no hover, so they stay in the row's flow, visible.
+ * Opaque `--bg-secondary`, the sidebar's own paper, so nothing shows through.
+ */
+const ROW_ACTIONS = [
+  "flex shrink-0 items-center bg-bg-secondary transition-opacity duration-150 ease-standard",
+  // Literal class names, not built from a shared prefix: Tailwind only
+  // generates a class it can read whole in the source.
+  "[@media(hover:hover)_and_(pointer:fine)]:absolute",
+  "[@media(hover:hover)_and_(pointer:fine)]:inset-y-0",
+  "[@media(hover:hover)_and_(pointer:fine)]:right-0",
+  "[@media(hover:hover)_and_(pointer:fine)]:opacity-0",
+  "group-hover/row:opacity-100 group-focus-within/row:opacity-100",
+].join(" ");
+
 type PendingDelete =
   | { kind: "session"; session: ChatSession }
   | { kind: "folder"; folder: Folder };
@@ -39,10 +57,11 @@ type PendingDelete =
  * matters; everyone else sees their conversations, newest first, with the
  * current one marked by `aria-current` rather than colour alone. Each row is
  * named for what it is about — the backend titles a session from its first
- * message the moment it is sent — and carries its own rename and delete
- * controls, always visible rather than hover-only (DocumentList's delete
- * button sets this precedent: a control only a mouse can find is a control a
- * touch or keyboard user cannot).
+ * message the moment it is sent — shows how long ago it was last used, and
+ * carries its own move, rename and delete controls. Those appear on hover or
+ * keyboard focus for a fine pointer, so twenty rows are not sixty icons, and
+ * are always shown on a touch screen, where there is no hover to find them
+ * with (`ROW_ACTIONS`). A truncated title shows in full on hover and focus.
  *
  * A row that navigates *and* carries actions cannot be `ListItem`'s
  * `href` form — that nests the action buttons inside the `<a>`, which is
@@ -211,29 +230,32 @@ export function ChatSessionList() {
 
   return (
     <div className="flex flex-col gap-2">
-      <div className="flex items-center justify-between px-2">
-        <span className="text-footnote font-semibold text-label-secondary">Conversations</span>
-        <div className="flex items-center gap-0.5">
-          <Button rank="plain" aria-label="New folder" onClick={startNewFolder}>
-            <FolderPlus className="size-4" strokeWidth={1.5} aria-hidden="true" />
+      <div className="flex items-center justify-between pl-3">
+        <span className="font-mono text-caption uppercase tracking-caps text-label-secondary">
+          Conversations
+        </span>
+        {/* Words, not glyphs; each visible word is part of its accessible name. */}
+        <div className="flex items-center">
+          <Button rank="plain" aria-label="New folder" className="!px-2 text-footnote" onClick={startNewFolder}>
+            Folder
           </Button>
-          <Button rank="plain" aria-label="New chat" onClick={() => void startNewChat()}>
-            <Plus className="size-4" strokeWidth={1.5} aria-hidden="true" />
+          <Button rank="plain" aria-label="New chat" className="!px-2 text-footnote" onClick={() => void startNewChat()}>
+            New
           </Button>
         </div>
       </div>
 
       {renameError !== null && (
-        <p role="alert" className="px-2 text-footnote text-danger">
+        <p role="alert" className="px-3 text-footnote text-danger">
           {renameError}
         </p>
       )}
 
       {(sessions.length > 0 || folders.length > 0) && (
-        <label className="relative mx-1">
+        <label className="relative">
           <span className="sr-only">Search conversations</span>
-          <Search className="pointer-events-none absolute left-3 top-1/2 size-4 -translate-y-1/2 text-label-tertiary" aria-hidden="true" />
-          <input value={query} onChange={(event) => setQuery(event.target.value)} placeholder="Search conversations" className="hit-target w-full rounded-md border border-separator bg-bg pl-9 pr-3 text-footnote text-label" />
+          <Search className="pointer-events-none absolute left-3 top-1/2 size-4 -translate-y-1/2 text-label-tertiary" strokeWidth={1.5} aria-hidden="true" />
+          <input value={query} onChange={(event) => setQuery(event.target.value)} placeholder="Search conversations" className="hit-target w-full rounded-md border border-separator bg-bg-tertiary pl-9 pr-3 text-body text-label placeholder:text-label-tertiary" />
         </label>
       )}
 
@@ -255,9 +277,9 @@ export function ChatSessionList() {
           }
         />
       ) : (
-        <List label="Conversations">
+        <ul aria-label="Conversations" className="flex flex-col">
           {creatingFolder && (
-            <li key="new-folder" className="list-row px-1 py-1">
+            <li key="new-folder" className="py-1">
               <RenameField
                 label="Folder name"
                 value={newFolderName}
@@ -268,7 +290,7 @@ export function ChatSessionList() {
             </li>
           )}
           {groups.flatMap((group) => [
-            <li key={`heading-${group.key}`} className="flex items-center justify-between gap-1 px-3 pb-1 pt-3">
+            <li key={`heading-${group.key}`} className="group/row relative flex min-h-11 items-end justify-between gap-1 pb-1 pl-3 pt-3">
               {group.kind === "folder" && editingFolderId === group.folder.id ? (
                 <RenameField
                   label="Folder name"
@@ -279,14 +301,21 @@ export function ChatSessionList() {
                 />
               ) : (
                 <>
-                  <span className="text-caption font-semibold uppercase tracking-wide text-label-tertiary">
+                  <span
+                    className={
+                      group.kind === "folder"
+                        ? "min-w-0 truncate text-footnote font-semibold text-label"
+                        : "font-mono text-caption uppercase tracking-caps text-label-secondary"
+                    }
+                  >
                     {group.label}
                   </span>
                   {group.kind === "folder" && (
-                    <div className="flex shrink-0 items-center gap-0.5">
+                    <div className={ROW_ACTIONS}>
                       <Button
                         rank="plain"
                         aria-label={`Rename ${group.folder.name}`}
+                        className="!px-0"
                         onClick={() => startRenameFolder(group.folder)}
                       >
                         <Pencil className="size-3.5" strokeWidth={1.5} aria-hidden="true" />
@@ -294,6 +323,7 @@ export function ChatSessionList() {
                       <Button
                         rank="plain"
                         aria-label={`Delete ${group.folder.name}`}
+                        className="!px-0"
                         onClick={() => setPendingDelete({ kind: "folder", folder: group.folder })}
                       >
                         <Trash2 className="size-3.5" strokeWidth={1.5} aria-hidden="true" />
@@ -307,9 +337,9 @@ export function ChatSessionList() {
               ? [
                   <li
                     key={`empty-${group.key}`}
-                    className="px-3 pb-2 text-footnote text-label-tertiary"
+                    className="pb-2 pl-3 text-footnote text-label-secondary"
                   >
-                    No conversations here yet.
+                    Empty. Move a conversation here from its row.
                   </li>,
                 ]
               : group.sessions.map((session) => {
@@ -317,7 +347,7 @@ export function ChatSessionList() {
                   const editing = editingId === session.id;
                   const moving = movingId === session.id;
                   return (
-                    <li key={session.id} className="list-row">
+                    <li key={session.id} className="group/row group/truncate relative">
                       <div className="flex w-full items-center">
                         {editing ? (
                           <RenameField
@@ -328,14 +358,14 @@ export function ChatSessionList() {
                             onCancel={cancelRename}
                           />
                         ) : moving ? (
-                          <label className="min-w-0 flex-1 px-4 py-2">
+                          <label className="min-w-0 flex-1 py-1">
                             <span className="sr-only">Move “{session.title}” to a folder</span>
                             <select
                               autoFocus
                               defaultValue={session.folder_id ?? ""}
                               onChange={(event) => void moveSession(session, event.target.value)}
                               onBlur={() => setMovingId(null)}
-                              className="hit-target w-full rounded-md border border-accent bg-bg px-2 text-callout text-label"
+                              className="hit-target w-full rounded-md border border-accent bg-bg-tertiary px-2 text-body text-label"
                             >
                               <option value="">No folder</option>
                               {folders.map((folder) => (
@@ -349,18 +379,34 @@ export function ChatSessionList() {
                           <Link
                             href={href}
                             aria-current={pathname === href ? "page" : undefined}
-                            className="hit-target flex min-w-0 flex-1 items-center px-4 py-2 text-callout text-label transition-colors duration-150 ease-standard hover:bg-fill-tertiary aria-[current=page]:bg-fill-secondary aria-[current=page]:font-semibold"
+                            // Named by its title alone; the exact time is its
+                            // description, not part of what the link is called.
+                            aria-label={session.title}
+                            aria-describedby={`last-used-${session.id}`}
+                            className={[
+                              "hit-target relative flex min-w-0 flex-1 items-center gap-2 rounded-sm pl-3 pr-2",
+                              "text-callout text-label-secondary transition-colors duration-150 ease-standard",
+                              "hover:text-label aria-[current=page]:font-semibold aria-[current=page]:text-label",
+                              "before:absolute before:inset-y-3 before:left-0 before:w-0.5 before:rounded-full",
+                              "before:bg-transparent aria-[current=page]:before:bg-rubric",
+                            ].join(" ")}
                           >
-                            <MarqueeText text={session.title} className="min-w-0 flex-1" />
+                            <Truncate text={session.title} className="flex-1" />
+                            <RelativeTime
+                              value={session.last_message_at ?? session.updated_at}
+                              id={`last-used-${session.id}`}
+                              className="shrink-0 font-mono text-caption font-normal text-label-secondary"
+                            />
                           </Link>
                         )}
 
                         {!editing && !moving && (
-                          <div className="flex shrink-0 items-center gap-0.5 pr-1">
+                          <div className={ROW_ACTIONS}>
                             {folders.length > 0 && (
                               <Button
                                 rank="plain"
                                 aria-label={`Move ${session.title} to a folder`}
+                                className="!px-0"
                                 onClick={() => setMovingId(session.id)}
                               >
                                 <FolderInput className="size-4" strokeWidth={1.5} aria-hidden="true" />
@@ -369,6 +415,7 @@ export function ChatSessionList() {
                             <Button
                               rank="plain"
                               aria-label={`Rename ${session.title}`}
+                              className="!px-0"
                               onClick={() => startRename(session)}
                             >
                               <Pencil className="size-4" strokeWidth={1.5} aria-hidden="true" />
@@ -376,6 +423,7 @@ export function ChatSessionList() {
                             <Button
                               rank="plain"
                               aria-label={`Delete ${session.title}`}
+                              className="!px-0"
                               onClick={() => setPendingDelete({ kind: "session", session })}
                             >
                               <Trash2 className="size-4" strokeWidth={1.5} aria-hidden="true" />
@@ -387,7 +435,7 @@ export function ChatSessionList() {
                   );
                 })),
           ])}
-        </List>
+        </ul>
       )}
 
       {/* DesignSystem §4: a destructive confirmation names the specific thing
@@ -447,22 +495,22 @@ function SearchResults({ results, isPending, pathname }: SearchResultsProps) {
     );
   }
   if (results.length === 0) {
-    return <p className="px-3 py-4 text-footnote text-label-secondary">No conversations match.</p>;
+    return <p className="px-3 py-4 text-footnote text-label-secondary">Nothing matches that. Search looks in titles and in what was said.</p>;
   }
   return (
-    <List label="Search results">
+    <ul aria-label="Search results" className="flex flex-col gap-1">
       {results.map((session) => {
         const href = `/chat/${session.id}`;
         return (
-          <li key={session.id} className="list-row">
+          <li key={session.id} className="group/truncate">
             <Link
               href={href}
               aria-current={pathname === href ? "page" : undefined}
-              className="hit-target flex flex-col items-start gap-0.5 px-4 py-2 text-callout text-label transition-colors duration-150 ease-standard hover:bg-fill-tertiary aria-[current=page]:bg-fill-secondary aria-[current=page]:font-semibold"
+              className="hit-target flex flex-col items-start justify-center gap-0.5 rounded-sm px-3 py-2 text-callout text-label-secondary transition-colors duration-150 ease-standard hover:bg-fill-tertiary hover:text-label aria-[current=page]:font-semibold aria-[current=page]:text-label"
             >
-              <MarqueeText text={session.title} className="w-full" />
+              <Truncate text={session.title} className="w-full" />
               {session.snippet != null && (
-                <span className="line-clamp-2 text-footnote font-normal text-label-secondary">
+                <span className="line-clamp-2 font-serif text-footnote font-normal text-label-secondary">
                   {session.snippet}
                 </span>
               )}
@@ -470,7 +518,7 @@ function SearchResults({ results, isPending, pathname }: SearchResultsProps) {
           </li>
         );
       })}
-    </List>
+    </ul>
   );
 }
 
@@ -569,7 +617,7 @@ function RenameField({ label, value, onChange, onCommit, onCancel }: RenameField
       onChange={(event) => onChange(event.target.value)}
       onKeyDown={onKeyDown}
       onBlur={onBlur}
-      className="hit-target min-w-0 flex-1 rounded-md border border-accent bg-bg px-4 py-2 text-callout text-label"
+      className="hit-target min-w-0 flex-1 rounded-md border border-accent bg-bg-tertiary px-3 py-2 text-body text-label"
     />
   );
 }

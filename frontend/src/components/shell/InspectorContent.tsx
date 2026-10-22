@@ -2,7 +2,7 @@
 
 import { useQuery } from "@tanstack/react-query";
 import { ChevronLeft, ChevronRight, FileSearch, Layers } from "lucide-react";
-import type { ReactNode } from "react";
+import { useEffect, useRef, type ReactNode } from "react";
 
 import { Button } from "@/components/ui/Button";
 import { EmptyState } from "@/components/ui/EmptyState";
@@ -16,28 +16,52 @@ import {
 import { useInspectorSelection, type InspectorMessage } from "@/lib/inspector/SelectionProvider";
 import type { Citation } from "@/lib/knowledge/api";
 
-export function InspectorContent({ headerAction }: { headerAction?: ReactNode } = {}) {
+export type InspectorContentProps = {
+  headerAction?: ReactNode;
+  /**
+   * Move focus to the panel's heading when it mounts — for a panel a person
+   * just asked to open (the rail), so a keyboard user lands inside it rather
+   * than on a control that no longer exists.
+   */
+  focusOnMount?: boolean;
+};
+
+export function InspectorContent({ headerAction, focusOnMount = false }: InspectorContentProps = {}) {
   const { selection, select } = useInspectorSelection();
+  const heading = useRef<HTMLHeadingElement>(null);
+
+  useEffect(() => {
+    if (focusOnMount) heading.current?.focus();
+    // Only on mount: a later re-render must not pull focus back here.
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, []);
 
   return (
     <div className="flex h-full flex-col">
-      <div className="flex h-14 shrink-0 items-center border-b border-separator px-4">
-        <h2 className="text-subheadline font-semibold text-label">Context</h2>
+      <div className="flex h-14 shrink-0 items-center gap-2 border-b border-separator pl-4 pr-2">
+        <h2
+          ref={heading}
+          tabIndex={-1}
+          className="font-mono text-caption uppercase tracking-caps text-label-secondary focus-visible:outline-none"
+        >
+          Context
+        </h2>
         <div className="ml-auto">{headerAction}</div>
       </div>
 
       {selection === null ? (
-        <div className="flex flex-1 items-center justify-center">
+        <div className="flex flex-1 flex-col gap-3 p-5">
           <EmptyState
             icon={Layers}
             title="No message selected"
-            description="Select an answer or citation to review its evidence. SQL answers also expose their query safety and execution details here."
+            description="Choose an answer, or one of its source numerals, to read the evidence behind it: the passages it quoted, what the context compiler admitted and left out, and for data answers, the SQL and its guard."
             headingLevel={3}
+            className="!items-start !px-0 !py-4 !text-left"
           />
         </div>
       ) : (
         <div className="flex min-h-0 flex-1 flex-col">
-          <nav aria-label="Inspector sections" className="flex shrink-0 flex-wrap gap-1 border-b border-separator p-2">
+          <nav aria-label="Inspector sections" className="flex shrink-0 gap-4 border-b border-separator px-4">
             <InspectorTab
               label="Evidence"
               active={selection.kind === "message" || selection.kind === "citation"}
@@ -83,7 +107,11 @@ function InspectorTab({ label, active, onClick }: { label: string; active: boole
       type="button"
       aria-current={active ? "page" : undefined}
       onClick={onClick}
-      className="hit-target flex-1 rounded-md px-2 text-footnote font-semibold text-label-secondary hover:bg-fill-tertiary aria-[current=page]:bg-accent-tint aria-[current=page]:text-accent"
+      className={[
+        "hit-target relative px-0 text-footnote font-medium text-label-secondary transition-colors duration-150 ease-standard",
+        "hover:text-label aria-[current=page]:font-semibold aria-[current=page]:text-label",
+        "after:absolute after:inset-x-0 after:-bottom-px after:h-0.5 after:bg-transparent aria-[current=page]:after:bg-rubric",
+      ].join(" ")}
     >
       {label}
     </button>

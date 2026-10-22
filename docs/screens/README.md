@@ -15,6 +15,7 @@ Each file is `<width>-<scheme>-<screen>.jpg`:
 | `overview` | `/` |
 | `chat` | `/chat/s1`, a two-turn conversation answered from documents |
 | `citation` | the same conversation with source 1 open in the context inspector |
+| `menu` | the account menu open (appearance, sign-out); on a phone, over the navigation sheet |
 | `knowledge` | `/knowledge`, including a superseded revision and a document still processing |
 | `sources` | `/sources` with a source selected, its items, and running, failed and finished jobs |
 | `memory` | `/memory`, scrolled to the claim history with one superseded claim |

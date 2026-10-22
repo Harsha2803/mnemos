@@ -446,9 +446,24 @@ retrofit across forty of them.
   is a real preference — it means *keep following the OS* — and a light/dark switch throws
   the user's answer away the moment they change their OS setting. The explicit choice is
   stored and stamped on `<html>` as `data-theme` before first paint, and it must win in
-  both directions (§2.1). Each option carries a text label as its accessible name; a sun
-  and a moon are not self-evident to everyone, and to a screen reader they are nothing.
-
+  both directions (§2.1). The options are words (System, Light, Dark), each contained in
+  its accessible name. It lives in the **account menu**, not the toolbar: it is set once.
+- **Navigation.** Typographic: words in three groups separated by space, not an icon per
+  row in a grey card. The current item is marked by weight, ink, a short `--rubric` rule
+  at its leading edge and `aria-current`, never by colour alone.
+- **Row actions.** Secondary actions on a list row (move, rename, delete a conversation)
+  appear on hover or when focus enters the row with a fine pointer, and are **always
+  visible on a coarse pointer**, where there is no hover to discover them. They sit on the
+  row's own opaque surface so nothing shows through. Primary actions are never hidden.
+- **Truncation.** A long title, path or ID truncates to one line *and* shows in full on
+  hover and on keyboard focus (`Truncate`), as generated content so a text query and a
+  screen reader still find it once. Where reading is the point (passages, answers), wrap.
+- **Time.** Relative in dense places ("2h", `RelativeTime`), with the exact time as the
+  hover title and as text for assistive technology; when the time sits inside a link, it
+  is the link's description, not part of its name.
+- **The inspector with nothing selected** is a 48px rail on the right edge, one control
+  that opens it to explain itself. A selection opens it fully; leaving the conversation
+  clears the selection, because evidence belongs to the answer it was opened from.
 ---
 
 ## 5. Frontend stack
@@ -487,7 +502,9 @@ exists.
 | `.hit-target`, `.material-chrome`, `.measure`, `.list-group` / `.list-row` | same file, `@layer components` |
 | Theme preference, the pre-paint script, the store | `frontend/src/lib/theme.ts` |
 | `Button`, `List`, `EmptyState`, `Skeleton`, `Table` | `frontend/src/components/ui/` |
-| `ThemeToggle` | `frontend/src/components/theme/` |
+| `ThemeToggle` (rendered inside `AccountMenu`) | `frontend/src/components/theme/` |
+| `AccountMenu`, `SidebarContent`, the inspector rail, `ToolbarTitle` | `frontend/src/components/shell/` |
+| `Truncate`, `RelativeTime` (and `lib/time.ts` for the wording) | `frontend/src/components/ui/` |
 | The three-column shell and the breakpoint sheets | `frontend/src/components/shell/AppShell.tsx` |
 | Generated API types (never hand-edited; `npm run generate:api`) | `frontend/src/lib/api/schema.ts` |
 
@@ -518,8 +535,8 @@ make touch controls accessible, and progressively add detail where space permits
 
 - The server starts with one content column. Navigation becomes inline at 768px; the
   inspector becomes inline at 1280px. Panel width caps protect the content between them.
-  Phone navigation contains appearance settings; the toolbar keeps navigation, location
-  and inspection. Both sheets have explicit close buttons, Escape, focus containment and
+  Appearance lives in the account menu at every width; the toolbar keeps navigation,
+  location (section, and the conversation's title) and inspection. Both sheets have explicit close buttons, Escape, focus containment and
   focus restoration. Selecting evidence opens its inspector; resizing alone does not.
 - `@container/content` on the content pane drives page grids (`@xl/content`, 36rem), so
   open sidebars cannot trick a form into using a desktop grid in a narrow pane. Base grids

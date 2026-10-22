@@ -65,6 +65,17 @@ test("chat with a citation open", async ({ page }, info) => {
   await shoot(page, "citation", info.project.name);
 });
 
+test("navigation and account menu", async ({ page }, info) => {
+  await page.goto("/chat/s1");
+  if (isPhone(page)) {
+    await page.getByRole("button", { name: "Show navigation", exact: true }).click();
+    await expect(page.getByRole("dialog", { name: "Workspace" })).toBeVisible();
+  }
+  await page.getByRole("button", { name: /analyst@mnemos\.local/ }).click();
+  await expect(page.getByRole("radiogroup", { name: "Appearance" })).toBeVisible();
+  await shoot(page, "menu", info.project.name);
+});
+
 test("knowledge", async ({ page }, info) => {
   await page.goto("/knowledge");
   await expect(page.getByRole("table", { name: "Knowledge documents" })).toBeVisible();

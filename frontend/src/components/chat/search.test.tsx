@@ -89,6 +89,6 @@ describe("searching conversations", () => {
 
     await userEvent.type(screen.getByPlaceholderText("Search conversations"), "nonexistent");
 
-    expect(await screen.findByText("No conversations match.")).toBeInTheDocument();
+    expect(await screen.findByText("Nothing matches that. Search looks in titles and in what was said.")).toBeInTheDocument();
   });
 });

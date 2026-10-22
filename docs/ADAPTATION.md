@@ -6,7 +6,7 @@
 
 **Last updated:** 2026-10-22 — an owner-authorized **UI revamp** is in progress (§8, first
 entry): Mnemos's own visual identity in six slices, one PR each, frontend only. Slice 0, a
-committed screenshot harness, merged (PR #36); slice 1, foundations, is landing. Nothing in the milestone ledger (§7) moves: `D1`
+committed screenshot harness, merged (PR #36); slice 1, foundations, merged (PR #37); slice 2, the shell, is landing. Nothing in the milestone ledger (§7) moves: `D1`
 and `C3` are done, `B4`, `C1`, `C2` stay deliberately deferred. Earlier: `C3` — conversation
 product depth — closed 2026-08-23 with folders, bookmarks, feedback, history search and the
 audit log (PR #26); detail in `TRACKER.md`'s 2026-08-22 and 2026-08-23 dated notes.
@@ -353,7 +353,13 @@ the list.
   hydration test that fails on the old code); DesignSystem §5 listed Framer Motion, never
   installed (corrected to CSS-only motion). Evidence: lint, typecheck, 133/133 unit,
   build, 12/12 responsive, 28/28 screens; the console error count in a real dev browser
-  went from 2 to 0.
+  went from 2 to 0. PR #37.
+- **Slice 2 — shell.** A typographic sidebar (serif wordmark, grouped sections with a rubric
+  marker, no icons), conversation rows with relative time, full titles on hover/focus and
+  actions revealed on hover/focus (always on touch), an account menu that now holds
+  appearance and sign-out, a breadcrumb toolbar title, and an inspector that is a 48px rail
+  until something is selected. Selection clears when the route changes. Evidence: 136/136
+  unit twice, 12/12 responsive, 32/32 screens.
 
 ### Mobile-first polish — verified locally (2026-09-10)
 

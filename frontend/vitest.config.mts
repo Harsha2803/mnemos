@@ -18,5 +18,9 @@ export default defineConfig({
     // document what a component actually resolves to rather than trusting the
     // class list it was given.
     css: true,
+    // Generous, because these are whole-tree renders with real providers and
+    // axe passes. At Vitest's 5s default a loaded machine failed a different
+    // test on each run, with every assertion correct. A real hang still fails.
+    testTimeout: 15_000,
   },
 });

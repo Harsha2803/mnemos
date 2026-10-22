@@ -223,9 +223,12 @@ describe("the signed-in shell", () => {
     );
     await screen.findByText("admin@mnemos.local");
 
-    // Named for the tenant being left, not a bare "Sign out": somebody signed
-    // in to two workspaces in two tabs should not have to guess which one this
-    // is (DesignSystem §4, destructive actions name their object).
+    // Sign-out is in the account menu, whose trigger is the visible email and
+    // workspace. It is still named for the tenant being left, not a bare "Sign
+    // out": somebody signed in to two workspaces in two tabs should not have
+    // to guess which one this is (DesignSystem §4).
+    await userEvent.click(screen.getByRole("button", { name: /admin@mnemos\.local/ }));
+    expect(screen.getByRole("radiogroup", { name: "Appearance" })).toBeInTheDocument();
     await userEvent.click(screen.getByRole("button", { name: "Sign out of mnemos" }));
 
     await waitFor(() => expect(router.countOf(REVOKE_PATH)).toBe(1));
