@@ -7,6 +7,7 @@ import { EventFeed, type FeedJob, type FeedJobStatus } from "@/components/connec
 import { ItemBrowser } from "@/components/connectors/ItemBrowser";
 import { RegisterSourceForm } from "@/components/connectors/RegisterSourceForm";
 import { SourceList } from "@/components/connectors/SourceList";
+import { PageHeader, SectionHeading } from "@/components/ui/PageHeader";
 import { Skeleton } from "@/components/ui/Skeleton";
 import {
   CONNECTOR_JOBS_QUERY_KEY,
@@ -127,24 +128,22 @@ export default function SourcesPage() {
 
   return (
     <div className="flex flex-col gap-8">
-      <header className="flex flex-col gap-2">
-        <h1 className="text-large-title font-semibold tracking-title text-label">Sources</h1>
-        <p className="text-callout leading-relaxed text-label-secondary">
-          Connect a bucket, a filesystem directory or a curated list of URLs, browse what it
-          contains, and ingest items into the knowledge library. Progress arrives live below.
-        </p>
-      </header>
+      <PageHeader
+        title="Sources"
+        description="Where documents come from: a bucket, a directory or a list of URLs. Browse what a source holds, ingest what you need, and watch each job's progress arrive live."
+      />
 
       <details
         open={registrationOpen}
         onToggle={(event) => setRegistrationOpen(event.currentTarget.open)}
-        className="rounded-lg border border-separator p-3"
+        className="group border-b border-separator pb-2"
       >
-        <summary className="hit-target flex cursor-pointer items-center font-semibold text-accent">
+        <summary className="hit-target flex cursor-pointer list-none items-center gap-2 font-semibold text-accent [&::-webkit-details-marker]:hidden">
+          <span aria-hidden="true" className="inline-block transition-transform duration-150 group-open:rotate-90">›</span>
           Connect a source
         </summary>
-        <section className="mt-3 flex flex-col gap-3" aria-labelledby="register-heading">
-          <h2 id="register-heading" className="text-title-3 font-semibold tracking-title">
+        <section className="mt-3 flex flex-col gap-3 pb-4" aria-labelledby="register-heading">
+          <h2 id="register-heading" className="sr-only">
             Connect a source
           </h2>
           <RegisterSourceForm
@@ -155,9 +154,7 @@ export default function SourcesPage() {
 
       <div className="grid grid-cols-1 gap-8 @xl/content:grid-cols-[minmax(0,1fr)_minmax(0,1.4fr)]">
         <section className="flex flex-col gap-3" aria-labelledby="sources-heading">
-          <h2 id="sources-heading" className="text-title-3 font-semibold tracking-title">
-            Registered sources
-          </h2>
+          <SectionHeading id="sources-heading">Registered sources</SectionHeading>
           {sources.isPending ? (
             <div className="flex flex-col gap-2" aria-hidden="true">
               <Skeleton className="h-12 w-full" />
@@ -174,12 +171,12 @@ export default function SourcesPage() {
         </section>
 
         <section className="flex flex-col gap-3" aria-labelledby="items-heading">
-          <h2 id="items-heading" className="text-title-3 font-semibold tracking-title">
+          <SectionHeading id="items-heading">
             {selectedSource ? `Items at ${selectedSource.name}` : "Browse a source"}
-          </h2>
+          </SectionHeading>
           {selectedSlug === null ? (
-            <p className="text-callout text-label-secondary">
-              Select a registered source to browse what it contains.
+            <p className="border-y border-separator py-4 text-callout text-label-secondary">
+              Choose a source on the left to see what it holds.
             </p>
           ) : items.isPending ? (
             <div className="flex flex-col gap-2" aria-hidden="true">
@@ -199,9 +196,7 @@ export default function SourcesPage() {
       </div>
 
       <section className="flex flex-col gap-3" aria-labelledby="activity-heading">
-        <h2 id="activity-heading" className="text-title-3 font-semibold tracking-title">
-          Ingestion activity
-        </h2>
+        <SectionHeading id="activity-heading">Ingestion activity</SectionHeading>
         {recentJobs.isPending && feedJobs.length === 0 ? (
           <div className="flex flex-col gap-2" aria-hidden="true">
             <Skeleton className="h-16 w-full" />

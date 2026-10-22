@@ -5,6 +5,7 @@ import { useState } from "react";
 
 import { Button } from "@/components/ui/Button";
 import { EmptyState } from "@/components/ui/EmptyState";
+import { absoluteTime, relativeLong } from "@/lib/time";
 
 export type FeedJobStatus = "queued" | "running" | "succeeded" | "failed" | "stuck";
 export type FeedJobEvent = { id: string; fromStatus: string | null; toStatus: string; ownerId: string | null; detail: string | null; occurredAt: string };
@@ -45,7 +46,7 @@ export function EventFeed({ jobs }: EventFeedProps) {
   const [copied, setCopied] = useState<string | null>(null);
 
   if (jobs.length === 0) {
-    return <EmptyState icon={Clock} title="Nothing queued yet" description="Ingest an item above and its progress appears here live." headingLevel={3} />;
+    return <EmptyState icon={Clock} title="Nothing queued yet" description="Ingest an item above and its progress appears here as it happens: queued, running, finished or failed." headingLevel={3} />;
   }
 
   const visible = jobs.filter((job) => {
@@ -71,32 +72,32 @@ export function EventFeed({ jobs }: EventFeedProps) {
 
   return (
     <div className="flex flex-col gap-3">
-      <div className="flex flex-wrap gap-1" role="group" aria-label="Filter ingestion activity">
+      <div className="-ml-2 flex flex-wrap gap-1" role="group" aria-label="Filter ingestion activity">
         {(["all", "active", "failed", "succeeded"] as const).map((value) => (
-          <button key={value} type="button" aria-pressed={filter === value} onClick={() => setFilter(value)} className="hit-target rounded-full px-3 text-footnote font-semibold capitalize text-label-secondary hover:bg-fill-tertiary aria-pressed:bg-accent-tint aria-pressed:text-accent">
+          <button key={value} type="button" aria-pressed={filter === value} onClick={() => setFilter(value)} className="hit-target relative px-2 text-footnote font-medium capitalize text-label-secondary transition-colors duration-150 ease-standard hover:text-label aria-pressed:font-semibold aria-pressed:text-label after:absolute after:inset-x-2 after:bottom-2 after:h-0.5 after:bg-transparent aria-pressed:after:bg-rubric">
             {value}
           </button>
         ))}
       </div>
 
       {visible.length === 0 ? (
-        <p className="rounded-md border border-separator p-4 text-footnote text-label-secondary">No jobs match this filter.</p>
+        <p className="border-y border-separator py-4 text-footnote text-label-secondary">No jobs match this filter. Choose All to see every job.</p>
       ) : (
-        <ul aria-label="Ingestion activity" className="flex flex-col gap-2">
+        <ul aria-label="Ingestion activity" className="flex flex-col border-t border-separator">
           {visible.map((job) => {
             const { icon: Icon, label, tone } = STATUS[job.status];
             const progress = job.totalUnits !== null && job.totalUnits > 0 && job.doneUnits !== null ? Math.min(100, Math.round((job.doneUnits / job.totalUnits) * 100)) : null;
             const attempts = job.attempts !== null && job.maxAttempts !== null ? `Attempt ${job.attempts}/${job.maxAttempts}` : null;
             const open = expanded.has(job.jobId);
             return (
-              <li key={job.jobId} className="rounded-md border border-separator bg-bg-secondary">
-                <div className="flex items-start gap-3 px-4 py-3">
+              <li key={job.jobId} className="border-b border-separator">
+                <div className="flex items-start gap-3 py-3">
                   <Icon className={`mt-0.5 size-[18px] shrink-0 ${tone} ${job.status === "running" ? "animate-spin" : ""}`} strokeWidth={1.5} aria-hidden="true" />
                   <div className="flex min-w-0 flex-1 flex-col">
                     <span className="truncate text-callout text-label">{job.itemName}</span>
-                    <span className="text-footnote text-label-secondary">{[attempts, progress !== null ? `${progress}%` : null, relativeTime(job.updatedAt)].filter(Boolean).join(" · ")}</span>
+                    <span className="text-footnote text-label-secondary" title={absoluteTime(job.updatedAt)}>{[attempts, progress !== null ? `${progress}%` : null, relativeLong(job.updatedAt)].filter(Boolean).join(" · ")}</span>
                     {progress !== null && (
-                      <span role="progressbar" aria-valuemin={0} aria-valuemax={100} aria-valuenow={progress} aria-label={`${job.itemName} progress`} className="mt-2 h-1.5 w-full overflow-hidden rounded-full bg-fill">
+                      <span role="progressbar" aria-valuemin={0} aria-valuemax={100} aria-valuenow={progress} aria-label={`${job.itemName} progress`} className="mt-2 h-1 w-full overflow-hidden rounded-full bg-fill">
                         <span className="block h-full rounded-full bg-accent" style={{ width: `${progress}%` }} />
                       </span>
                     )}
@@ -104,7 +105,7 @@ export function EventFeed({ jobs }: EventFeedProps) {
                       <span className="mt-1 text-footnote text-label-secondary">Error: {job.errorCode}{job.errorDetail ? ` — ${job.errorDetail}` : ""}</span>
                     )}
                   </div>
-                  <span className={`shrink-0 text-footnote font-semibold ${tone}`}>{label}</span>
+                  <span className={`status-label shrink-0 pt-0.5 ${tone}`}>{label}</span>
                   <Button rank="plain" aria-label={`${open ? "Collapse" : "Expand"} ${job.itemName} history`} aria-expanded={open} className="!px-2" onClick={() => toggle(job.jobId)}>
                     <ChevronDown className={`size-4 transition-transform ${open ? "rotate-180" : ""}`} aria-hidden="true" />
                   </Button>
@@ -121,9 +122,9 @@ export function EventFeed({ jobs }: EventFeedProps) {
 
 function JobDetails({ job, copied, onCopy }: { job: FeedJob; copied: boolean; onCopy: () => void }) {
   return (
-    <div className="border-t border-separator px-4 py-4">
+    <div className="border-t border-separator py-4 pl-8">
       <div className="mb-4 flex items-center justify-between gap-2">
-        <code className="min-w-0 truncate text-caption text-label-secondary">{job.jobId}</code>
+        <code className="min-w-0 truncate font-mono text-caption text-label-secondary" title={job.jobId}>{job.jobId}</code>
         <Button rank="plain" aria-label="Copy job ID" className="!px-2 text-footnote" onClick={onCopy}>
           {copied ? <Check className="size-4" aria-hidden="true" /> : <Copy className="size-4" aria-hidden="true" />}{copied ? "Copied" : "Copy ID"}
         </Button>
@@ -138,7 +139,7 @@ function JobDetails({ job, copied, onCopy }: { job: FeedJob; copied: boolean; on
       <ol className="relative ml-2 border-l border-separator pl-5" aria-label="Job status history">
         {(job.events.length > 0 ? job.events : [{ id: `current-${job.jobId}`, fromStatus: null, toStatus: job.status, ownerId: job.ownerId, detail: job.errorDetail, occurredAt: job.updatedAt }]).map((event) => (
           <li key={event.id} className="relative pb-4 last:pb-0">
-            <span className="absolute -left-[1.55rem] top-1 size-2 rounded-full bg-accent" aria-hidden="true" />
+            <span className="absolute -left-[1.55rem] top-1.5 size-2 rounded-full bg-label-tertiary" aria-hidden="true" />
             <span className="block text-footnote font-semibold text-label">{statusLabel(event.toStatus)}</span>
             <time className="text-caption text-label-secondary" dateTime={event.occurredAt}>{formatTimestamp(event.occurredAt)}</time>
             {event.detail && <p className="mt-1 text-footnote text-label-secondary">{event.detail}</p>}
@@ -149,7 +150,6 @@ function JobDetails({ job, copied, onCopy }: { job: FeedJob; copied: boolean; on
   );
 }
 
-function Detail({ label, value }: { label: string; value: string }) { return <div><dt className="text-caption text-label-secondary">{label}</dt><dd className="mt-0.5 truncate text-label">{value}</dd></div>; }
+function Detail({ label, value }: { label: string; value: string }) { return <div><dt className="font-mono text-caption uppercase tracking-caps text-label-secondary">{label}</dt><dd className="mt-0.5 truncate font-mono text-footnote text-label" title={value}>{value}</dd></div>; }
 function statusLabel(value: string): string { return value.charAt(0).toUpperCase() + value.slice(1); }
 function formatTimestamp(value: string | null): string { return value ? new Intl.DateTimeFormat(undefined, { dateStyle: "medium", timeStyle: "short" }).format(new Date(value)) : "—"; }
-function relativeTime(value: string): string { const seconds = Math.max(0, Math.round((Date.now() - new Date(value).getTime()) / 1000)); if (seconds < 60) return "just now"; if (seconds < 3600) return `${Math.floor(seconds / 60)}m ago`; if (seconds < 86400) return `${Math.floor(seconds / 3600)}h ago`; return `${Math.floor(seconds / 86400)}d ago`; }

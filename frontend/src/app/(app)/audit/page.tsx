@@ -5,7 +5,9 @@ import { ScrollText, ShieldAlert } from "lucide-react";
 import { useState } from "react";
 
 import { EmptyState } from "@/components/ui/EmptyState";
+import { PageHeader } from "@/components/ui/PageHeader";
 import { Skeleton } from "@/components/ui/Skeleton";
+import { RelativeTime } from "@/components/ui/RelativeTime";
 import { Table, type TableColumn } from "@/components/ui/Table";
 import {
   AUDIT_EVENTS_QUERY_KEY,
@@ -14,8 +16,8 @@ import {
   type AuditEvent,
 } from "@/lib/audit/api";
 
-const SELECT = "hit-target rounded-md border border-separator bg-bg px-3 text-callout text-label";
-const INPUT = "hit-target w-full rounded-md border border-separator bg-bg px-3 text-callout text-label";
+const SELECT = "field hit-target";
+const INPUT = "field hit-target";
 
 /**
  * Who did what: every security-relevant event this build records (sign-in/
@@ -62,10 +64,10 @@ export default function AuditPage() {
       <Header />
 
       <form
-        className="flex flex-wrap items-end gap-3"
+        className="grid grid-cols-1 gap-3 @xl/content:grid-cols-3"
         onSubmit={(submitEvent) => submitEvent.preventDefault()}
       >
-        <label className="flex flex-col gap-1 text-footnote text-label-secondary">
+        <label className="field-label">
           Action
           <input
             value={action}
@@ -74,7 +76,7 @@ export default function AuditPage() {
             className={INPUT}
           />
         </label>
-        <label className="flex flex-col gap-1 text-footnote text-label-secondary">
+        <label className="field-label">
           Resource kind
           <input
             value={resourceKind}
@@ -83,7 +85,7 @@ export default function AuditPage() {
             className={INPUT}
           />
         </label>
-        <label className="flex flex-col gap-1 text-footnote text-label-secondary">
+        <label className="field-label">
           Outcome
           <select
             value={outcome}
@@ -104,20 +106,20 @@ export default function AuditPage() {
           Audit events
         </h2>
         {isPending ? (
-          <div className="flex flex-col gap-2" aria-hidden="true">
+          <div className="flex flex-col gap-2" role="status" aria-label="Loading audit events">
             <Skeleton className="h-10 w-full" />
             <Skeleton className="h-10 w-full" />
             <Skeleton className="h-10 w-full" />
           </div>
         ) : error ? (
-          <p role="alert" className="text-callout text-danger">
-            {error instanceof Error ? error.message : "could not load the audit log"}
+          <p role="alert" className="border-l-2 border-danger pl-3 text-callout text-danger">
+            The audit log could not be loaded ({error instanceof Error ? error.message : "unknown error"}). Your filters are kept; reload to try again.
           </p>
         ) : events.length === 0 ? (
           <EmptyState
             icon={ScrollText}
             title="No matching events"
-            description="Nothing recorded yet for this filter."
+            description="Nothing recorded matches these filters. Clear one to widen the search."
             headingLevel={3}
           />
         ) : (
@@ -130,14 +132,10 @@ export default function AuditPage() {
 
 function Header() {
   return (
-    <header className="flex flex-col gap-2">
-      <h1 className="text-large-title font-semibold tracking-title text-label">Audit log</h1>
-      <p className="text-callout leading-relaxed text-label-secondary">
-        Every security-relevant event this build records — sign-in and sign-out, a tool grant
-        or invocation, a memory supersession or retraction, a document delete, and an NL2SQL
-        write refusal — who did it, when, and the outcome.
-      </p>
-    </header>
+    <PageHeader
+      title="Audit log"
+      description="Who did what, and whether it was allowed: sign-ins, tool grants and calls, memory revisions, document deletions, and refused SQL writes."
+    />
   );
 }
 
@@ -147,9 +145,7 @@ function AuditEventTable({ events }: { events: AuditEvent[] }) {
       key: "occurred_at",
       header: "When",
       render: (event) => (
-        <time dateTime={event.occurred_at} className="whitespace-nowrap text-footnote">
-          {new Date(event.occurred_at).toLocaleString()}
-        </time>
+        <RelativeTime value={event.occurred_at} form="long" className="whitespace-nowrap text-footnote" />
       ),
     },
     {
@@ -161,12 +157,12 @@ function AuditEventTable({ events }: { events: AuditEvent[] }) {
         </span>
       ),
     },
-    { key: "action", header: "Action", render: (event) => event.action },
+    { key: "action", header: "Action", render: (event) => <span className="font-mono text-footnote">{event.action}</span> },
     {
       key: "resource",
       header: "Resource",
       render: (event) => (
-        <span className="text-footnote text-label-secondary">
+        <span className="font-mono text-footnote text-label-secondary">
           {event.resource_kind}
           {event.resource_id !== null ? `:${event.resource_id.slice(0, 8)}` : ""}
         </span>
@@ -176,13 +172,7 @@ function AuditEventTable({ events }: { events: AuditEvent[] }) {
       key: "outcome",
       header: "Outcome",
       render: (event) => (
-        <span
-          className={
-            event.outcome === "allow"
-              ? "font-semibold text-success"
-              : "font-semibold text-danger"
-          }
-        >
+        <span className={`status-label ${event.outcome === "allow" ? "text-success" : "text-danger"}`}>
           {event.outcome}
         </span>
       ),

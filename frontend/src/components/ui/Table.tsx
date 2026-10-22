@@ -30,18 +30,18 @@ export type TableProps<T> = {
 export function Table<T>({ caption, columns, rows, rowKey, className = "" }: TableProps<T>) {
   return (
     <div
-      className={`table-region min-w-0 max-w-full overflow-auto rounded-lg border border-separator ${className}`.trim()}
+      className={`table-region min-w-0 max-w-full overflow-auto border-y border-separator ${className}`.trim()}
     >
       <table role="table" className="responsive-table w-full text-left text-callout">
         <caption className="sr-only">{caption}</caption>
         <thead role="rowgroup">
-          <tr role="row" className="border-b border-separator bg-bg-secondary">
+          <tr role="row" className="border-b border-separator">
             {columns.map((column) => (
               <th
                 key={column.key}
                 scope="col"
                 role="columnheader"
-                className="whitespace-nowrap px-4 py-2 text-footnote font-semibold text-label-secondary"
+                className="whitespace-nowrap px-3 py-2 font-mono text-caption font-normal uppercase tracking-caps text-label-secondary"
               >
                 {column.header}
               </th>
@@ -59,10 +59,10 @@ export function Table<T>({ caption, columns, rows, rowKey, className = "" }: Tab
                 <td
                   key={column.key}
                   role="cell"
-                  className={`px-4 py-2 align-top ${column.className ?? ""}`.trim()}
+                  className={`px-3 py-2.5 align-top ${column.className ?? ""}`.trim()}
                 >
                   <span
-                    className="table-field-label text-footnote font-semibold text-label-secondary"
+                    className="table-field-label font-mono text-caption uppercase tracking-caps text-label-secondary"
                     aria-hidden="true"
                   >
                     {column.header}

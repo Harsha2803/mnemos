@@ -35,7 +35,7 @@ export function EmptyState({
   return (
     <div
       className={[
-        "flex flex-col items-center justify-center gap-3 px-6 py-10 text-center",
+        "flex flex-col items-center justify-center gap-2 px-6 py-10 text-center",
         "animate-fade-in-up",
         className,
       ]
@@ -43,15 +43,15 @@ export function EmptyState({
         .join(" ")}
     >
       <Icon
-        className="size-7 text-label-tertiary"
-        strokeWidth={1.5}
+        className="mb-1 size-6 text-label-tertiary"
+        strokeWidth={1.25}
         aria-hidden="true"
       />
-      <Heading className="text-headline font-semibold text-label">{title}</Heading>
+      <Heading className="font-serif text-title-3 font-semibold leading-tight text-label">{title}</Heading>
       {description !== undefined && (
-        <p className="measure text-subheadline text-label-secondary">{description}</p>
+        <p className="measure-reading text-callout leading-relaxed text-label-secondary">{description}</p>
       )}
-      {action}
+      {action !== undefined && <div className="mt-2">{action}</div>}
     </div>
   );
 }

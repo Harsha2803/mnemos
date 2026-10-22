@@ -571,10 +571,10 @@
      rather than a border because it has to start at the *text* origin, not at
      the container edge — a full-bleed rule cuts the group in half instead of
      dividing it. `--list-inset` is what the row's leading slot shifts. */
+  /* Rules above and below, not a rounded grey card: the group is drawn by
+     its hairlines and its rows' rhythm (DesignSystem §4). */
   .list-group {
-    background-color: var(--bg-secondary);
-    border-radius: var(--radius-lg);
-    overflow: hidden;
+    border-block: 1px solid var(--separator);
   }
 
   .list-row {
@@ -640,6 +640,59 @@
      tokens) and an `EmptyState` replacing a loading skeleton. */
   .animate-fade-in-up {
     animation: fade-in-up var(--duration-normal) var(--ease-out);
+  }
+
+  /* A text field, select or textarea: the raised sheet (--bg-tertiary) with a
+     hairline, the accent on focus. One class rather than the same eight
+     utilities repeated in every form. */
+  .field {
+    width: 100%;
+    min-width: 0;
+    min-height: var(--hit-target);
+    padding: 0 var(--space-3);
+    border: 1px solid var(--separator);
+    border-radius: var(--radius-md);
+    background-color: var(--bg-tertiary);
+    color: var(--label);
+    font-size: var(--text-body);
+    transition: border-color var(--duration-fast) var(--ease-standard);
+  }
+
+  .field::placeholder {
+    color: var(--label-tertiary);
+  }
+
+  .field:hover {
+    border-color: var(--label-tertiary);
+  }
+
+  .field:focus-visible {
+    border-color: var(--accent);
+    outline-offset: 1px;
+  }
+
+  textarea.field {
+    padding-block: var(--space-2);
+  }
+
+  /* A field's label: the interface face, small and secondary. */
+  .field-label {
+    display: flex;
+    flex-direction: column;
+    gap: var(--space-1);
+    font-size: var(--text-footnote);
+    font-weight: 600;
+    color: var(--label-secondary);
+  }
+
+  /* A status said in a word: mono caps, coloured by meaning. The word is the
+     signal; the colour only repeats it (DesignSystem §3). */
+  .status-label {
+    font-family: var(--font-mono);
+    font-size: var(--text-caption);
+    letter-spacing: var(--tracking-caps);
+    text-transform: uppercase;
+    white-space: nowrap;
   }
 
   /* An inline control too small to be a 44px box (a superscript numeral, a

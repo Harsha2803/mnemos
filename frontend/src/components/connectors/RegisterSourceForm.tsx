@@ -21,8 +21,7 @@ const KIND_LABEL: Record<Kind, string> = {
 
 const KIND_ICON: Record<Kind, LucideIcon> = { s3: Database, minio: Database, local_fs: FolderOpen, http: Globe };
 
-const inputClasses =
-  "hit-target min-w-0 w-full rounded-md border border-separator bg-bg px-4 text-body text-label placeholder:text-label-tertiary focus-visible:border-accent";
+const inputClasses = "field hit-target";
 
 /**
  * One form, three shapes: which fields it shows depends on `kind`, matching
@@ -78,12 +77,12 @@ export function RegisterSourceForm({ onRegistered }: RegisterSourceFormProps) {
   return (
     <form
       onSubmit={(event) => void onSubmit(event)}
-      className="flex flex-col gap-4 rounded-lg border border-separator bg-bg-secondary p-4 @xl/content:p-6"
+      className="flex flex-col gap-4"
       noValidate
     >
       <div className="grid grid-cols-1 gap-4 @xl/content:grid-cols-2">
         <div className="flex flex-col gap-2">
-          <label htmlFor="source-name" className="text-subheadline font-semibold text-label">
+          <label htmlFor="source-name" className="text-footnote font-semibold text-label-secondary">
             Name
           </label>
           <input
@@ -96,7 +95,7 @@ export function RegisterSourceForm({ onRegistered }: RegisterSourceFormProps) {
           />
         </div>
         <div className="flex flex-col gap-2">
-          <label htmlFor="source-slug" className="text-subheadline font-semibold text-label">
+          <label htmlFor="source-slug" className="text-footnote font-semibold text-label-secondary">
             Slug
           </label>
           <input
@@ -117,13 +116,13 @@ export function RegisterSourceForm({ onRegistered }: RegisterSourceFormProps) {
       </div>
 
       <div className="flex flex-col gap-2">
-        <span className="text-subheadline font-semibold text-label">Provider</span>
+        <span className="text-footnote font-semibold text-label-secondary">Provider</span>
         <div className="grid grid-cols-2 gap-2 @xl/content:grid-cols-4" role="radiogroup" aria-label="Source provider">
           {(Object.keys(KIND_LABEL) as Kind[]).map((value) => {
             const Icon = KIND_ICON[value];
             return (
-              <button key={value} type="button" role="radio" aria-checked={kind === value} onClick={() => setKind(value)} className="hit-target flex flex-col items-start rounded-md border border-separator p-3 text-left text-footnote text-label-secondary hover:bg-fill-tertiary aria-checked:border-accent aria-checked:bg-accent-tint aria-checked:text-accent">
-                <Icon className="mb-2 size-5" strokeWidth={1.5} aria-hidden="true" />
+              <button key={value} type="button" role="radio" aria-checked={kind === value} onClick={() => setKind(value)} className="hit-target flex items-center gap-2 rounded-md border border-separator px-3 py-2 text-left text-footnote text-label-secondary transition-colors duration-150 ease-standard hover:border-label-tertiary hover:text-label aria-checked:border-accent aria-checked:bg-accent-tint aria-checked:text-accent">
+                <Icon className="size-4 shrink-0" strokeWidth={1.5} aria-hidden="true" />
                 <span className="font-semibold">{KIND_LABEL[value]}</span>
               </button>
             );
@@ -134,7 +133,7 @@ export function RegisterSourceForm({ onRegistered }: RegisterSourceFormProps) {
       {(kind === "s3" || kind === "minio") && (
         <div className="grid grid-cols-1 gap-4 @xl/content:grid-cols-2">
           <div className="flex flex-col gap-2">
-            <label htmlFor="source-bucket" className="text-subheadline font-semibold text-label">
+            <label htmlFor="source-bucket" className="text-footnote font-semibold text-label-secondary">
               Bucket
             </label>
             <input
@@ -147,7 +146,7 @@ export function RegisterSourceForm({ onRegistered }: RegisterSourceFormProps) {
             />
           </div>
           <div className="flex flex-col gap-2">
-            <label htmlFor="source-prefix" className="text-subheadline font-semibold text-label">
+            <label htmlFor="source-prefix" className="text-footnote font-semibold text-label-secondary">
               Prefix (optional)
             </label>
             <input
@@ -163,7 +162,7 @@ export function RegisterSourceForm({ onRegistered }: RegisterSourceFormProps) {
 
       {kind === "local_fs" && (
         <div className="flex flex-col gap-2">
-          <label htmlFor="source-root" className="text-subheadline font-semibold text-label">
+          <label htmlFor="source-root" className="text-footnote font-semibold text-label-secondary">
             Root directory
           </label>
           <input
@@ -183,7 +182,7 @@ export function RegisterSourceForm({ onRegistered }: RegisterSourceFormProps) {
 
       {kind === "http" && (
         <div className="flex flex-col gap-2">
-          <label htmlFor="source-urls" className="text-subheadline font-semibold text-label">
+          <label htmlFor="source-urls" className="text-footnote font-semibold text-label-secondary">
             URLs, one per line
           </label>
           <textarea

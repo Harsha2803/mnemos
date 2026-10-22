@@ -62,16 +62,16 @@ export function UploadControl({ onUploaded }: UploadControlProps) {
 
   return (
     <div className="flex flex-col gap-3">
-      <div onDragOver={(event) => { event.preventDefault(); setDragging(true); }} onDragLeave={() => setDragging(false)} onDrop={onDrop} className={["flex flex-col items-center justify-center gap-3 rounded-lg border border-dashed p-6 text-center transition-colors", dragging ? "border-accent bg-accent-tint" : "border-separator bg-bg-secondary"].join(" ")}>
-        <Upload className="size-6 text-label-tertiary" strokeWidth={1.5} aria-hidden="true" />
-        <p className="text-callout text-label-secondary">Drop documents here, or choose them. Plain text, Markdown and PDF, up to {MAX_UPLOAD_MB} MB each.</p>
+      <div onDragOver={(event) => { event.preventDefault(); setDragging(true); }} onDragLeave={() => setDragging(false)} onDrop={onDrop} className={["flex flex-col items-start gap-3 rounded-md border border-dashed p-5 transition-colors duration-150 ease-standard @xl/content:flex-row @xl/content:items-center", dragging ? "border-accent bg-accent-tint" : "border-label-tertiary"].join(" ")}>
+        <Upload className="size-5 shrink-0 text-label-secondary" strokeWidth={1.5} aria-hidden="true" />
+        <p className="flex-1 text-callout text-label-secondary">{dragging ? "Drop to upload." : <>Drop documents here, or choose them. Plain text, Markdown and PDF, up to {MAX_UPLOAD_MB} MB each.</>}</p>
         <Button rank="tinted" onClick={() => inputRef.current?.click()}>Choose files</Button>
         <input ref={inputRef} type="file" multiple aria-label="Upload documents" accept=".txt,.md,.pdf,text/plain,text/markdown,application/pdf" className="sr-only" onChange={(event) => { const files = Array.from(event.target.files ?? []); if (files.length > 0) void uploadAll(files); event.target.value = ""; }} />
       </div>
 
       {queue.length > 0 && (
-        <div className="rounded-lg border border-separator" role={pending > 0 ? "status" : undefined} aria-label={pending === 1 ? "Processing the document" : pending > 1 ? `Processing ${pending} documents` : "Upload summary"}>
-          <div className="flex items-center justify-between border-b border-separator px-4 py-2 text-footnote text-label-secondary">
+        <div className="border-y border-separator" role={pending > 0 ? "status" : undefined} aria-label={pending === 1 ? "Processing the document" : pending > 1 ? `Processing ${pending} documents` : "Upload summary"}>
+          <div className="flex items-center justify-between border-b border-separator py-1 text-footnote text-label-secondary">
             <span>{pending > 0 ? `${pending} processing` : `${done} uploaded`}{failed > 0 ? ` · ${failed} failed` : ""}</span>
             {pending === 0 && <Button rank="plain" className="!px-2 text-footnote" onClick={() => setQueue([])}>Clear</Button>}
           </div>
@@ -87,7 +87,7 @@ export function UploadControl({ onUploaded }: UploadControlProps) {
 function QueueRow({ item, onRetry, onRemove }: { item: QueueItem; onRetry: () => void; onRemove: () => void }) {
   const active = item.state === "validating" || item.state === "uploading";
   return (
-    <li className="flex items-center gap-3 px-4 py-3">
+    <li className="flex items-center gap-3 py-2.5">
       {active ? <Loader2 className="size-4 shrink-0 animate-spin text-info" aria-hidden="true" /> : item.state === "done" ? <CheckCircle2 className="size-4 shrink-0 text-success" aria-hidden="true" /> : <AlertCircle className="size-4 shrink-0 text-danger" aria-hidden="true" />}
       <div className="min-w-0 flex-1">
         <span className="block truncate text-footnote font-semibold text-label">{item.file.name}</span>

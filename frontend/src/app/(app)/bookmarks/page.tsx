@@ -6,6 +6,7 @@ import Link from "next/link";
 
 import { Button } from "@/components/ui/Button";
 import { EmptyState } from "@/components/ui/EmptyState";
+import { PageHeader } from "@/components/ui/PageHeader";
 import { Skeleton } from "@/components/ui/Skeleton";
 import {
   CHAT_BOOKMARKS_QUERY_KEY,
@@ -37,19 +38,17 @@ export default function BookmarksPage() {
 
   return (
     <div className="flex flex-col gap-8">
-      <header className="flex flex-col gap-2">
-        <h1 className="text-large-title font-semibold tracking-title text-label">Bookmarks</h1>
-        <p className="text-callout leading-relaxed text-label-secondary">
-          Messages you saved from any conversation, with the note you left on each one.
-        </p>
-      </header>
+      <PageHeader
+        title="Bookmarks"
+        description="Answers you kept, from any conversation, with the note you left on each."
+      />
 
       <section className="flex flex-col gap-3" aria-labelledby="bookmarks-heading">
         <h2 id="bookmarks-heading" className="sr-only">
           Saved messages
         </h2>
         {isPending ? (
-          <div className="flex flex-col gap-2" aria-hidden="true">
+          <div className="flex flex-col gap-2" role="status" aria-label="Loading bookmarks">
             <Skeleton className="h-20 w-full" />
             <Skeleton className="h-20 w-full" />
           </div>
@@ -57,7 +56,7 @@ export default function BookmarksPage() {
           <EmptyState
             icon={BookmarkIcon}
             title="No bookmarks yet"
-            description="Bookmark an answer from any conversation and it will show up here."
+            description="Press Bookmark under any answer to keep it here, with its conversation one click away."
             headingLevel={3}
           />
         ) : (
@@ -74,11 +73,11 @@ export default function BookmarksPage() {
 
 function BookmarkRow({ item, onRemove }: { item: BookmarkedMessage; onRemove: () => void }) {
   return (
-    <div className="list-row flex flex-col gap-2 px-4 py-3">
+    <div className="list-row flex flex-col gap-2 py-4">
       <div className="flex items-start justify-between gap-3">
         <Link
           href={`/chat/${item.session_id}#message-${item.message_id}`}
-          className="min-w-0 text-callout font-semibold text-accent hover:underline"
+          className="hit-target inline-flex min-w-0 items-center text-callout font-semibold text-accent underline-offset-4 hover:underline"
         >
           {item.session_title}
         </Link>
@@ -90,10 +89,11 @@ function BookmarkRow({ item, onRemove }: { item: BookmarkedMessage; onRemove: ()
           <Trash2 className="size-4" strokeWidth={1.5} aria-hidden="true" />
         </Button>
       </div>
-      <p className="line-clamp-3 text-body leading-relaxed text-label">{item.message_content}</p>
+      <p className="measure-reading line-clamp-3 font-serif text-reading leading-relaxed text-label">{item.message_content}</p>
       {item.note !== null && item.note.length > 0 && (
-        <p className="text-footnote text-label-secondary">
-          <span className="font-semibold">Note:</span> {item.note}
+        <p className="border-l-2 border-rubric pl-3 text-footnote text-label-secondary">
+          <span className="font-mono uppercase tracking-caps">Note </span>
+          {item.note}
         </p>
       )}
     </div>
