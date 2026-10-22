@@ -8,13 +8,14 @@
 
 **Last updated:** 2026-10-22 — **UI revamp run in progress** (owner-authorized, not a
 milestone): Mnemos gets its own visual identity in place of the stock AI-chat look, one
-slice per branch and PR (dated note below, §3 and §5). Slice 0, the committed screenshot
-harness (`npm run screens` → `docs/screens/`), is on `test/screens-harness`.
-**Phase:** `C3` done (unchanged). UI revamp: slice 0 of 6. Deployment: live, with the
+slice per branch and PR (dated note below, §3 and §5). Slice 0, the screenshot harness,
+merged (PR #36). Slice 1, foundations (palette, self-hosted type, ADR-0013, two fixes), is on
+`feat/ui-foundations`.
+**Phase:** `C3` done (unchanged). UI revamp: slice 1 of 6. Deployment: live, with the
 follow-ups in §5's second list.
 **Next task:** §5 — the UI revamp slices in order, then the deployment follow-ups. `B4`,
 `C1`, `C2` stay deliberately deferred.
-**Branch right now:** `test/screens-harness`. PRs #28 to #35 are merged.
+**Branch right now:** `feat/ui-foundations`. PRs #28 to #36 are merged.
 
 > ### 2026-10-22 — UI revamp: a distinct identity (owner-authorized run, not a milestone)
 >
@@ -1690,7 +1691,8 @@ Not a milestone; no backend capability changes. Evidence per slice:
 
 | Slice | What landed | Evidence |
 |---|---|---|
-| 0 · screenshot harness | `frontend/screens/` (spec + deterministic fixtures: a cited two-turn answer, a superseded revision and memory claim, running/failed/finished jobs, a persisted bundle), `playwright.screens.config.ts`, `npm run screens` → 28 JPEGs in `docs/screens/` (7 screens × 390/1440 × light/dark), pinned clock, locale, timezone and reduced motion | `npm run screens` 28/28 on the pre-revamp UI; those files are the "before" every later PR diffs against |
+| 0 · screenshot harness | `frontend/screens/` (spec + deterministic fixtures: a cited two-turn answer, a superseded revision and memory claim, running/failed/finished jobs, a persisted bundle), `playwright.screens.config.ts`, `npm run screens` → 28 JPEGs in `docs/screens/` (7 screens × 390/1440 × light/dark), pinned clock, locale, timezone and reduced motion | `npm run screens` 28/28 on the pre-revamp UI; those files are the "before" every later PR diffs against. PR #36, merged as `dc98540` |
+| 1 · foundations | Warm paper / warm charcoal neutrals, verdigris accent (action), rubric red (provenance), new state colours, small radii, a near-opaque toolbar material; Source Serif 4 + IBM Plex Sans + Plex Mono self-hosted via `next/font/local` (111,356 bytes, latin, `swap`; [ADR-0013](docs/ArchitectureDecisionRecords/ADR-0013-self-hosted-type.md)); DesignSystem intro and §0-§2 rewritten with measured contrast on both surfaces; §5's never-installed Framer Motion row corrected to "CSS only"; `getServerSessionSnapshot` returned a new object per call, now a frozen constant | lint, typecheck clean; `npm test` 133/133 (new `session.test.ts` hydrates a session reader and fails on the old code with the exact console message); `npm run build` emits exactly the three fonts; dev console on `/signin` and `/`: 2× "getServerSnapshot should be cached" before, 0 after; `test:responsive` 12/12; `npm run screens` 28/28 |
 
 ### ✅ Mobile-first product polish — verified locally 2026-09-10
 
@@ -3855,8 +3857,8 @@ starts, each attaching before/after images from `npm run screens`. Before each m
 `npm run lint`, `npm run typecheck`, `npm test`, `npm run test:responsive` (all four
 viewport projects); before the last, also `npm run test:e2e` against a rebuilt Compose stack.
 
-0. ~~Screenshot harness~~ — done on `test/screens-harness` (§3).
-1. **Foundations.** An ADR superseding DesignSystem §0's "system font, no webfonts"; §0-§2
+0. ~~Screenshot harness~~ — done, PR #36 (§3).
+1. ~~**Foundations.**~~ — done on `feat/ui-foundations` (§3). An ADR superseding DesignSystem §0's "system font, no webfonts"; §0-§2
    rewritten for the new identity (no indigo/violet, warm paper and warm charcoal neutrals,
    one meaningful accent, measured contrast rows); `globals.css` tokens; self-hosted OFL
    fonts through `next/font` (serif for reading, sans for UI, mono for metadata) with a

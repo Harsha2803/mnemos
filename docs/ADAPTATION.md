@@ -6,7 +6,7 @@
 
 **Last updated:** 2026-10-22 — an owner-authorized **UI revamp** is in progress (§8, first
 entry): Mnemos's own visual identity in six slices, one PR each, frontend only. Slice 0, a
-committed screenshot harness, is landing. Nothing in the milestone ledger (§7) moves: `D1`
+committed screenshot harness, merged (PR #36); slice 1, foundations, is landing. Nothing in the milestone ledger (§7) moves: `D1`
 and `C3` are done, `B4`, `C1`, `C2` stay deliberately deferred. Earlier: `C3` — conversation
 product depth — closed 2026-08-23 with folders, bookmarks, feedback, history search and the
 audit log (PR #26); detail in `TRACKER.md`'s 2026-08-22 and 2026-08-23 dated notes.
@@ -343,7 +343,17 @@ the list.
   citation open, knowledge, sources, memory and sign-in at 390 and 1440px in light and dark
   against deterministic API-boundary fixtures (`frontend/screens/`), with the clock,
   locale, timezone and motion pinned, and writes 28 JPEGs to `docs/screens/`. Evidence:
-  28/28 on the pre-revamp UI, committed as the "before" set.
+  28/28 on the pre-revamp UI, committed as the "before" set. PR #36.
+- **Slice 1 — foundations.** New palette (warm paper and charcoal; verdigris for action,
+  rubric red for provenance; no indigo), three self-hosted OFL faces through
+  `next/font/local` (111,356 bytes; ADR-0013 supersedes DesignSystem §0's system-font
+  decision), DesignSystem §0-§2 rewritten with contrast measured on both text surfaces.
+  Also fixed: `getServerSessionSnapshot` built a new object per call, which React reported
+  as "getServerSnapshot should be cached" on every page (now a frozen constant, with a
+  hydration test that fails on the old code); DesignSystem §5 listed Framer Motion, never
+  installed (corrected to CSS-only motion). Evidence: lint, typecheck, 133/133 unit,
+  build, 12/12 responsive, 28/28 screens; the console error count in a real dev browser
+  went from 2 to 0.
 
 ### Mobile-first polish — verified locally (2026-09-10)
 
