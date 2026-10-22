@@ -1,4 +1,18 @@
-Current task update — 2026-09-26
+Current task update — 2026-10-22
+
+Read TRACKER.md first. The owner authorized a UI revamp run (TRACKER dated note
+"UI revamp: a distinct identity"; §5 lists the slices). §0 rule 9 is lifted for that run
+only. Each slice is its own branch and PR, merged before the next starts, with before and
+after screenshots from `npm run screens` (frontend/screens/, output in docs/screens/).
+Frontend only; the retrieval and compile paths stay untouched so the README benchmark
+stands. Deploying the result to the live demo needs the owner's yes (VM cost).
+
+Progress: slice 0 (screenshot harness) — on test/screens-harness.
+
+After the revamp: TRACKER §5's deployment follow-ups (move the VM onto RustFS only with the
+owner's yes; role binding without SQL; §4 item 40).
+
+--- Previous task update (2026-09-26) ---
 
 Read TRACKER.md first. Two pieces of owner-requested maintenance have landed since the
 2026-09-10 note:
