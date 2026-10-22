@@ -23,8 +23,8 @@ export default function ChatIndexPage() {
   return (
     <EmptyState
       icon={MessageCircle}
-      title="Talk to Mnemos"
-      description="Ask a question and watch the answer stream in, token by token."
+      title="Start a conversation"
+      description="Ask about a policy, a figure in your data, or anything else. Mnemos chooses where to look, and every answer shows where it came from."
       action={
         <Button rank="filled" onClick={() => void startNewChat()}>
           New chat

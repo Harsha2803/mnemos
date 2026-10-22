@@ -461,6 +461,32 @@ retrofit across forty of them.
 - **Time.** Relative in dense places ("2h", `RelativeTime`), with the exact time as the
   hover title and as text for assistive technology; when the time sits inside a link, it
   is the link's description, not part of its name.
+- **An answer is a document, not a bubble.** The question is a compact query line ("YOU"
+  in mono caps, then the question in the interface face), with a rule above each new
+  exchange. The answer is reading text: serif, `--text-reading`, `--measure-reading`,
+  split into its paragraphs. No tinted pills, no grey blocks, no right alignment.
+- **Citations are superscript numerals** in the rubric, real buttons, hugging the word
+  they cite. On a transcript at least 46rem wide each paragraph's sources sit beside it
+  as **sidenotes** (document title, page, the passage's opening lines; a rubric rule when
+  active), and a numeral opens the inspector. Below 46rem a numeral opens its source
+  **under its paragraph** (`aria-expanded`), with one press on to the inspector. Nothing
+  floats over the text being read. Hovering a numeral lights its sidenote and the reverse.
+- **The route is a stamp**: mono caps in a 1px border, accent because it is a control,
+  revealing "Answered from … and why" on demand.
+- **Actions under an answer are a quiet colophon**: words (Inspect, Copy, Bookmark), a
+  glyph only for the two ratings, and the latest answer's context budget as a 2px meter
+  with its numbers. A failed press is explained at the control (`role="status"`), an
+  optimistic change is rolled back, and "Copied" appears where Copy was pressed.
+- **Streaming.** The answer fills in place (`aria-busy`). One polite live region says
+  "Mnemos is answering." and then "Answer complete." (or stopped, or failed), instead of
+  reading tokens aloud. The reader's place is theirs: following the end only while at
+  the end, "Jump to latest" when they have scrolled up. A failed answer is labelled
+  "Not answered" and offers "Ask again".
+- **The composer** is a sheet, not a pill: the textarea, then a line saying how to send
+  and that Mnemos chooses documents, data or a tool, and worded Send / Stop buttons.
+- **Inline hit areas.** A control that must sit inside a line of text (a numeral, a
+  stamp) keeps its visual size and takes a 44px invisible hit area (`.hit-area-inline`),
+  so the §3 floor holds without breaking the line.
 - **The inspector with nothing selected** is a 48px rail on the right edge, one control
   that opens it to explain itself. A selection opens it fully; leaving the conversation
   clears the selection, because evidence belongs to the answer it was opened from.

@@ -72,6 +72,7 @@ export default function ChatSessionPage() {
         id: message.id,
         role: message.role === "user" ? "user" : "assistant",
         content: message.content,
+        createdAt: message.created_at,
         flow: message.flow,
         routeReason: message.router_rationale,
         citations: citations.filter((c) => c.message_id === message.id),
@@ -88,7 +89,7 @@ export default function ChatSessionPage() {
 
     setMessages((prev) => [
       ...prev,
-      { id: userMessageId, role: "user", content, justSent: true },
+      { id: userMessageId, role: "user", content, justSent: true, createdAt: new Date().toISOString() },
       { id: assistantMessageId, role: "assistant", content: "", streaming: true },
     ]);
     setStreaming(true);
@@ -122,6 +123,7 @@ export default function ChatSessionPage() {
                     id: message.id,
                     role: "assistant",
                     content: message.content,
+                    createdAt: message.created_at,
                     flow: message.flow,
                     routeReason: message.router_rationale,
                     nl2sql,
@@ -159,11 +161,9 @@ export default function ChatSessionPage() {
           setMessages((prev) =>
             prev.map((m) =>
               m.id === assistantMessageId
-                ? {
-                    ...m,
-                    content: m.content.length > 0 ? m.content : message,
-                    streaming: false,
-                  }
+                ? m.content.length > 0
+                  ? { ...m, content: `${m.content}\n\nThe answer was cut off: ${message}`, streaming: false }
+                  : { ...m, content: message, streaming: false, failed: true }
                 : m,
             ),
           );
@@ -216,9 +216,20 @@ export default function ChatSessionPage() {
       prev.map((m) => (m.id === message.id ? { ...m, bookmarked: nextBookmarked } : m)),
     );
     const request = nextBookmarked ? upsertBookmark(message.id) : removeBookmark(message.id);
+    setMessages((prev) => prev.map((m) => (m.id === message.id ? { ...m, actionError: undefined } : m)));
     request.catch(() => {
       setMessages((prev) =>
-        prev.map((m) => (m.id === message.id ? { ...m, bookmarked: !nextBookmarked } : m)),
+        prev.map((m) =>
+          m.id === message.id
+            ? {
+                ...m,
+                bookmarked: !nextBookmarked,
+                actionError: nextBookmarked
+                  ? "The bookmark was not saved. Try again."
+                  : "The bookmark was not removed. Try again.",
+              }
+            : m,
+        ),
       );
     });
   }
@@ -230,15 +241,29 @@ export default function ChatSessionPage() {
   ): void {
     const previous = message.feedback;
     setMessages((prev) =>
-      prev.map((m) => (m.id === message.id ? { ...m, feedback: rating } : m)),
+      prev.map((m) => (m.id === message.id ? { ...m, feedback: rating, actionError: undefined } : m)),
     );
     const request =
       rating === null ? removeFeedback(message.id) : upsertFeedback(message.id, rating, comment);
     request.catch(() => {
       setMessages((prev) =>
-        prev.map((m) => (m.id === message.id ? { ...m, feedback: previous } : m)),
+        prev.map((m) =>
+          m.id === message.id
+            ? { ...m, feedback: previous, actionError: "Your rating was not saved. Try again." }
+            : m,
+        ),
       );
     });
+  }
+
+  /** Ask the question behind a failed answer again, as a new turn. */
+  function handleRetry(failed: DisplayMessage): void {
+    const index = messages.findIndex((m) => m.id === failed.id);
+    const question = messages
+      .slice(0, index)
+      .reverse()
+      .find((m) => m.role === "user");
+    if (question !== undefined && !streaming) handleSend(question.content);
   }
 
   function handleMessageSelect(message: DisplayMessage): void {
@@ -257,10 +282,12 @@ export default function ChatSessionPage() {
     <div className="chat-session flex min-h-0 flex-1 flex-col">
       <div className="min-h-0 flex-1 overflow-y-auto scrollbar-thin">
         {isPending ? (
-          <div className="flex flex-col gap-4 px-4 py-6" aria-hidden="true">
-            <Skeleton className="ml-auto h-16 w-2/3" />
-            <Skeleton className="h-24 w-3/4" />
-            <Skeleton className="ml-auto h-12 w-1/2" />
+          // Shaped like what is coming: a query line, then paragraphs of text.
+          <div className="flex flex-col gap-3 px-4 py-6 sm:px-6" role="status" aria-label="Loading the conversation">
+            <Skeleton className="h-5 w-1/2" />
+            <Skeleton className="mt-3 h-4 w-full max-w-[var(--measure-reading)]" />
+            <Skeleton className="h-4 w-11/12 max-w-[var(--measure-reading)]" />
+            <Skeleton className="h-4 w-3/4 max-w-[var(--measure-reading)]" />
           </div>
         ) : (
           <MessageList
@@ -269,6 +296,7 @@ export default function ChatSessionPage() {
             onMessageSelect={handleMessageSelect}
             onToggleBookmark={handleToggleBookmark}
             onRate={handleRate}
+            onRetry={handleRetry}
             selectedCitationId={selection?.kind === "citation" ? selection.citation.id : undefined}
           />
         )}

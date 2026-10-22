@@ -58,10 +58,12 @@ test("chat", async ({ page }, info) => {
 test("chat with a citation open", async ({ page }, info) => {
   await page.goto("/chat/s1");
   await page.getByRole("button", { name: /Show source 1/ }).first().click();
-  const inspector = isPhone(page)
-    ? page.getByRole("dialog", { name: "Context inspector" })
+  // On a phone the source opens under its paragraph; on a desktop, beside it
+  // in the margin and in full in the inspector.
+  const where = isPhone(page)
+    ? page.getByRole("button", { name: "Open source 1 in the inspector", exact: true }).locator("xpath=ancestor::div[1]/..")
     : page.getByRole("complementary", { name: "Context inspector" });
-  await expect(inspector.getByText("carry over a maximum of three").first()).toBeVisible();
+  await expect(where.getByText("carry over a maximum of three").first()).toBeVisible();
   await shoot(page, "citation", info.project.name);
 });
 
