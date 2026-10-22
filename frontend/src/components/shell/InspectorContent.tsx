@@ -1,11 +1,13 @@
 "use client";
 
 import { useQuery } from "@tanstack/react-query";
-import { ChevronLeft, ChevronRight, FileSearch, Layers } from "lucide-react";
-import { useEffect, useRef, type ReactNode } from "react";
+import { Check, ChevronLeft, ChevronRight, Copy, Layers } from "lucide-react";
+import { useEffect, useMemo, useRef, useState, type ReactNode } from "react";
 
 import { Button } from "@/components/ui/Button";
 import { EmptyState } from "@/components/ui/EmptyState";
+import { RelativeTime } from "@/components/ui/RelativeTime";
+import { RevisionMark } from "@/components/ui/RevisionMark";
 import { Skeleton } from "@/components/ui/Skeleton";
 import type { Nl2SqlResult } from "@/lib/chat/stream";
 import {
@@ -14,7 +16,7 @@ import {
   type ContextBundle,
 } from "@/lib/context/api";
 import { useInspectorSelection, type InspectorMessage } from "@/lib/inspector/SelectionProvider";
-import type { Citation } from "@/lib/knowledge/api";
+import { fetchDocuments, KNOWLEDGE_QUERY_KEY, type Citation } from "@/lib/knowledge/api";
 
 export type InspectorContentProps = {
   headerAction?: ReactNode;
@@ -29,6 +31,7 @@ export type InspectorContentProps = {
 export function InspectorContent({ headerAction, focusOnMount = false }: InspectorContentProps = {}) {
   const { selection, select } = useInspectorSelection();
   const heading = useRef<HTMLHeadingElement>(null);
+  const titles = useDocumentTitles(selection !== null);
 
   useEffect(() => {
     if (focusOnMount) heading.current?.focus();
@@ -87,13 +90,13 @@ export function InspectorContent({ headerAction, focusOnMount = false }: Inspect
             />
           </nav>
 
-          <div className="min-h-0 flex-1 overflow-y-auto p-4">
+          <div className="min-h-0 flex-1 overflow-y-auto px-4 py-5">
             {selection.kind === "citation" && (
-              <CitationView message={selection.message} citation={selection.citation} />
+              <CitationView message={selection.message} citation={selection.citation} titles={titles} />
             )}
-            {selection.kind === "message" && <EvidenceView message={selection.message} />}
+            {selection.kind === "message" && <EvidenceView message={selection.message} titles={titles} />}
             {selection.kind === "sql" && <SqlView result={selection.result} />}
-            {selection.kind === "bundle" && <BundleView message={selection.message} />}
+            {selection.kind === "bundle" && <BundleView message={selection.message} titles={titles} />}
           </div>
         </div>
       )}
@@ -118,37 +121,89 @@ function InspectorTab({ label, active, onClick }: { label: string; active: boole
   );
 }
 
-function EvidenceView({ message }: { message: InspectorMessage }) {
+/** Document titles by id, from the cached library list. */
+function useDocumentTitles(enabled: boolean): ReadonlyMap<string, string> {
+  const documents = useQuery({
+    queryKey: KNOWLEDGE_QUERY_KEY,
+    queryFn: ({ signal }) => fetchDocuments(signal),
+    enabled,
+  });
+  return useMemo(
+    () => new Map((Array.isArray(documents.data) ? documents.data : []).map((d) => [d.id, d.title])),
+    [documents.data],
+  );
+}
+
+function titleOf(documentId: string | null, titles: ReadonlyMap<string, string>): string {
+  return (documentId === null ? undefined : titles.get(documentId)) ?? "Document passage";
+}
+
+/** A small mono caps label naming the field or section below it. */
+function Label({ children, className = "" }: { children: ReactNode; className?: string }) {
+  return (
+    <p className={`font-mono text-caption uppercase tracking-caps text-label-secondary ${className}`.trim()}>
+      {children}
+    </p>
+  );
+}
+
+function EvidenceView({ message, titles }: { message: InspectorMessage; titles: ReadonlyMap<string, string> }) {
   const { select } = useInspectorSelection();
+  const citations = [...message.citations].sort((a, b) => a.marker - b.marker);
+  const documents = new Set(citations.map((citation) => citation.document_id));
+
   return (
     <div className="flex flex-col gap-4">
       <div>
-        <p className="text-footnote font-semibold uppercase tracking-wide text-label-secondary">Answer evidence</p>
+        <Label>Evidence for this answer</Label>
         <p className="mt-1 text-footnote text-label-secondary">
-          {message.citations.length === 0
-            ? "This answer did not return document citations."
-            : `${message.citations.length} source${message.citations.length === 1 ? "" : "s"} supported this answer.`}
+          {citations.length === 0
+            ? message.nl2sql !== undefined
+              ? "This answer came from data, not documents. Its query is under SQL."
+              : "This answer cites no passages. Its compiled context is under Bundle."
+            : `${citations.length} passage${citations.length === 1 ? "" : "s"} from ${documents.size} document${documents.size === 1 ? "" : "s"}.`}
         </p>
       </div>
-      {message.citations.map((citation) => (
-        <button
-          key={citation.id}
-          type="button"
-          onClick={() => select({ kind: "citation", message, citation })}
-          className="hit-target flex flex-col items-start rounded-md border border-separator bg-bg-secondary p-3 text-left hover:bg-fill-tertiary"
-        >
-          <span className="font-semibold text-label">Source [{citation.marker}]</span>
-          <span className="mt-1 line-clamp-3 text-footnote leading-relaxed text-label-secondary">
-            {citation.quoted_text}
-          </span>
-          <span className="mt-2 text-caption text-label-secondary">{citationMetadata(citation)}</span>
-        </button>
-      ))}
+      {citations.length > 0 && (
+        <ol className="flex flex-col border-t border-separator">
+          {citations.map((citation) => (
+            <li key={citation.id} className="border-b border-separator">
+              <button
+                type="button"
+                onClick={() => select({ kind: "citation", message, citation })}
+                className="hit-target group flex w-full flex-col items-start gap-1 py-3 text-left"
+              >
+                <span className="flex w-full items-baseline gap-2 text-footnote">
+                  <span className="font-semibold text-rubric">{citation.marker}</span>
+                  <span className="min-w-0 flex-1 truncate font-semibold text-label group-hover:underline">
+                    {titleOf(citation.document_id, titles)}
+                  </span>
+                  {citation.page_number !== null && (
+                    <span className="shrink-0 font-mono text-caption text-label-secondary">p.{citation.page_number}</span>
+                  )}
+                </span>
+                <span className="line-clamp-3 font-serif text-footnote leading-relaxed text-label-secondary">
+                  {citation.quoted_text}
+                </span>
+                <span className="font-mono text-caption text-label-secondary">{citationMetadata(citation)}</span>
+              </button>
+            </li>
+          ))}
+        </ol>
+      )}
     </div>
   );
 }
 
-function CitationView({ message, citation }: { message: InspectorMessage; citation: Citation }) {
+function CitationView({
+  message,
+  citation,
+  titles,
+}: {
+  message: InspectorMessage;
+  citation: Citation;
+  titles: ReadonlyMap<string, string>;
+}) {
   const { select } = useInspectorSelection();
   const citations = [...message.citations].sort((a, b) => a.marker - b.marker);
   const index = citations.findIndex((item) => item.id === citation.id);
@@ -158,60 +213,105 @@ function CitationView({ message, citation }: { message: InspectorMessage; citati
   return (
     <div className="flex flex-col gap-4">
       <div className="flex items-center justify-between gap-2">
-        <div>
-          <span className="text-footnote font-semibold text-label-secondary">Source [{citation.marker}]</span>
-          <p className="text-callout font-semibold text-label">
-            {citation.page_number !== null ? `Page ${citation.page_number}` : "Document passage"}
-          </p>
-        </div>
-        <div className="flex gap-1">
-          <Button rank="plain" aria-label="Previous citation" disabled={!previous} className="!px-2" onClick={() => previous && select({ kind: "citation", message, citation: previous })}>
+        <Label>
+          Source {citation.marker}
+          {citations.length > 1 ? ` of ${citations.length}` : ""}
+        </Label>
+        <div className="-mr-2 flex">
+          <Button
+            rank="plain"
+            aria-label="Previous citation"
+            disabled={!previous}
+            className="!px-0"
+            onClick={() => previous && select({ kind: "citation", message, citation: previous })}
+          >
             <ChevronLeft className="size-4" aria-hidden="true" />
           </Button>
-          <Button rank="plain" aria-label="Next citation" disabled={!next} className="!px-2" onClick={() => next && select({ kind: "citation", message, citation: next })}>
+          <Button
+            rank="plain"
+            aria-label="Next citation"
+            disabled={!next}
+            className="!px-0"
+            onClick={() => next && select({ kind: "citation", message, citation: next })}
+          >
             <ChevronRight className="size-4" aria-hidden="true" />
           </Button>
         </div>
       </div>
-      <p className="text-footnote text-label-secondary">{citationMetadata(citation)}</p>
-      <blockquote className="whitespace-pre-wrap rounded-lg border-l-2 border-accent bg-bg-tertiary p-3 text-footnote leading-relaxed text-label">
+      <div>
+        <h3 className="font-serif text-title-3 font-semibold leading-tight tracking-title text-label">
+          {titleOf(citation.document_id, titles)}
+        </h3>
+        <p className="mt-1 flex flex-wrap gap-x-2 text-footnote text-label-secondary">
+          {citation.page_number !== null && <span>Page {citation.page_number}</span>}
+          <span className="font-mono text-caption">{citationMetadata(citation)}</span>
+        </p>
+      </div>
+      {/* The whole retrieved passage — the text the model was given, not an
+          excerpt of it — set as reading text with the rubric rule that marks
+          provenance everywhere else. */}
+      <blockquote className="whitespace-pre-wrap border-l-2 border-rubric pl-4 font-serif text-callout leading-relaxed text-label">
         {citation.quoted_text}
       </blockquote>
-      <Button rank="tinted" onClick={() => select({ kind: "message", message })}>
-        <FileSearch className="size-4" aria-hidden="true" />
-        View all evidence
-      </Button>
+      <div>
+        <Button rank="plain" className="!px-0" onClick={() => select({ kind: "message", message })}>
+          All evidence for this answer
+        </Button>
+      </div>
     </div>
   );
 }
 
 function SqlView({ result }: { result: Nl2SqlResult }) {
+  const [copied, setCopied] = useState(false);
+  const refused = result.verdict !== "allowed";
+
+  async function copySql(): Promise<void> {
+    await navigator.clipboard.writeText(result.sql);
+    setCopied(true);
+    window.setTimeout(() => setCopied(false), 1500);
+  }
+
   return (
-    <div className="flex flex-col gap-4">
-      <div className="grid grid-cols-2 gap-3 text-footnote">
-        <Metric label="Verdict" value={result.verdict === "allowed" ? "Allowed" : "Refused"} />
+    <div className="flex flex-col gap-5">
+      <div>
+        <Label>Read-only guard</Label>
+        <p className={`mt-1 text-callout font-semibold ${refused ? "text-danger" : "text-success"}`}>
+          {refused ? "Refused — the query did not run" : result.executed ? "Allowed and run" : "Allowed, but the database could not run it"}
+        </p>
+      </div>
+      <dl className="grid grid-cols-3 gap-3 border-y border-separator py-3">
         <Metric label="Attempt" value={String(result.attempt)} />
         <Metric label="Duration" value={result.duration_ms === null ? "—" : `${result.duration_ms} ms`} />
         <Metric label="Rows" value={result.row_count === null ? "—" : String(result.row_count)} />
-      </div>
-      <div>
-        <p className="text-footnote font-semibold text-label-secondary">Authorized tables</p>
-        <p className="mt-1 text-footnote text-label">{result.authorized_tables.join(", ") || "None"}</p>
+      </dl>
+      <div className="flex flex-col gap-1">
+        <Label>Tables read</Label>
+        <p className="font-mono text-footnote text-label">{result.authorized_tables.join(", ") || "None"}</p>
       </div>
       {result.denied_tables.length > 0 && (
-        <div>
-          <p className="text-footnote font-semibold text-danger">Denied tables</p>
-          <p className="mt-1 text-footnote text-label">{result.denied_tables.join(", ")}</p>
+        <div className="flex flex-col gap-1">
+          <Label className="!text-danger">Tables denied</Label>
+          <p className="font-mono text-footnote text-label">{result.denied_tables.join(", ")}</p>
         </div>
       )}
-      <pre className="overflow-x-auto rounded-md bg-bg-tertiary p-3 text-footnote text-label">
-        <code className="font-mono">{result.sql}</code>
-      </pre>
+      <div className="flex flex-col gap-1">
+        <div className="flex items-center justify-between">
+          <Label>Generated SQL</Label>
+          <Button rank="plain" aria-label="Copy SQL" className="-mr-2 !px-2 text-footnote" onClick={() => void copySql()}>
+            {copied ? <Check className="size-3.5" aria-hidden="true" /> : <Copy className="size-3.5" aria-hidden="true" />}
+            {copied ? "Copied" : "Copy"}
+          </Button>
+        </div>
+        <pre className="overflow-x-auto rounded-sm bg-bg-tertiary p-3 font-mono text-footnote leading-relaxed text-label">
+          <code>{result.sql}</code>
+        </pre>
+      </div>
     </div>
   );
 }
 
-function BundleView({ message }: { message: InspectorMessage }) {
+function BundleView({ message, titles }: { message: InspectorMessage; titles: ReadonlyMap<string, string> }) {
   const bundle = useQuery({
     queryKey: contextBundleQueryKey(message.id),
     queryFn: ({ signal }) => fetchContextBundle(message.id, signal),
@@ -219,10 +319,10 @@ function BundleView({ message }: { message: InspectorMessage }) {
 
   if (bundle.isPending) {
     return (
-      <div className="flex flex-col gap-3" aria-label="Loading context bundle">
-        <Skeleton label="Loading context bundle" className="h-20 w-full" />
-        <Skeleton className="h-32 w-full" />
-        <Skeleton className="h-24 w-full" />
+      <div className="flex flex-col gap-3">
+        <Skeleton label="Loading context bundle" className="h-16 w-full" />
+        <Skeleton className="h-28 w-full" />
+        <Skeleton className="h-20 w-full" />
       </div>
     );
   }
@@ -231,9 +331,14 @@ function BundleView({ message }: { message: InspectorMessage }) {
     return (
       <EmptyState
         icon={Layers}
-        title="Bundle unavailable"
-        description={bundle.error.message}
+        title="The bundle could not be loaded"
+        description={`${bundle.error.message}. The answer itself is unaffected; try again in a moment.`}
         headingLevel={3}
+        action={
+          <Button rank="tinted" onClick={() => void bundle.refetch()}>
+            Try again
+          </Button>
+        }
       />
     );
   }
@@ -249,34 +354,35 @@ function BundleView({ message }: { message: InspectorMessage }) {
     );
   }
 
-  return <PersistedBundle bundle={bundle.data} />;
+  return <PersistedBundle bundle={bundle.data} titles={titles} />;
 }
 
-function PersistedBundle({ bundle }: { bundle: ContextBundle }) {
+function PersistedBundle({ bundle, titles }: { bundle: ContextBundle; titles: ReadonlyMap<string, string> }) {
   const percent = Math.min(100, Math.round((bundle.tokens_consumed / bundle.token_budget) * 100));
   const refine = objectFrom(bundle.explain.refine);
   const conflicts = numberFrom(refine.conflicts_demoted);
   const conflictDetails = arrayFrom(refine.conflicts);
 
   return (
-    <div className="flex flex-col gap-6">
-      <section aria-labelledby="budget-heading" className="rounded-lg bg-bg-tertiary p-3">
+    <div className="flex flex-col gap-7">
+      <section aria-labelledby="budget-heading" className="flex flex-col gap-2">
         <div className="flex items-baseline justify-between gap-2">
           <h3 id="budget-heading" className="text-callout font-semibold text-label">Hard token budget</h3>
-          <span className="text-footnote font-semibold text-label">{percent}%</span>
+          <span className="font-mono text-footnote text-label">{percent}%</span>
         </div>
         <div
-          className="mt-3 h-2 overflow-hidden rounded-full bg-fill-secondary"
+          className="h-1 overflow-hidden rounded-full bg-fill"
           role="progressbar"
           aria-label="Context token spend"
           aria-valuemin={0}
           aria-valuemax={bundle.token_budget}
           aria-valuenow={bundle.tokens_consumed}
         >
-          <div className="h-full rounded-full bg-accent" style={{ width: `${percent}%` }} />
+          <div className="h-full bg-accent" style={{ width: `${percent}%` }} />
         </div>
-        <p className="mt-2 text-footnote text-label-secondary">
-          {bundle.tokens_consumed.toLocaleString()} of {bundle.token_budget.toLocaleString()} tokens · {(bundle.token_budget - bundle.tokens_consumed).toLocaleString()} headroom
+        <p className="font-mono text-caption text-label-secondary">
+          {bundle.tokens_consumed.toLocaleString()} of {bundle.token_budget.toLocaleString()} tokens ·{" "}
+          {(bundle.token_budget - bundle.tokens_consumed).toLocaleString()} headroom
         </p>
       </section>
 
@@ -284,22 +390,24 @@ function PersistedBundle({ bundle }: { bundle: ContextBundle }) {
         {bundle.admitted.length === 0 ? (
           <p className="text-footnote text-label-secondary">No candidate survived the budget and policy gates.</p>
         ) : (
-          <ol className="flex flex-col gap-3">
-            {bundle.admitted.map((item) => (
-              <li key={item.id} className="rounded-md border border-separator bg-bg-secondary p-3">
-                <div className="flex flex-wrap items-center justify-between gap-2">
-                  <span className="text-footnote font-semibold text-label">
+          <ol className="flex flex-col border-t border-separator">
+            {bundle.admitted.map((item, index) => (
+              <li key={item.id} className="flex flex-col gap-1 border-b border-separator py-3">
+                <div className="flex items-baseline gap-2 text-footnote">
+                  <span className="font-mono text-caption text-label-secondary">{index + 1}</span>
+                  <span className="min-w-0 flex-1 truncate font-semibold text-label" title={item.document_title ?? item.source_ref}>
                     {item.document_title ?? item.source_ref}
                   </span>
-                  <span className="rounded-full bg-accent-tint px-2 py-1 text-caption font-semibold text-accent">
-                    {item.tokens} tokens
-                  </span>
+                  <span className="shrink-0 font-mono text-caption text-label">{item.tokens} tok</span>
                 </div>
-                <p className="mt-1 text-caption text-label-secondary">
-                  {item.section} · {item.operator} · trust {item.trust_tier} · utility {item.utility.toFixed(3)} · density {item.density.toFixed(4)}
+                <p className="line-clamp-4 whitespace-pre-wrap font-serif text-footnote leading-relaxed text-label-secondary">
+                  {item.text}
                 </p>
-                <p className="mt-2 line-clamp-5 whitespace-pre-wrap text-footnote leading-relaxed text-label-secondary">{item.text}</p>
-                <p className="mt-2 text-caption text-label-secondary">Authorization: {item.acl_rule}</p>
+                <p className="font-mono text-caption text-label-secondary">
+                  {item.section} · {item.operator} · trust {item.trust_tier} · utility {item.utility.toFixed(3)} · density{" "}
+                  {item.density.toFixed(4)}
+                </p>
+                <p className="font-mono text-caption text-label-secondary">ACL {item.acl_rule}</p>
               </li>
             ))}
           </ol>
@@ -310,15 +418,17 @@ function PersistedBundle({ bundle }: { bundle: ContextBundle }) {
         {bundle.rejections.length === 0 ? (
           <p className="text-footnote text-label-secondary">Every candidate passed.</p>
         ) : (
-          <ul className="flex flex-col gap-2">
+          <ul className="flex flex-col border-t border-separator">
             {bundle.rejections.map((item) => (
-              <li key={`${item.key}-${item.reason}`} className="rounded-md bg-bg-tertiary p-3">
-                <div className="flex justify-between gap-2 text-footnote">
-                  <span className="font-semibold text-label">{item.source_ref}</span>
-                  <span className="shrink-0 text-label-secondary">{item.tokens} tokens</span>
+              <li key={`${item.key}-${item.reason}`} className="flex flex-col gap-1 border-b border-separator py-3">
+                <div className="flex items-baseline justify-between gap-2 text-footnote">
+                  <span className="min-w-0 truncate text-label-secondary line-through decoration-rubric" title={item.source_ref}>
+                    {item.source_ref}
+                  </span>
+                  <span className="shrink-0 font-mono text-caption text-label-secondary">{item.tokens} tok</span>
                 </div>
-                <p className="mt-1 text-caption font-semibold uppercase tracking-wide text-warning">{humanize(item.reason)}</p>
-                {item.detail && <p className="mt-1 text-footnote text-label-secondary">{item.detail}</p>}
+                <p className="font-mono text-caption uppercase tracking-caps text-warning">{humanize(item.reason)}</p>
+                {item.detail && <p className="text-footnote text-label-secondary">{item.detail}</p>}
               </li>
             ))}
           </ul>
@@ -326,45 +436,88 @@ function PersistedBundle({ bundle }: { bundle: ContextBundle }) {
       </BundleSection>
 
       <BundleSection title="Decisions and lineage">
-        <dl className="grid grid-cols-2 gap-3 text-footnote">
-          <MetricTerm label="Flow" value={bundle.flow} />
-          <MetricTerm label="Conflicts demoted" value={String(conflicts)} />
-          <MetricTerm label="Bundle digest" value={bundle.digest.slice(0, 12)} />
-          <MetricTerm label="Created" value={new Date(bundle.created_at).toLocaleString()} />
+        <dl className="grid grid-cols-2 gap-x-3 gap-y-3">
+          <Metric label="Flow" value={bundle.flow} />
+          <Metric label="Conflicts demoted" value={String(conflicts)} />
+          <Metric label="Digest" value={bundle.digest.slice(0, 12)} mono />
+          <div>
+            <dt className="font-mono text-caption uppercase tracking-caps text-label-secondary">Compiled</dt>
+            <dd className="mt-0.5 text-footnote text-label">
+              <RelativeTime value={bundle.created_at} form="long" />
+            </dd>
+          </div>
         </dl>
-        {bundle.lineage.length > 0 && (
-          <ul className="mt-3 flex flex-col gap-2 text-footnote text-label-secondary">
+        {(bundle.lineage.length > 0 || conflictDetails.length > 0) && (
+          <ul className="flex flex-col gap-3 text-footnote">
             {bundle.lineage.map((edge) => (
               <li key={`${edge.source_id}-${edge.target_id}-${edge.kind}`}>
-                <span className="font-semibold text-label">{humanize(edge.kind)}</span>: {edge.source_id.slice(0, 8)} → {edge.target_id.slice(0, 8)}{edge.rationale ? ` · ${edge.rationale}` : ""}
+                {edge.kind === "supersedes" ? (
+                  <RevisionMark
+                    previous={nameOf(edge.target_id, titles)}
+                    current={nameOf(edge.source_id, titles)}
+                    note={edge.rationale ?? undefined}
+                  />
+                ) : (
+                  <span className="text-label-secondary">
+                    <span className="font-semibold text-label">{humanize(edge.kind)}</span>: {nameOf(edge.source_id, titles)} →{" "}
+                    {nameOf(edge.target_id, titles)}
+                    {edge.rationale ? ` · ${edge.rationale}` : ""}
+                  </span>
+                )}
               </li>
             ))}
-          </ul>
-        )}
-        {conflictDetails.length > 0 && (
-          <ul className="mt-3 flex flex-col gap-2 text-footnote text-label-secondary">
             {conflictDetails.map((value, index) => {
               const detail = objectFrom(value);
-              return <li key={index}>Demoted {String(detail.candidate ?? "candidate")} behind {String(detail.preferred_source ?? "newer claim")}.</li>;
+              return (
+                <li key={index}>
+                  <RevisionMark
+                    previous={String(detail.candidate ?? "candidate")}
+                    current={String(detail.preferred_source ?? "newer claim")}
+                    note="demoted in a conflict"
+                  />
+                </li>
+              );
             })}
           </ul>
         )}
       </BundleSection>
 
-      <details className="rounded-md border border-separator bg-bg-secondary p-3">
-        <summary className="hit-target flex cursor-pointer items-center text-footnote font-semibold text-label">Compiled prompt</summary>
-        <pre className="mt-3 overflow-x-auto whitespace-pre-wrap text-caption leading-relaxed text-label-secondary"><code>{bundle.compiled_prompt}</code></pre>
+      <details className="group border-t border-separator pt-1">
+        <summary className="hit-target flex cursor-pointer items-center justify-between text-footnote font-semibold text-label">
+          Compiled prompt
+          <ChevronRight className="size-4 text-label-secondary transition-transform group-open:rotate-90" aria-hidden="true" />
+        </summary>
+        <pre className="mt-2 overflow-x-auto whitespace-pre-wrap rounded-sm bg-bg-tertiary p-3 font-mono text-caption leading-relaxed text-label-secondary">
+          <code>{bundle.compiled_prompt}</code>
+        </pre>
       </details>
     </div>
   );
 }
 
 function BundleSection({ title, children }: { title: string; children: ReactNode }) {
-  return <section className="flex flex-col gap-3"><h3 className="text-callout font-semibold text-label">{title}</h3>{children}</section>;
+  return (
+    <section className="flex flex-col gap-3">
+      <h3 className="text-callout font-semibold text-label">{title}</h3>
+      {children}
+    </section>
+  );
 }
 
-function MetricTerm({ label, value }: { label: string; value: string }) {
-  return <div className="rounded-md bg-bg-tertiary p-3"><dt className="text-caption text-label-secondary">{label}</dt><dd className="mt-1 truncate font-semibold text-label" title={value}>{value}</dd></div>;
+function Metric({ label, value, mono = false }: { label: string; value: string; mono?: boolean }) {
+  return (
+    <div className="min-w-0">
+      <dt className="font-mono text-caption uppercase tracking-caps text-label-secondary">{label}</dt>
+      <dd className={`mt-0.5 truncate text-footnote text-label ${mono ? "font-mono" : "font-semibold"}`} title={value}>
+        {value}
+      </dd>
+    </div>
+  );
+}
+
+/** A lineage endpoint by name where the library knows it, else a short id. */
+function nameOf(id: string, titles: ReadonlyMap<string, string>): string {
+  return titles.get(id) ?? id.slice(0, 8);
 }
 
 function numberFrom(value: unknown): number {
@@ -372,7 +525,7 @@ function numberFrom(value: unknown): number {
 }
 
 function objectFrom(value: unknown): Record<string, unknown> {
-  return typeof value === "object" && value !== null && !Array.isArray(value) ? value as Record<string, unknown> : {};
+  return typeof value === "object" && value !== null && !Array.isArray(value) ? (value as Record<string, unknown>) : {};
 }
 
 function arrayFrom(value: unknown): unknown[] {
@@ -381,15 +534,6 @@ function arrayFrom(value: unknown): unknown[] {
 
 function humanize(value: string): string {
   return value.replaceAll("_", " ");
-}
-
-function Metric({ label, value }: { label: string; value: string }) {
-  return (
-    <div className="rounded-md bg-bg-tertiary p-3">
-      <span className="block text-caption text-label-secondary">{label}</span>
-      <span className="mt-1 block font-semibold text-label">{value}</span>
-    </div>
-  );
 }
 
 function citationMetadata(citation: Citation): string {

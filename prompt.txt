@@ -10,7 +10,8 @@ stands. Deploying the result to the live demo needs the owner's yes (VM cost).
 Progress: slice 0 (screenshot harness) merged, PR #36. Slice 1 (foundations: palette,
 self-hosted fonts, ADR-0013, getServerSnapshot fix) merged, PR #37. Slice 2 (shell:
 sidebar, account menu, inspector rail) merged, PR #38. Slice 3 (chat as a document:
-sidenotes, route stamp, composer, scroll anchoring) — on feat/ui-chat.
+sidenotes, route stamp, composer, scroll anchoring) merged, PR #39. Slice 4 (inspector
+views, revision marks) — on feat/ui-inspector.
 
 After the revamp: TRACKER §5's deployment follow-ups (move the VM onto RustFS only with the
 owner's yes; role binding without SQL; §4 item 40).

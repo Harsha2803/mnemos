@@ -668,7 +668,7 @@
        that would be zero pixels tall. */
     line-height: 1;
     margin-left: 0.08em;
-    padding: 0 0.22em;
+    padding: 0 0.12em;
     border-radius: var(--radius-sm);
     font-family: var(--font-sans);
     font-weight: 600;
