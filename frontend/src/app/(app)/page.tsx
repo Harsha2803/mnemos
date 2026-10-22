@@ -1,133 +1,355 @@
 "use client";
 
 import { useQueries } from "@tanstack/react-query";
-import { ArrowRight, BookOpen, MessageCircle, Plug, Upload } from "lucide-react";
 import Link from "next/link";
+import type { ReactNode } from "react";
 
+import { useReadiness } from "@/components/shell/useReadiness";
 import { SystemStatus } from "@/components/shell/SystemStatus";
+import { RevisionMark } from "@/components/ui/RevisionMark";
 import { Skeleton } from "@/components/ui/Skeleton";
-import { fetchSessions } from "@/lib/chat/api";
-import { fetchJobs, fetchSources } from "@/lib/connectors/api";
-import { fetchDocuments } from "@/lib/knowledge/api";
+import { fetchSessions, type ChatSession } from "@/lib/chat/api";
+import { fetchJobs, fetchSources, type IngestJob } from "@/lib/connectors/api";
+import { fetchDocuments, type KnowledgeDocument } from "@/lib/knowledge/api";
+import { fetchMemoryHistory, type MemoryHistory } from "@/lib/memory/api";
+import { absoluteTime, relativeLong } from "@/lib/time";
 
+/**
+ * The overview: where this workspace stands, in one sentence, and what has
+ * happened in it, in date order.
+ *
+ * Not a dashboard of big numbers and quick-action cards. Mnemos is about
+ * provenance, so its front page is a ledger: documents ingested (or failed),
+ * revisions that superseded older ones, memory claims revised, conversations
+ * held — each dated, each linking to where it happened. Readiness is one line,
+ * with the per-service detail a press away.
+ */
 export default function OverviewPage() {
-  const [documents, sources, jobs, conversations] = useQueries({
+  const [documents, sources, jobs, conversations, memory] = useQueries({
     queries: [
       { queryKey: ["knowledge", "documents"], queryFn: ({ signal }) => fetchDocuments(signal) },
       { queryKey: ["connectors", "sources"], queryFn: ({ signal }) => fetchSources(signal) },
       { queryKey: ["connectors", "jobs"], queryFn: ({ signal }) => fetchJobs(signal) },
       { queryKey: ["chat", "sessions"], queryFn: ({ signal }) => fetchSessions(signal) },
+      { queryKey: ["memory", "history", { includeRetracted: true }], queryFn: ({ signal }) => fetchMemoryHistory({ includeRetracted: true }, signal) },
     ],
   });
 
-  const activeJobs = (jobs.data ?? []).filter((job) => ["queued", "running", "stuck"].includes(job.status));
-  const readyDocuments = (documents.data ?? []).filter((document) => document.status === "ready");
-  const enabledSources = (sources.data ?? []).filter((source) => source.is_enabled);
+  const pending = documents.isPending || sources.isPending || jobs.isPending || conversations.isPending;
 
   return (
-    <div className="flex flex-col gap-8">
-      <header className="flex flex-col gap-1">
-        <h1 className="text-title-1 font-semibold tracking-title text-label">Overview</h1>
-        <p className="text-callout text-label-secondary">What Mnemos can use, what is processing, and where to continue.</p>
+    <div className="flex flex-col gap-10">
+      <header className="flex flex-col gap-4">
+        <h1 className="font-serif text-large-title font-semibold tracking-title text-label">Overview</h1>
+        {pending ? (
+          <div className="flex flex-col gap-2" role="status" aria-label="Loading the workspace summary">
+            <Skeleton className="h-5 w-full max-w-[var(--measure-reading)]" />
+            <Skeleton className="h-5 w-2/3 max-w-[var(--measure-reading)]" />
+          </div>
+        ) : (
+          <p className="measure-reading font-serif text-title-3 leading-relaxed text-label">
+            <WorkspaceState
+              documents={listOrEmpty(documents.data)}
+              sourceCount={listOrEmpty(sources.data).filter((source) => source.is_enabled).length}
+              jobs={listOrEmpty(jobs.data)}
+              sessions={conversations.data?.sessions ?? []}
+            />
+          </p>
+        )}
+        <nav aria-label="Start something" className="flex flex-wrap gap-x-6 gap-y-1 text-callout">
+          <ActionLink href="/chat">Ask a question</ActionLink>
+          <ActionLink href="/knowledge">Add documents</ActionLink>
+          <ActionLink href="/sources">Connect a source</ActionLink>
+        </nav>
       </header>
 
-      <section className="flex flex-col gap-3" aria-labelledby="quick-actions-heading">
-        <h2 id="quick-actions-heading" className="text-title-3 font-semibold tracking-title">Quick actions</h2>
-        <div className="grid grid-cols-1 gap-2 @xl/content:grid-cols-3">
-          <QuickAction href="/chat" icon={MessageCircle} label="New chat" detail="Ask Mnemos a question" />
-          <QuickAction href="/knowledge" icon={Upload} label="Upload documents" detail="Add knowledge to search" />
-          <QuickAction href="/sources" icon={Plug} label="Connect source" detail="Browse and ingest a source" />
-        </div>
-      </section>
+      <Readiness />
 
-      <section className="grid grid-cols-2 gap-px overflow-hidden rounded-lg border border-separator bg-separator @xl/content:grid-cols-4" aria-label="Workspace summary">
-        <SummaryMetric label="Ready documents" value={readyDocuments.length} pending={documents.isPending} />
-        <SummaryMetric label="Enabled sources" value={enabledSources.length} pending={sources.isPending} />
-        <SummaryMetric label="Active jobs" value={activeJobs.length} pending={jobs.isPending} />
-        <SummaryMetric label="Conversations" value={conversations.data?.sessions.length ?? 0} pending={conversations.isPending} />
-      </section>
-
-      <div className="grid grid-cols-1 gap-8 @xl/content:grid-cols-2">
-        <section className="flex min-w-0 flex-col gap-3" aria-labelledby="recent-ingestion-heading">
-          <h2 id="recent-ingestion-heading" className="text-title-3 font-semibold tracking-title">Recent ingestion</h2>
-          {jobs.isPending ? <Skeleton className="h-24 w-full" /> : (jobs.data ?? []).length === 0 ? (
-            <CompactEmpty icon={Plug} text="No ingestion activity yet." href="/sources" action="Connect a source" />
-          ) : (
-            <ul className="divide-y divide-separator rounded-md border border-separator">
-              {(jobs.data ?? []).slice(0, 4).map((job) => (
-                <li key={job.id} className="flex items-center justify-between gap-3 px-3 py-2 text-footnote">
-                  <span className="min-w-0 truncate text-label">{job.payload.item_name ?? job.payload.item_uri ?? job.id}</span>
-                  <span className={statusTone(job.status)}>{statusLabel(job.status)}</span>
-                </li>
-              ))}
-            </ul>
-          )}
-        </section>
-
-        <section className="flex min-w-0 flex-col gap-3" aria-labelledby="recent-conversations-heading">
-          <h2 id="recent-conversations-heading" className="text-title-3 font-semibold tracking-title">Recent conversations</h2>
-          {conversations.isPending ? <Skeleton className="h-24 w-full" /> : (conversations.data?.sessions.length ?? 0) === 0 ? (
-            <CompactEmpty icon={MessageCircle} text="No conversations yet." href="/chat" action="Start a chat" />
-          ) : (
-            <ul className="divide-y divide-separator rounded-md border border-separator">
-              {conversations.data?.sessions.slice(0, 4).map((session) => (
-                <li key={session.id}>
-                  <Link href={`/chat/${session.id}`} className="hit-target flex items-center justify-between gap-3 px-3 py-2 text-footnote hover:bg-fill-tertiary">
-                    <span className="truncate text-label">{session.title}</span>
-                    <ArrowRight className="size-4 shrink-0 text-label-tertiary" aria-hidden="true" />
-                  </Link>
-                </li>
-              ))}
-            </ul>
-          )}
-        </section>
-      </div>
-
-      <section className="flex flex-col gap-3" aria-labelledby="system-status-heading">
-        <h2 id="system-status-heading" className="text-title-3 font-semibold tracking-title">System readiness</h2>
-        <SystemStatus />
+      <section aria-labelledby="ledger-heading" className="flex flex-col gap-4">
+        <h2 id="ledger-heading" className="font-mono text-caption uppercase tracking-caps text-label-secondary">
+          Activity
+        </h2>
+        {pending ? (
+          <div className="flex flex-col gap-3" role="status" aria-label="Loading activity">
+            {[0, 1, 2, 3].map((row) => (
+              <Skeleton key={row} className="h-5 w-full" />
+            ))}
+          </div>
+        ) : (
+          <Ledger
+            entries={ledgerEntries({
+              documents: listOrEmpty(documents.data),
+              jobs: listOrEmpty(jobs.data),
+              sessions: conversations.data?.sessions ?? [],
+              memory: memory.data,
+            })}
+          />
+        )}
+        {(documents.isError || jobs.isError || conversations.isError || memory.isError) && (
+          <p role="alert" className="text-footnote text-danger">
+            Part of the record could not be loaded ({[documents.isError && "documents", jobs.isError && "ingestion", conversations.isError && "conversations", memory.isError && "memory"].filter(Boolean).join(", ")}). What is shown is complete for everything else.
+          </p>
+        )}
       </section>
     </div>
   );
 }
 
-function SummaryMetric({ label, value, pending }: { label: string; value: number; pending: boolean }) {
+function ActionLink({ href, children }: { href: string; children: ReactNode }) {
   return (
-    <div className="bg-bg-secondary p-4">
-      {pending ? <Skeleton className="h-7 w-12" /> : <span className="text-title-2 font-semibold text-label">{value}</span>}
-      <span className="mt-1 block text-footnote text-label-secondary">{label}</span>
-    </div>
-  );
-}
-
-function QuickAction({ href, icon: Icon, label, detail }: { href: string; icon: typeof BookOpen; label: string; detail: string }) {
-  return (
-    <Link href={href} aria-label={label === "New chat" ? "Start new conversation" : undefined} className="hit-target flex items-center gap-3 rounded-md border border-separator p-3 hover:bg-fill-tertiary">
-      <Icon className="size-5 shrink-0 text-accent" strokeWidth={1.5} aria-hidden="true" />
-      <span className="min-w-0">
-        <span className="block text-callout font-semibold text-label">{label}</span>
-        <span className="block text-footnote text-label-secondary">{detail}</span>
-      </span>
+    <Link
+      href={href}
+      className="hit-target inline-flex items-center font-semibold text-accent underline-offset-4 hover:underline"
+    >
+      {children} <span aria-hidden="true" className="ml-1">→</span>
     </Link>
   );
 }
 
-function CompactEmpty({ icon: Icon, text, href, action }: { icon: typeof BookOpen; text: string; href: string; action: string }) {
+/** The state of the workspace as one sentence, with its numbers linked to their screens. */
+function WorkspaceState({
+  documents,
+  sourceCount,
+  jobs,
+  sessions,
+}: {
+  documents: KnowledgeDocument[];
+  sourceCount: number;
+  jobs: IngestJob[];
+  sessions: ChatSession[];
+}) {
+  const current = documents.filter((d) => d.status === "ready" && d.superseded_by === null).length;
+  const processing = documents.filter((d) => d.status !== "ready" && d.status !== "failed").length;
+  const superseded = documents.filter((d) => d.superseded_by !== null).length;
+  const running = jobs.filter((j) => j.status === "queued" || j.status === "running").length;
+  const failed = jobs.filter((j) => j.status === "failed" || j.status === "stuck").length;
+  const latest = sessions
+    .map((s) => s.last_message_at ?? s.updated_at)
+    .sort()
+    .at(-1);
+
+  if (documents.length === 0 && sessions.length === 0) {
+    return (
+      <>
+        An empty workspace. Add a document or connect a source, and Mnemos will answer from it,
+        citing the page.
+      </>
+    );
+  }
+
   return (
-    <div className="flex items-center gap-3 rounded-md border border-separator p-4">
-      <Icon className="size-5 text-label-tertiary" aria-hidden="true" />
-      <p className="text-footnote text-label-secondary">{text} <Link className="font-semibold text-accent" href={href}>{action}</Link></p>
+    <>
+      <Link className="underline decoration-separator underline-offset-4 hover:decoration-accent" href="/knowledge">
+        {plural(current, "current document")}
+      </Link>
+      {processing > 0 && `, ${processing} still processing`}
+      {superseded > 0 && `, ${plural(superseded, "superseded revision")} kept on record`}.{" "}
+      <Link className="underline decoration-separator underline-offset-4 hover:decoration-accent" href="/sources">
+        {plural(sourceCount, "source")}
+      </Link>
+      {running > 0 || failed > 0
+        ? ` connected, with ${[running > 0 && `${running} ingesting`, failed > 0 && `${failed} failed`].filter(Boolean).join(" and ")}.`
+        : " connected, nothing ingesting."}{" "}
+      {sessions.length > 0
+        ? `${plural(sessions.length, "conversation")}, the latest ${latest !== undefined ? relativeLong(latest) : "recently"}.`
+        : "No conversations yet."}
+    </>
+  );
+}
+
+/** One line for the API and its dependencies; the per-service list on demand. */
+function Readiness() {
+  const { data, isPending, isError } = useReadiness();
+  const summary = isPending
+    ? "Checking services…"
+    : isError
+      ? "The API is unreachable"
+      : data.ready
+        ? `All ${data.checks.length} services ready`
+        : `${data.checks.filter((check) => !check.ok).length} of ${data.checks.length} services not ready`;
+  const tone = isPending ? "bg-fill" : isError ? "bg-danger" : data.ready ? "bg-success" : "bg-warning";
+
+  return (
+    <details className="group border-y border-separator" open={!isPending && (isError || !data.ready)}>
+      <summary className="hit-target flex cursor-pointer list-none items-center gap-3 text-callout text-label [&::-webkit-details-marker]:hidden">
+        <span aria-hidden="true" className={`size-2 shrink-0 rounded-full ${tone}`} />
+        <span className="flex-1">{summary}</span>
+        <span className="text-footnote text-label-secondary group-open:hidden">Details</span>
+        <span className="hidden text-footnote text-label-secondary group-open:inline">Hide</span>
+      </summary>
+      <div className="pb-3">
+        <SystemStatus />
+      </div>
+    </details>
+  );
+}
+
+type LedgerEntry = {
+  key: string;
+  at: string;
+  kind: "Ingested" | "Failed" | "Ingesting" | "Added" | "Revised" | "Conversation";
+  body: ReactNode;
+  href?: string;
+};
+
+function ledgerEntries({
+  documents,
+  jobs,
+  sessions,
+  memory,
+}: {
+  documents: KnowledgeDocument[];
+  jobs: IngestJob[];
+  sessions: ChatSession[];
+  memory: MemoryHistory | undefined;
+}): LedgerEntry[] {
+  // A document a job is ingesting (or ingested) is already on the record as
+  // that job; listing it again as "Added" would say the same thing twice.
+  const fromJobs = new Set(jobs.map((j) => j.document_id).filter(Boolean));
+  const jobItems = new Set(jobs.map((j) => j.payload.item_name).filter(Boolean));
+  const entries: LedgerEntry[] = [];
+
+  for (const job of jobs) {
+    const name = job.payload.item_name ?? job.payload.item_uri ?? job.id;
+    const source = job.payload.source_slug;
+    if (job.status === "succeeded") {
+      entries.push({ key: `job-${job.id}`, at: job.finished_at ?? job.updated_at, kind: "Ingested", href: "/knowledge", body: <>{name}{source && <Muted> from {source}</Muted>}</> });
+    } else if (job.status === "failed" || job.status === "stuck") {
+      entries.push({ key: `job-${job.id}`, at: job.updated_at, kind: "Failed", href: "/sources", body: <>{name}<Muted> · {job.error_detail ?? job.error_code ?? job.status}</Muted></> });
+    } else {
+      entries.push({ key: `job-${job.id}`, at: job.updated_at, kind: "Ingesting", href: "/sources", body: <>{name}<Muted> · step {job.done_units} of {job.total_units}</Muted></> });
+    }
+  }
+
+  for (const document of documents) {
+    const replaced = documents.find((other) => other.superseded_by === document.id);
+    if (replaced !== undefined) {
+      entries.push({
+        key: `revision-${document.id}`,
+        at: document.created_at,
+        kind: "Revised",
+        href: "/knowledge",
+        body: <RevisionMark previous={replaced.title} current={document.title} />,
+      });
+    } else if (!fromJobs.has(document.id) && !jobItems.has(document.title) && document.superseded_by === null) {
+      entries.push({ key: `doc-${document.id}`, at: document.created_at, kind: "Added", href: "/knowledge", body: document.title });
+    }
+  }
+
+  const claims = new Map((memory?.claims ?? []).map((claim) => [claim.id, claim]));
+  for (const edge of memory?.edges ?? []) {
+    const current = claims.get(edge.source_id);
+    const previous = claims.get(edge.target_id);
+    if (edge.kind !== "supersedes" || current === undefined || previous === undefined) continue;
+    entries.push({
+      key: `memory-${edge.id}`,
+      at: edge.created_at,
+      kind: "Revised",
+      href: "/memory",
+      body: (
+        <>
+          <Muted>{current.subject.display_name} · {current.predicate} </Muted>
+          <RevisionMark previous={previous.object_text} current={current.object_text} />
+        </>
+      ),
+    });
+  }
+
+  for (const session of sessions) {
+    entries.push({ key: `chat-${session.id}`, at: session.last_message_at ?? session.updated_at, kind: "Conversation", href: `/chat/${session.id}`, body: session.title });
+  }
+
+  return entries.sort((left, right) => right.at.localeCompare(left.at)).slice(0, 14);
+}
+
+function Ledger({ entries }: { entries: LedgerEntry[] }) {
+  if (entries.length === 0) {
+    return (
+      <p className="text-callout text-label-secondary">
+        Nothing has happened here yet. Ingest a document or ask a question, and the record starts.
+      </p>
+    );
+  }
+
+  const days = groupByDay(entries);
+  return (
+    <div className="flex flex-col gap-6">
+      {days.map(({ label, entries: dayEntries }) => (
+        <section key={label} aria-label={label} className="flex flex-col">
+          <h3 className="mb-1 text-footnote font-semibold text-label">{label}</h3>
+          <ol className="flex flex-col border-t border-separator">
+            {dayEntries.map((entry) => (
+              <li key={entry.key} className="border-b border-separator">
+                <LedgerRow entry={entry} />
+              </li>
+            ))}
+          </ol>
+        </section>
+      ))}
     </div>
   );
 }
 
-function statusLabel(status: string): string {
-  return status.charAt(0).toUpperCase() + status.slice(1);
+function LedgerRow({ entry }: { entry: LedgerEntry }) {
+  const content = (
+    <>
+      <time dateTime={entry.at} title={absoluteTime(entry.at)} className="w-12 shrink-0 font-mono text-caption text-label-secondary">
+        {timeOfDay(entry.at)}
+      </time>
+      <span className={`w-28 shrink-0 font-mono text-caption uppercase tracking-caps ${KIND_TONE[entry.kind]}`}>{entry.kind}</span>
+      <span className="min-w-0 flex-1 text-callout text-label @max-xl/content:basis-full">{entry.body}</span>
+    </>
+  );
+  // On a narrow pane the time and kind share a line and the entry wraps below.
+  const row = "flex min-h-11 items-baseline gap-x-3 gap-y-1 py-2.5 @max-xl/content:flex-wrap";
+  if (entry.href === undefined) return <div className={row}>{content}</div>;
+  return (
+    <Link href={entry.href} className={`${row} transition-colors duration-150 ease-standard hover:bg-fill-tertiary`}>
+      {content}
+    </Link>
+  );
 }
 
-function statusTone(status: string): string {
-  if (status === "succeeded") return "shrink-0 font-semibold text-success";
-  if (status === "failed") return "shrink-0 font-semibold text-danger";
-  if (status === "stuck") return "shrink-0 font-semibold text-warning";
-  return "shrink-0 font-semibold text-info";
+const KIND_TONE: Record<LedgerEntry["kind"], string> = {
+  Ingested: "text-success",
+  Failed: "text-danger",
+  Ingesting: "text-info",
+  Added: "text-label-secondary",
+  Revised: "text-rubric",
+  Conversation: "text-label-secondary",
+};
+
+function Muted({ children }: { children: ReactNode }) {
+  return <span className="text-label-secondary">{children}</span>;
+}
+
+function groupByDay(entries: LedgerEntry[]): { label: string; entries: LedgerEntry[] }[] {
+  const today = new Date();
+  const start = new Date(today.getFullYear(), today.getMonth(), today.getDate()).getTime();
+  const groups = new Map<string, LedgerEntry[]>();
+  for (const entry of entries) {
+    const at = new Date(entry.at);
+    const day = new Date(at.getFullYear(), at.getMonth(), at.getDate()).getTime();
+    const ago = Math.round((start - day) / 86_400_000);
+    const label =
+      ago <= 0
+        ? "Today"
+        : ago === 1
+          ? "Yesterday"
+          : new Intl.DateTimeFormat(undefined, { weekday: "long", day: "numeric", month: "long", year: at.getFullYear() === today.getFullYear() ? undefined : "numeric" }).format(at);
+    groups.set(label, [...(groups.get(label) ?? []), entry]);
+  }
+  return [...groups.entries()].map(([label, grouped]) => ({ label, entries: grouped }));
+}
+
+function timeOfDay(iso: string): string {
+  return new Intl.DateTimeFormat(undefined, { hour: "2-digit", minute: "2-digit" }).format(new Date(iso));
+}
+
+function plural(count: number, noun: string): string {
+  return `${count === 0 ? "No" : count} ${noun}${count === 1 ? "" : "s"}`;
+}
+
+function listOrEmpty<T>(value: T[] | undefined): T[] {
+  return Array.isArray(value) ? value : [];
 }
