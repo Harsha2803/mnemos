@@ -67,6 +67,32 @@ test("chat with a citation open", async ({ page }, info) => {
   await shoot(page, "citation", info.project.name);
 });
 
+test("the context bundle behind an answer", async ({ page }, info) => {
+  await page.goto("/chat/s1");
+  await page.getByRole("button", { name: "Inspect answer" }).first().click();
+  const inspector = isPhone(page)
+    ? page.getByRole("dialog", { name: "Context inspector" })
+    : page.getByRole("complementary", { name: "Context inspector" });
+  await inspector.getByRole("button", { name: "Bundle" }).click();
+  await expect(inspector.getByRole("heading", { name: "Hard token budget" })).toBeVisible();
+  await expect(inspector.getByText("Employee Handbook 2025.pdf", { exact: false }).first()).toBeVisible();
+  await shoot(page, "bundle", info.project.name);
+});
+
+test("a data answer and its SQL", async ({ page }, info) => {
+  await page.goto("/chat/s2");
+  await page.getByRole("textbox", { name: "Message", exact: true }).fill("Revenue by region for Q3");
+  await page.getByRole("button", { name: "Send message", exact: true }).click();
+  await expect(page.getByRole("table", { name: "Query results" })).toBeVisible();
+  await page.getByRole("button", { name: "Inspect answer" }).click();
+  const inspector = isPhone(page)
+    ? page.getByRole("dialog", { name: "Context inspector" })
+    : page.getByRole("complementary", { name: "Context inspector" });
+  await inspector.getByRole("button", { name: "SQL" }).click();
+  await expect(inspector.getByText("Allowed and run")).toBeVisible();
+  await shoot(page, "sql", info.project.name);
+});
+
 test("navigation and account menu", async ({ page }, info) => {
   await page.goto("/chat/s1");
   if (isPhone(page)) {

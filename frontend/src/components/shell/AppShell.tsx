@@ -145,7 +145,11 @@ export function AppShell({ children }: { children: ReactNode }) {
   const inspectorIsRail = inspectorPinned && selection === null && !emptyInspectorExpanded;
 
   return (
-    <div className="workspace-shell flex h-dvh overflow-hidden bg-bg text-label">
+    // `relative` here and on the content column: an absolutely positioned
+    // descendant (every `sr-only` label) needs a positioned ancestor inside
+    // the shell, or it is laid out against the document and makes the page
+    // itself scroll past the shell — found on /memory by the screenshot run.
+    <div className="workspace-shell relative flex h-dvh overflow-hidden bg-bg text-label">
       {sidebarIsInline && (
         <nav
           id={SIDEBAR_ID}
@@ -180,7 +184,7 @@ export function AppShell({ children }: { children: ReactNode }) {
           that is a flex sibling of a separately scrolling pane is translucent
           over nothing, which is a blur filter costing frames for no effect. */}
       <div
-        className={`flex min-w-0 flex-1 flex-col ${isChatSession ? "overflow-hidden" : "overflow-y-auto"}`}
+        className={`relative flex min-w-0 flex-1 flex-col ${isChatSession ? "overflow-hidden" : "overflow-y-auto"}`}
       >
         <header className="workspace-toolbar material-chrome sticky top-0 z-20 flex min-h-14 shrink-0 items-center gap-2 border-b border-separator px-3">
           <Button

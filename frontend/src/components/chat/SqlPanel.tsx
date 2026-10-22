@@ -29,9 +29,9 @@ export function SqlPanel({ result }: SqlPanelProps) {
   }
 
   return (
-    <div className="flex min-w-0 w-full max-w-full flex-col gap-3 rounded-lg border border-separator bg-bg-secondary p-4">
+    <div className="flex min-w-0 w-full max-w-full flex-col gap-3 border-l-2 border-separator pl-4">
       {refused && (
-        <div className="flex items-start gap-2 rounded-md border border-danger bg-bg px-3 py-2 text-footnote text-danger">
+        <div className="flex items-start gap-2 border-l-2 border-danger py-1 pl-3 text-footnote text-danger">
           <ShieldAlert className="size-4 shrink-0 translate-y-0.5" strokeWidth={1.5} aria-hidden="true" />
           <div className="flex flex-col gap-1">
             <span className="font-semibold">{VERDICT_LABEL[result.verdict]}</span>
@@ -43,7 +43,7 @@ export function SqlPanel({ result }: SqlPanelProps) {
       )}
 
       {executionFailed && (
-        <div className="flex items-start gap-2 rounded-md border border-danger bg-bg px-3 py-2 text-footnote text-danger">
+        <div className="flex items-start gap-2 border-l-2 border-danger py-1 pl-3 text-footnote text-danger">
           <TriangleAlert className="size-4 shrink-0 translate-y-0.5" strokeWidth={1.5} aria-hidden="true" />
           <div className="flex flex-col gap-1">
             <span className="font-semibold">Allowed by the read-only guard, but the database could not run it</span>
@@ -53,7 +53,7 @@ export function SqlPanel({ result }: SqlPanelProps) {
         </div>
       )}
 
-      <dl className="flex flex-wrap gap-x-5 gap-y-2 border-y border-separator py-2 text-footnote">
+      <dl className="flex flex-wrap gap-x-5 gap-y-1 font-mono text-caption">
         <Meta label="Verdict" value={result.verdict === "allowed" ? "Allowed" : "Refused"} tone={refused ? "text-danger" : "text-success"} />
         <Meta label="Attempt" value={String(result.attempt)} />
         <Meta label="Duration" value={result.duration_ms === null ? "—" : `${result.duration_ms} ms`} />
@@ -61,25 +61,25 @@ export function SqlPanel({ result }: SqlPanelProps) {
         <Meta label="Result" value={result.truncated ? "Truncated" : "Complete"} tone={result.truncated ? "text-warning" : undefined} />
       </dl>
 
-      <div className="flex flex-wrap gap-2 text-footnote">
-        {result.authorized_tables.map((table) => <span key={table} className="rounded-full bg-fill-tertiary px-2 py-1 text-label-secondary">Authorized: {table}</span>)}
-        {result.denied_tables.map((table) => <span key={table} className="rounded-full bg-fill-tertiary px-2 py-1 font-semibold text-danger">Denied: {table}</span>)}
+      <div className="flex flex-wrap gap-x-4 gap-y-1 font-mono text-caption">
+        {result.authorized_tables.map((table) => <span key={table} className="text-label-secondary">Authorized: <span className="text-label">{table}</span></span>)}
+        {result.denied_tables.map((table) => <span key={table} className="font-semibold text-danger">Denied: {table}</span>)}
       </div>
 
-      <details open className="group rounded-md bg-bg-tertiary">
-        <summary className="hit-target flex cursor-pointer items-center justify-between px-3 text-footnote font-semibold text-label">Generated SQL <span className="text-label-tertiary group-open:hidden">Show</span><span className="hidden text-label-tertiary group-open:inline">Hide</span></summary>
+      <details open className="group rounded-sm bg-bg-tertiary">
+        <summary className="hit-target flex cursor-pointer items-center justify-between px-3 text-footnote font-semibold text-label">Generated SQL <span className="font-normal text-label-secondary group-open:hidden">Show</span><span className="hidden font-normal text-label-secondary group-open:inline">Hide</span></summary>
         <div className="border-t border-separator">
           <div className="flex justify-end p-1">
             <Button rank="plain" className="!px-2 text-footnote" aria-label="Copy SQL" onClick={() => void copy("sql", result.sql)}>
               {copied === "sql" ? <Check className="size-4" aria-hidden="true" /> : <Copy className="size-4" aria-hidden="true" />}{copied === "sql" ? "Copied" : "Copy SQL"}
             </Button>
           </div>
-          <pre className="overflow-x-auto px-3 pb-3 text-footnote text-label"><code className="font-mono">{result.sql}</code></pre>
+          <pre className="overflow-x-auto px-3 pb-3 text-footnote leading-relaxed text-label"><code className="font-mono">{result.sql}</code></pre>
         </div>
       </details>
 
       {result.executed && result.rows.length === 0 && (
-        <div className="flex items-center gap-3 rounded-md border border-separator p-4 text-footnote text-label-secondary">
+        <div className="flex items-center gap-3 border-l-2 border-separator py-1 pl-3 text-footnote text-label-secondary">
           <Database className="size-5" aria-hidden="true" />The query ran successfully and returned no rows.
         </div>
       )}
@@ -98,13 +98,13 @@ export function SqlPanel({ result }: SqlPanelProps) {
             rows={result.rows}
             rowKey={(_, index) => String(index)}
           />
-          {result.truncated && <p className="text-footnote text-label-tertiary">Showing the first {result.rows.length} rows — more were available and were not fetched.</p>}
+          {result.truncated && <p className="text-footnote text-label-secondary">Showing the first {result.rows.length} rows — more were available and were not fetched.</p>}
         </>
       )}
     </div>
   );
 }
 
-function Meta({ label, value, tone = "text-label" }: { label: string; value: string; tone?: string }) { return <div><dt className="inline text-label-secondary">{label}: </dt><dd className={`inline font-semibold ${tone}`}>{value}</dd></div>; }
+function Meta({ label, value, tone = "text-label" }: { label: string; value: string; tone?: string }) { return <div><dt className="inline uppercase tracking-caps text-label-secondary">{label} </dt><dd className={`inline ${tone}`}>{value}</dd></div>; }
 function formatCell(value: SqlCellValue): string { if (value === null) return "—"; if (typeof value === "boolean") return value ? "true" : "false"; return String(value); }
 function tableAsTsv(result: Nl2SqlResult): string { return [result.columns, ...result.rows].map((row) => row.map(formatCell).join("\t")).join("\n"); }

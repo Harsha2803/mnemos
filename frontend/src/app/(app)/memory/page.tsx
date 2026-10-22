@@ -1,10 +1,11 @@
 "use client";
 
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
-import { Brain, GitBranch, RotateCcw, XCircle } from "lucide-react";
+import { Brain, RotateCcw, XCircle } from "lucide-react";
 import { useState, type ReactNode } from "react";
 
 import { Button } from "@/components/ui/Button";
+import { RevisionMark } from "@/components/ui/RevisionMark";
 import { EmptyState } from "@/components/ui/EmptyState";
 import { Skeleton } from "@/components/ui/Skeleton";
 import {
@@ -15,6 +16,7 @@ import {
   supersedeMemory,
   type MemoryClaim,
   type MemoryFilters,
+  type MemoryHistory,
   type MemoryWrite,
 } from "@/lib/memory/api";
 
@@ -165,15 +167,65 @@ export default function MemoryPage() {
                 </li>
               ))}
             </ol>
-            <aside aria-labelledby="lineage-heading" className="rounded-lg bg-bg-tertiary p-4">
-              <h3 id="lineage-heading" className="flex items-center gap-2 text-callout font-semibold text-label"><GitBranch className="size-4" aria-hidden="true" />Lineage</h3>
-              {history.data.edges.length === 0 ? <p className="mt-2 text-footnote text-label-secondary">No supersession edges in this view.</p> : <ul className="mt-3 flex flex-col gap-3 text-footnote">{history.data.edges.map((edge) => <li key={edge.id}><p className="font-semibold text-label">{edge.kind.replaceAll("_", " ")}</p><p className="break-all text-label-secondary">{edge.source_id} → {edge.target_id}</p>{edge.rationale && <p className="mt-1 text-label-tertiary">{edge.rationale}</p>}</li>)}</ul>}
-            </aside>
+            <Revisions history={history.data} />
           </div>
         )}
       </section>
     </div>
   );
+}
+
+/**
+ * Every supersession in view, as an editor's revision mark: the old value
+ * struck, the new one beside it, and the date the new one took effect. A
+ * supersession is never an overwrite (C5) — both claims stay in the history
+ * above — so this reads what changed into what, rather than raw edge ids.
+ */
+function Revisions({ history }: { history: MemoryHistory }) {
+  const byId = new Map(history.claims.map((claim) => [claim.id, claim]));
+  const revisions = history.edges
+    .filter((edge) => edge.kind === "supersedes")
+    .map((edge) => ({ edge, current: byId.get(edge.source_id), previous: byId.get(edge.target_id) }));
+
+  return (
+    <aside aria-labelledby="revisions-heading" className="flex flex-col gap-3 border-l-2 border-separator pl-4">
+      <h3 id="revisions-heading" className="font-mono text-caption uppercase tracking-caps text-label-secondary">
+        Revisions
+      </h3>
+      {revisions.length === 0 ? (
+        <p className="text-footnote text-label-secondary">Nothing in this view has been superseded.</p>
+      ) : (
+        <ul className="flex flex-col gap-4 text-footnote">
+          {revisions.map(({ edge, current, previous }) => (
+            <li key={edge.id} className="flex flex-col gap-1">
+              {current !== undefined && (
+                <p className="font-semibold text-label">
+                  {current.subject.display_name} · <span className="font-mono font-normal">{current.predicate}</span>
+                </p>
+              )}
+              {current !== undefined && previous !== undefined ? (
+                <RevisionMark
+                  previous={previous.object_text}
+                  current={current.object_text}
+                  effective={formatDay(current.valid_from)}
+                />
+              ) : (
+                // One end of the edge is outside the current filters.
+                <p className="font-mono text-caption text-label-secondary">
+                  {edge.source_id.slice(0, 8)} supersedes {edge.target_id.slice(0, 8)} (outside this view)
+                </p>
+              )}
+              {edge.rationale && <p className="text-caption text-label-secondary">{edge.rationale}</p>}
+            </li>
+          ))}
+        </ul>
+      )}
+    </aside>
+  );
+}
+
+function formatDay(value: string): string {
+  return new Intl.DateTimeFormat(undefined, { dateStyle: "medium" }).format(new Date(value));
 }
 
 function Field({ label, children, className = "" }: { label: string; children: ReactNode; className?: string }) {

@@ -9,13 +9,13 @@
 **Last updated:** 2026-10-22 — **UI revamp run in progress** (owner-authorized, not a
 milestone): Mnemos gets its own visual identity in place of the stock AI-chat look, one
 slice per branch and PR (dated note below, §3 and §5). Slice 0, the screenshot harness,
-merged (PR #36); slice 1, foundations (PR #37); slice 2, the shell (PR #38). Slice 3,
-chat, is on `feat/ui-chat`.
-**Phase:** `C3` done (unchanged). UI revamp: slice 3 of 6. Deployment: live, with the
+merged (PR #36); slice 1, foundations (PR #37); slice 2, the shell (PR #38); slice 3, chat
+(PR #39). Slice 4, the inspector, is on `feat/ui-inspector`.
+**Phase:** `C3` done (unchanged). UI revamp: slice 4 of 6. Deployment: live, with the
 follow-ups in §5's second list.
 **Next task:** §5 — the UI revamp slices in order, then the deployment follow-ups. `B4`,
 `C1`, `C2` stay deliberately deferred.
-**Branch right now:** `feat/ui-chat`. PRs #28 to #38 are merged.
+**Branch right now:** `feat/ui-inspector`. PRs #28 to #39 are merged.
 
 > ### 2026-10-22 — UI revamp: a distinct identity (owner-authorized run, not a milestone)
 >
@@ -1694,7 +1694,8 @@ Not a milestone; no backend capability changes. Evidence per slice:
 | 0 · screenshot harness | `frontend/screens/` (spec + deterministic fixtures: a cited two-turn answer, a superseded revision and memory claim, running/failed/finished jobs, a persisted bundle), `playwright.screens.config.ts`, `npm run screens` → 28 JPEGs in `docs/screens/` (7 screens × 390/1440 × light/dark), pinned clock, locale, timezone and reduced motion | `npm run screens` 28/28 on the pre-revamp UI; those files are the "before" every later PR diffs against. PR #36, merged as `dc98540` |
 | 1 · foundations | Warm paper / warm charcoal neutrals, verdigris accent (action), rubric red (provenance), new state colours, small radii, a near-opaque toolbar material; Source Serif 4 + IBM Plex Sans + Plex Mono self-hosted via `next/font/local` (111,356 bytes, latin, `swap`; [ADR-0013](docs/ArchitectureDecisionRecords/ADR-0013-self-hosted-type.md)); DesignSystem intro and §0-§2 rewritten with measured contrast on both surfaces; §5's never-installed Framer Motion row corrected to "CSS only"; `getServerSessionSnapshot` returned a new object per call, now a frozen constant | lint, typecheck clean; `npm test` 133/133 (new `session.test.ts` hydrates a session reader and fails on the old code with the exact console message); `npm run build` emits exactly the three fonts; dev console on `/signin` and `/`: 2× "getServerSnapshot should be cached" before, 0 after; `test:responsive` 12/12; `npm run screens` 28/28. PR #37, merged as `8134ab1` |
 | 2 · shell | Serif wordmark; typographic sections in three groups with a rubric marker on the current one, no icons; conversations with relative time (`RelativeTime`, exact time on hover and as the link's description), full titles on hover/focus (`Truncate`, replacing the hover marquee), move/rename/delete revealed on hover/focus with a fine pointer and always shown on touch; an account menu (Radix Popover) holding identity, appearance (worded System/Light/Dark) and sign-out; toolbar shows "Chat / <conversation title>" and no theme buttons; the empty inspector is a 48px rail that opens on request and focuses its heading; leaving a conversation clears its selection; the sidebar is opaque paper and only the toolbar keeps a material. Test infrastructure: Vitest `testTimeout` 15s and Testing Library `asyncUtilTimeout` 5s, after load made a different test time out on each run | lint, typecheck clean; `npm test` 136/136 twice in a row (new: rail opens/collapses with focus, no appearance in the toolbar, selection cleared on navigation; updated to the new behaviour: three-column, collapse, resize, chrome-material, sign-out and citation tests); `test:responsive` 12/12; `npm run screens` 32/32 (new `menu` case); e2e `auth.spec.ts` opens the account menu before signing out (run at the end of the revamp). PR #38, merged as `f9c93e4` |
-| 3 · chat | The conversation as a document: a query line per question, the answer as serif paragraphs at the reading measure; rubric superscript numerals that hug the cited word; sidenotes (title, page, passage) beside each paragraph on a ≥46rem transcript, an inline source disclosure below it on narrower ones (the floating preview that covered the question is gone); a route stamp revealing its rationale; a quiet colophon (Inspect, Copy, Bookmark, ratings) with the latest answer's budget meter; bookmark/rating rollbacks explained at the control; "Not answered" + "Ask again" for a failed answer; scroll anchoring with "Jump to latest"; one live region announcing start and completion; a composer sheet with keyboard and routing hints and worded Send/Stop. `renderWithProviders` now uses Testing Library's `wrapper`, so `rerender` keeps providers | lint, typecheck clean; `npm test` 146/146 (new `transcript.test.tsx`: paragraphs, numeral spacing, narrow disclosure, wide open, stamp rationale, failure + retry, rollback message, budget meter, completion announcement, scroll anchoring); `test:responsive` 12/12 (the narrow chat case now asserts the inline disclosure before the sheet, and found a zero-height numeral that unit tests could not, fixed); `npm run screens` 32/32 |
+| 3 · chat | The conversation as a document: a query line per question, the answer as serif paragraphs at the reading measure; rubric superscript numerals that hug the cited word; sidenotes (title, page, passage) beside each paragraph on a ≥46rem transcript, an inline source disclosure below it on narrower ones (the floating preview that covered the question is gone); a route stamp revealing its rationale; a quiet colophon (Inspect, Copy, Bookmark, ratings) with the latest answer's budget meter; bookmark/rating rollbacks explained at the control; "Not answered" + "Ask again" for a failed answer; scroll anchoring with "Jump to latest"; one live region announcing start and completion; a composer sheet with keyboard and routing hints and worded Send/Stop. `renderWithProviders` now uses Testing Library's `wrapper`, so `rerender` keeps providers | lint, typecheck clean; `npm test` 146/146 (new `transcript.test.tsx`: paragraphs, numeral spacing, narrow disclosure, wide open, stamp rationale, failure + retry, rollback message, budget meter, completion announcement, scroll anchoring); `test:responsive` 12/12 (the narrow chat case now asserts the inline disclosure before the sheet, and found a zero-height numeral that unit tests could not, fixed); `npm run screens` 32/32. PR #39, merged as `4cdafa5` |
+| 4 · inspector | Evidence lists each passage with numeral, document title (from the cached library) and page; a citation reads as a serif document title, page and character range, and the whole retrieved passage; SQL view with the guard verdict in words, attempt/duration/rows, tables read/denied and copyable SQL; the bundle as an apparatus (thin budget bar with exact numbers, admitted with scores, excluded struck with the reason, lineage and demoted conflicts as revision marks); a bundle that fails to load offers "Try again". New `RevisionMark` (struck old value, new value, effective date; worded for screen readers), also replacing Memory's raw-id lineage with a "Revisions" list. The transcript's SQL panel moves to the same vocabulary. Found and fixed by the screenshot run: absolutely positioned `sr-only` text inside the main column had no positioned ancestor, so `/memory` made the document itself 1180px tall at a 900px viewport; the shell and its content column are now positioned | lint, typecheck clean; `npm test` 151/151 (new `inspector.test.tsx`: revision mark, Memory revisions, evidence titles, citation view with next/previous, bundle exclusions and lineage marks); `test:responsive` 12/12, whose `fits()` now also asserts the document never scrolls (failed at 1180 > 901 without the fix) with a superseded memory claim added to its fixtures; `npm run screens` 40/40 (new `bundle` and `sql` cases, an SSE fixture for sending) |
 
 ### ✅ Mobile-first product polish — verified locally 2026-09-10
 
@@ -3359,6 +3360,16 @@ Recorded so they are not rediscovered as surprises:
     missing. Fixed with one import in `entrypoints/api/main.py`'s composition root, which is
     also the answer for `worker` and `realtime` if either ever gains an ORM path that
     crosses a feature boundary before something else has imported the registry first.
+42. **The citation view shows the whole retrieved passage, not the text around it** (UI
+    revamp, 2026-10-22). The revamp brief asked for "the quoted passage in its surrounding
+    text". A citation's `quoted_text` is already the complete chunk the model was given, so
+    the inspector shows all of it with title, page, character range and relevance. The
+    *neighbouring* chunks are not shown, deliberately: no endpoint returns them, and one that
+    fetched chunks by document and ordinal would have to re-apply retrieval's tag ACL outside
+    the scan (C4) — a security-relevant backend change, not the small field the brief
+    allowed. If it is wanted, build it as `GET /knowledge/documents/{id}/passages/{chunk_id}`
+    that authorizes through the same tag predicate retrieval uses, with a test that a chunk
+    from an unreachable document is refused, and only then show neighbours in the inspector.
 
 ---
 
@@ -3871,11 +3882,12 @@ viewport projects); before the last, also `npm run test:e2e` against a rebuilt C
 2. ~~**Shell.**~~ — done, PR #38 (§3). Typographic sidebar with an active marker and few icons; conversations with
    relative time and hover/focus actions (always shown on coarse pointers); appearance moves
    into an account menu; the empty inspector collapses to a slim rail.
-3. ~~**Chat.**~~ — done on `feat/ui-chat` (§3). The answer as reading text, the question as a compact query line, superscript
+3. ~~**Chat.**~~ — done, PR #39 (§3). The answer as reading text, the question as a compact query line, superscript
    citations with sidenotes on wide panes and inline disclosure on narrow ones (no preview
    covering the question), a route stamp that reveals its rationale, a better composer,
    scroll anchoring with "jump to latest", completion announced.
-4. **Inspector.** Evidence with document title, page and passage; bundle and SQL views in
+4. ~~**Inspector.**~~ — done on `feat/ui-inspector` (§3). Deferred with reason: the
+   passage's *neighbouring* text (§4). Evidence with document title, page and passage; bundle and SQL views in
    the new vocabulary; supersession as revision marks (struck old value, new value, date).
 5. **Overview**, then a consistency pass over Knowledge, Sources, Memory, Tools, Bookmarks
    and Audit log.

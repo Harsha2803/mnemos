@@ -6,7 +6,7 @@
 
 **Last updated:** 2026-10-22 — an owner-authorized **UI revamp** is in progress (§8, first
 entry): Mnemos's own visual identity in six slices, one PR each, frontend only. Slice 0, a
-committed screenshot harness, merged (PR #36); slice 1, foundations, merged (PR #37); slice 2, the shell, merged (PR #38); slice 3, chat, is landing. Nothing in the milestone ledger (§7) moves: `D1`
+committed screenshot harness, merged (PR #36); slice 1, foundations, merged (PR #37); slice 2, the shell, merged (PR #38); slice 3, chat, merged (PR #39); slice 4, the inspector, is landing. Nothing in the milestone ledger (§7) moves: `D1`
 and `C3` are done, `B4`, `C1`, `C2` stay deliberately deferred. Earlier: `C3` — conversation
 product depth — closed 2026-08-23 with folders, bookmarks, feedback, history search and the
 audit log (PR #26); detail in `TRACKER.md`'s 2026-08-22 and 2026-08-23 dated notes.
@@ -366,7 +366,16 @@ the list.
   colophon holds actions and the latest answer's budget meter; failures and rollbacks are
   said where they happen; scrolling never yanks a reader who scrolled up ("Jump to
   latest"); completion is announced once. Evidence: 146/146 unit, 12/12 responsive (which
-  caught a zero-height superscript button jsdom could not), 32/32 screens.
+  caught a zero-height superscript button jsdom could not), 32/32 screens. PR #39.
+- **Slice 4 — inspector.** Evidence, citation, SQL and bundle views rebuilt as an
+  apparatus (mono labels, rules, serif passages, titles resolved from the library), and
+  supersession drawn as revision marks (`RevisionMark`) in the bundle's lineage and on the
+  Memory screen. The citation view shows the whole retrieved passage; its *neighbouring*
+  text is deliberately not shown (TRACKER §4: it would need a passage endpoint that
+  repeats retrieval's tag ACL outside the scan). The screenshot run exposed `sr-only`
+  text escaping the shell and making the document scroll; fixed, and the responsive
+  suite now asserts the document never scrolls. Evidence: 151/151 unit, 12/12
+  responsive, 40/40 screens.
 
 ### Mobile-first polish — verified locally (2026-09-10)
 

@@ -204,10 +204,35 @@ function answer(path: string): unknown {
   return undefined;
 }
 
+const SQL_ANSWER_TEXT = "West led Q3 with 128,400 in revenue, ahead of East (97,210) and North (64,020).";
+
+/** The NL2SQL answer a question sent on screen receives, as the live `done` frame. */
+const sqlAnswer = {
+  message: message({ id: "a-sql", role: "assistant", ordinal: 1, created_at: NOW, flow: "nl2sql", router_rationale: "Asks for a business metric or data breakdown.", content: SQL_ANSWER_TEXT }),
+  nl2sql: {
+    sql: "SELECT region, SUM(revenue) AS revenue\nFROM analytics.sales_order\nWHERE quarter = '2026-Q3'\nGROUP BY region\nORDER BY revenue DESC",
+    verdict: "allowed", verdict_detail: null, attempt: 1, authorized_tables: ["analytics.sales_order"], denied_tables: [],
+    executed: true, row_count: 3, truncated: false, duration_ms: 42, error_code: null, error_detail: null,
+    columns: ["region", "revenue"], rows: [["West", 128400], ["East", 97210], ["North", 64020]],
+  },
+};
+
+const sse = (event: string, data: unknown) => `event: ${event}\ndata: ${JSON.stringify(data)}\n\n`;
+
 export async function installFixtures(page: Page): Promise<void> {
   await page.routeWebSocket("**/ws/**", () => {});
   await page.route("http://localhost:8000/**", async (route: Route) => {
     const path = new URL(route.request().url()).pathname;
+    if (path.endsWith("/messages") && route.request().method() === "POST") {
+      await route.fulfill({
+        contentType: "text/event-stream",
+        body:
+          sse("route", { flow: "nl2sql", reason: "Asks for a business metric or data breakdown." }) +
+          sse("token", { text: SQL_ANSWER_TEXT }) +
+          sse("done", sqlAnswer),
+      });
+      return;
+    }
     if (/\/context\/messages\/[^/]+\/bundle$/.test(path)) {
       if (path.includes("/a1/")) await route.fulfill({ json: bundle });
       else await route.fulfill({ status: 404, json: { detail: "no bundle" } });

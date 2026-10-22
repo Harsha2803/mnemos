@@ -15,6 +15,8 @@ Each file is `<width>-<scheme>-<screen>.jpg`:
 | `overview` | `/` |
 | `chat` | `/chat/s1`, a two-turn conversation answered from documents |
 | `citation` | the same conversation with source 1 opened: in the inspector on a desktop, under its paragraph on a phone |
+| `bundle` | "Inspect answer" on the first answer, then Bundle: budget, admitted, excluded, revision marks |
+| `sql` | a question sent in `/chat/s2` answered from data: the result table inline, the SQL view in the inspector |
 | `menu` | the account menu open (appearance, sign-out); on a phone, over the navigation sheet |
 | `knowledge` | `/knowledge`, including a superseded revision and a document still processing |
 | `sources` | `/sources` with a source selected, its items, and running, failed and finished jobs |

@@ -487,6 +487,18 @@ retrofit across forty of them.
 - **Inline hit areas.** A control that must sit inside a line of text (a numeral, a
   stamp) keeps its visual size and takes a 44px invisible hit area (`.hit-area-inline`),
   so the §3 floor holds without breaking the line.
+- **Supersession is a revision mark, not a badge** (`RevisionMark`): the old value struck
+  through in the rubric, an arrow, the new value on a rubric tint, and the date it took
+  effect. `<del>`/`<ins>` carry the meaning and each half also says it in words
+  ("Superseded:", "Replaced by:") for screen readers that do not announce them. Used for
+  memory claims, document lineage and conflicts demoted by the compiler.
+- **Inspector views** read like an apparatus, not a dashboard: mono caps labels name each
+  field, rules separate entries, no tinted cards. Evidence lists each passage with its
+  numeral, document title and page; a citation is the document title in serif, its page
+  and character range, and the **whole retrieved passage** (the text the model was given)
+  with a rubric rule. The bundle shows its budget as a thin bar with exact numbers,
+  admitted items with their scores, excluded items struck with the reason in caps, and
+  lineage as revision marks.
 - **The inspector with nothing selected** is a 48px rail on the right edge, one control
   that opens it to explain itself. A selection opens it fully; leaving the conversation
   clears the selection, because evidence belongs to the answer it was opened from.
@@ -530,7 +542,7 @@ exists.
 | `Button`, `List`, `EmptyState`, `Skeleton`, `Table` | `frontend/src/components/ui/` |
 | `ThemeToggle` (rendered inside `AccountMenu`) | `frontend/src/components/theme/` |
 | `AccountMenu`, `SidebarContent`, the inspector rail, `ToolbarTitle` | `frontend/src/components/shell/` |
-| `Truncate`, `RelativeTime` (and `lib/time.ts` for the wording) | `frontend/src/components/ui/` |
+| `Truncate`, `RelativeTime` (and `lib/time.ts` for the wording), `RevisionMark` | `frontend/src/components/ui/` |
 | The three-column shell and the breakpoint sheets | `frontend/src/components/shell/AppShell.tsx` |
 | Generated API types (never hand-edited; `npm run generate:api`) | `frontend/src/lib/api/schema.ts` |
 
