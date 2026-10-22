@@ -4,16 +4,12 @@
 > self-contained: architecture, the capability inventory, schema, milestones, and current
 > state. [`TRACKER.md`](../TRACKER.md) holds live task status; this holds the design.
 
-**Last updated:** 2026-08-23 — `D1` shipped (PR #25); `C3` — conversation product depth —
-was then reopened by explicit project-owner decision (docs/Roadmap.md §2) and is now
-**complete**: all five deliverables (folders, bookmarks, feedback, history search, audit
-log). Backend vertical slices including a real migration (`0008`) and a new `observability`
-feature (audit write path, 8 named call sites), 515 backend tests with 0 regressions;
-frontend UI for all five plus new `/bookmarks` and `/audit` screens, 128 frontend tests with
-0 regressions, plus a new Playwright spec and all 16 tests across all 8 Playwright specs
-green against a rebuilt stack. Four real bugs found and fixed across the milestone — full
-detail is in `TRACKER.md`'s 2026-08-22 and 2026-08-23 dated notes. `B4`, `C1`, `C2` stay
-deliberately deferred; nothing is committed next.
+**Last updated:** 2026-10-22 — an owner-authorized **UI revamp** is in progress (§8, first
+entry): Mnemos's own visual identity in six slices, one PR each, frontend only. Slice 0, a
+committed screenshot harness, is landing. Nothing in the milestone ledger (§7) moves: `D1`
+and `C3` are done, `B4`, `C1`, `C2` stay deliberately deferred. Earlier: `C3` — conversation
+product depth — closed 2026-08-23 with folders, bookmarks, feedback, history search and the
+audit log (PR #26); detail in `TRACKER.md`'s 2026-08-22 and 2026-08-23 dated notes.
 
 ---
 
@@ -224,6 +220,10 @@ this section for historical translation. `D1` shipped; `C3` was then reopened 20
 is now complete (all five deliverables). `B4` and `C1`–`C2` remain deliberately deferred. The
 authoritative live copy is [TRACKER §3.0](../TRACKER.md#30-the-plan--completed-foundation-and-the-resume-focused-finish).
 
+Out-of-band polish is not a milestone and does not appear in these tables: the
+2026-08-17 UI enhancement pass, the 2026-09-10 mobile-first pass and the 2026-10-22 UI
+revamp each have their evidence in §8 instead.
+
 Two rules govern every row.
 
 - **Both halves land** (TRACKER C12). A milestone with an untouched `frontend/` is not
@@ -330,6 +330,20 @@ merely untested; that is written up in §8 and in
 ---
 
 ## 8. Current state
+
+### UI revamp — a distinct identity (2026-10-22, in progress, not a milestone)
+
+Owner-authorized: replace the stock AI-chat look with an identity drawn from what Mnemos
+is about (provenance, revisions, what was admitted and excluded), and give every component
+deliberate states. The system's discipline stays (tokens, 8pt rhythm, accessibility floors,
+measured contrast, guard tests); its look changes. Six slices, one PR each; TRACKER §5 has
+the list.
+
+- **Slice 0 — screenshot harness.** `npm run screens` renders overview, chat, chat with a
+  citation open, knowledge, sources, memory and sign-in at 390 and 1440px in light and dark
+  against deterministic API-boundary fixtures (`frontend/screens/`), with the clock,
+  locale, timezone and motion pinned, and writes 28 JPEGs to `docs/screens/`. Evidence:
+  28/28 on the pre-revamp UI, committed as the "before" set.
 
 ### Mobile-first polish — verified locally (2026-09-10)
 

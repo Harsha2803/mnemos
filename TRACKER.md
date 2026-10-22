@@ -6,20 +6,31 @@
 > **and [`docs/ADAPTATION.md`](docs/ADAPTATION.md)** *in the same commit* — a stale
 > tracker is worse than none.
 
-**Last updated:** 2026-09-26 — **the public demo is deployed** at
-https://mnemos.harsha2803.dev (GCP VM `mnemos-demo`, on demand; see
-[`docs/Deploy.md`](docs/Deploy.md); PR #29, merged as `e38e8ef`). All 16 Playwright tests
-across all 8 specs pass against the public HTTPS URLs; backend CI's `mypy --strict` failure
-(SQLAlchemy 2.1 stub drift) is fixed. The owner-authorized mobile-first frontend polish
-(verified locally 2026-09-10, evidence in §3 and the ADAPTATION note) merges on top of it via
-PR #28. Neither is a milestone. **What is left is in §5 and §6.**
-**Phase:** `C3` done (unchanged). Mobile-first maintenance: merging (PR #28). Deployment:
-live, with the follow-ups in §6.
-**Next task:** §5 — the deployment follow-ups, now starting with role binding without SQL
-(MinIO is replaced; moving the live VM onto RustFS waits for the owner to allow the VM
-time). `B4`, `C1`, `C2` stay deliberately deferred.
-**Branch right now:** `chore/pin-backend-deps` (hash-pinned backend lockfiles). PRs #28 to #33
-are merged.
+**Last updated:** 2026-10-22 — **UI revamp run in progress** (owner-authorized, not a
+milestone): Mnemos gets its own visual identity in place of the stock AI-chat look, one
+slice per branch and PR (dated note below, §3 and §5). Slice 0, the committed screenshot
+harness (`npm run screens` → `docs/screens/`), is on `test/screens-harness`.
+**Phase:** `C3` done (unchanged). UI revamp: slice 0 of 6. Deployment: live, with the
+follow-ups in §5's second list.
+**Next task:** §5 — the UI revamp slices in order, then the deployment follow-ups. `B4`,
+`C1`, `C2` stay deliberately deferred.
+**Branch right now:** `test/screens-harness`. PRs #28 to #35 are merged.
+
+> ### 2026-10-22 — UI revamp: a distinct identity (owner-authorized run, not a milestone)
+>
+> The owner's friends said the UI reads as a generic AI-generated app ("very
+> Claude-Code-ish"). The owner asked for a revamp with more nuance in interaction states and
+> a less common look, carried through in **one continuous run** (§0 rule 9 is lifted for this
+> run only, as it was for the 2026-08-08 run; every other §0 and §7 rule applies). The earlier
+> instruction to follow Apple's design resources was about consistency, not the look: tokens
+> as the single source, the 8pt rhythm, the accessibility floors, the measured contrast
+> table and the guard tests stay; palette, type, surfaces, component vocabulary and how
+> each screen presents provenance change. Frontend only, unless a screen truly needs a
+> field; the retrieval and compile paths are not touched, so the README benchmark stands.
+> Slices, each its own branch and PR, merged before the next starts: 0 screenshot harness ·
+> 1 foundations (ADR, tokens, fonts, two fixes) · 2 shell · 3 chat · 4 inspector ·
+> 5 overview + consistency pass · 6 sign-in, shortcuts, state audit. Every PR attaches its
+> before and after from `docs/screens/`. Deploying to the live demo is not part of the run.
 
 > ### 2026-09-26 — backend dependencies pinned (deployment follow-up, not a milestone)
 >
@@ -1579,6 +1590,9 @@ are merged.
    and its own entry in §3, and §5 was still rewritten before each one was built. Only the
    "land one and stop" instruction was lifted, and only for that run. Unless a future
    instruction says otherwise again, this rule is back in force for whoever reads it next.
+   **Suspended a second time, 2026-10-22, for the UI revamp run only** (dated note at the
+   top; slices in §5). Same terms as 2026-08-08: each slice its own branch, PR, commits and
+   §3 entry; only "land one and stop" is lifted.
 
 ---
 
@@ -1669,6 +1683,14 @@ port in `C4`. Until then the README must say so.
 
 Milestone ledger and exit criteria live in [ADAPTATION §7](docs/ADAPTATION.md#7-milestones).
 Detailed evidence for each ✅ is in [ADAPTATION §8](docs/ADAPTATION.md#8-current-state).
+
+### 🟡 UI revamp — a distinct identity (2026-10-22, owner-authorized, in progress)
+
+Not a milestone; no backend capability changes. Evidence per slice:
+
+| Slice | What landed | Evidence |
+|---|---|---|
+| 0 · screenshot harness | `frontend/screens/` (spec + deterministic fixtures: a cited two-turn answer, a superseded revision and memory claim, running/failed/finished jobs, a persisted bundle), `playwright.screens.config.ts`, `npm run screens` → 28 JPEGs in `docs/screens/` (7 screens × 390/1440 × light/dark), pinned clock, locale, timezone and reduced motion | `npm run screens` 28/28 on the pre-revamp UI; those files are the "before" every later PR diffs against |
 
 ### ✅ Mobile-first product polish — verified locally 2026-09-10
 
@@ -3826,8 +3848,41 @@ Recorded so they are not rediscovered as surprises:
 
 ## 5. NEXT TASK
 
-**Deployment follow-ups** (2026-09-26). The demo is live; these are what remain, in order.
-Each is maintenance, not a milestone — follow §0/§7 exactly as for milestone work.
+**First: the UI revamp run** (2026-10-22, dated note at the top). Its brief is the owner's
+handoff, `../prompts/mnemos-ui-revamp.txt` in the portfolio folder; the essentials are
+restated here so this file stands alone. One branch and PR per slice, merged before the next
+starts, each attaching before/after images from `npm run screens`. Before each merge:
+`npm run lint`, `npm run typecheck`, `npm test`, `npm run test:responsive` (all four
+viewport projects); before the last, also `npm run test:e2e` against a rebuilt Compose stack.
+
+0. ~~Screenshot harness~~ — done on `test/screens-harness` (§3).
+1. **Foundations.** An ADR superseding DesignSystem §0's "system font, no webfonts"; §0-§2
+   rewritten for the new identity (no indigo/violet, warm paper and warm charcoal neutrals,
+   one meaningful accent, measured contrast rows); `globals.css` tokens; self-hosted OFL
+   fonts through `next/font` (serif for reading, sans for UI, mono for metadata) with a
+   stated byte budget; fix the dev-console "getServerSnapshot should be cached" error with a
+   test; reconcile DesignSystem §5's Framer Motion row with `package.json`. The guard tests
+   (no hard-coded colour, every documented token defined, 44px targets, the two dark
+   blocks identical) stay green.
+2. **Shell.** Typographic sidebar with an active marker and few icons; conversations with
+   relative time and hover/focus actions (always shown on coarse pointers); appearance moves
+   into an account menu; the empty inspector collapses to a slim rail.
+3. **Chat.** The answer as reading text, the question as a compact query line, superscript
+   citations with sidenotes on wide panes and inline disclosure on narrow ones (no preview
+   covering the question), a route stamp that reveals its rationale, a better composer,
+   scroll anchoring with "jump to latest", completion announced.
+4. **Inspector.** Evidence with document title, page and passage; bundle and SQL views in
+   the new vocabulary; supersession as revision marks (struck old value, new value, date).
+5. **Overview**, then a consistency pass over Knowledge, Sources, Memory, Tools, Bookmarks
+   and Audit log.
+6. **Sign-in** with identity (auth behaviour unchanged), keyboard shortcuts, and an audit of
+   empty, loading and error states.
+
+Stop and ask only for: cost, a published README number, a refused push or merge, or if the
+direction clearly fails on the real screens after slice 1 (say so with screenshots first).
+
+**Then: deployment follow-ups** (2026-09-26). The demo is live; these are what remain, in
+order. Each is maintenance, not a milestone — follow §0/§7 exactly as for milestone work.
 
 1. **Move the live VM onto RustFS** (owner approves the VM time first): `./up`, the
    `.env.prod` rename, `./redeploy main`, `deploy/gcp/migrate-minio-objects.sh`, check a

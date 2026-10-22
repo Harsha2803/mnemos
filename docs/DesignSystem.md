@@ -534,5 +534,9 @@ make touch controls accessible, and progressively add detail where space permits
   `npm run test:e2e` suite against Compose for real authentication, streaming and
   ingestion. Emulation is not real-device certification; iOS Safari/Android keyboard and
   safe-area checks remain manual QA.
+- Screenshots: `npm run screens` renders every main screen at 390 and 1440px in light and
+  dark against the fixtures in `frontend/screens/` and writes them to `docs/screens/`.
+  Re-run it with any visual change and commit the files that moved, so the pull request
+  shows the before and after.
 
 No additional visual assets, webfonts, UI framework or runtime dependency is needed.
