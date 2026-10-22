@@ -57,10 +57,40 @@ describe("the three-column shell", () => {
     expect(screen.getByRole("main")).toBeInTheDocument();
     expect(screen.getByRole("complementary", { name: "Context inspector" })).toBeInTheDocument();
 
-    // The inspector renders an EmptyState until M4 fills it, not fake rows.
-    expect(
-      screen.getByRole("heading", { level: 3, name: "No message selected" }),
-    ).toBeInTheDocument();
+    // With nothing selected the inspector is a slim rail, not an empty 320px
+    // column: present (so it stays in the reader's mental model) but quiet.
+    const inspector = screen.getByRole("complementary", { name: "Context inspector" });
+    expect(inspector).toHaveClass("w-12");
+    expect(screen.getByRole("button", { name: "Expand context inspector" })).toBeInTheDocument();
+    expect(screen.queryByRole("heading", { name: "No message selected" })).toBeNull();
+  });
+
+  it("test_the_empty_inspector_rail_opens_to_explain_itself_and_collapses_back", async () => {
+    viewport(1440);
+    renderShell();
+
+    await userEvent.click(screen.getByRole("button", { name: "Expand context inspector" }));
+
+    // Opened on request: the panel explains what it will show, and focus lands
+    // inside it rather than on the rail control that just disappeared.
+    expect(screen.getByRole("heading", { level: 3, name: "No message selected" })).toBeInTheDocument();
+    expect(screen.getByRole("heading", { level: 2, name: "Context" })).toHaveFocus();
+    expect(screen.getByRole("complementary", { name: "Context inspector" })).toHaveClass("inspector-column");
+
+    await userEvent.click(screen.getByRole("button", { name: "Collapse context inspector to a rail" }));
+    expect(screen.getByRole("button", { name: "Expand context inspector" })).toBeInTheDocument();
+  });
+
+  it("test_appearance_is_not_in_the_toolbar", () => {
+    viewport(1440);
+    renderShell();
+
+    // Set once, rarely revisited: it lives in the account menu now, and the
+    // toolbar keeps only navigation, location and inspection.
+    expect(screen.getByRole("banner")).not.toContainElement(
+      screen.queryByRole("radiogroup", { name: "Appearance" }),
+    );
+    expect(screen.queryByRole("radiogroup", { name: "Appearance" })).toBeNull();
   });
 
   it("test_the_inspector_collapses_and_reopens_on_the_desktop", async () => {
@@ -77,10 +107,10 @@ describe("the three-column shell", () => {
     // user's mental model (DesignSystem §1).
     const collapsed = screen.getByRole("complementary", { name: "Context inspector" });
     expect(collapsed).toHaveClass("w-0");
-    expect(screen.queryByRole("heading", { name: "No message selected" })).toBeNull();
+    expect(screen.queryByRole("button", { name: "Expand context inspector" })).toBeNull();
 
     await userEvent.click(screen.getByRole("button", { name: "Show context inspector" }));
-    expect(screen.getByRole("heading", { name: "No message selected" })).toBeInTheDocument();
+    expect(screen.getByRole("button", { name: "Expand context inspector" })).toBeInTheDocument();
   });
 
   it("test_the_sidebar_collapses_and_reopens_on_the_desktop", async () => {
@@ -120,6 +150,8 @@ describe("the three-column shell", () => {
     await waitFor(() =>
       expect(screen.getByRole("navigation", { name: "Workspace" })).toHaveClass("w-0"),
     );
+    // The rail has no width to resize; open the panel to reach its handle.
+    await userEvent.click(screen.getByRole("button", { name: "Expand context inspector" }));
     expect(screen.getByRole("separator", { name: "Resize the context inspector" })).toHaveAttribute(
       "aria-valuenow",
       "384",
@@ -166,9 +198,10 @@ describe("the three-column shell", () => {
     expect(handle).toHaveAttribute("aria-valuenow", "420");
   });
 
-  it("test_the_arrow_keys_resize_the_inspector_boundary_inverted", () => {
+  it("test_the_arrow_keys_resize_the_inspector_boundary_inverted", async () => {
     viewport(1440);
     renderShell();
+    await userEvent.click(screen.getByRole("button", { name: "Expand context inspector" }));
 
     // The inspector sits on the right, so its handle is on its *leading*
     // edge — the same rightward motion that grows the sidebar has to shrink
@@ -273,15 +306,17 @@ describe("the three-column shell", () => {
     }
   });
 
-  it("test_the_chrome_is_translucent_with_an_opaque_fallback", () => {
+  it("test_only_the_toolbar_is_translucent_and_it_has_an_opaque_fallback", () => {
     viewport(1440);
     renderShell();
 
-    // Both pieces of chrome opt into the material, and the material carries its
-    // fallback — translucent chrome over unblurred content is illegible, so a
-    // browser without backdrop-filter must get an opaque bar, not a see-through
-    // one (DesignSystem §2.4).
-    expect(screen.getByRole("navigation", { name: "Workspace" })).toHaveClass("material-chrome");
+    // One material, for one job (DesignSystem §2.4): content scrolls under the
+    // sticky toolbar, so it is translucent paper; nothing scrolls under the
+    // sidebar, so it is opaque. The material carries its fallback — a browser
+    // without backdrop-filter must get an opaque bar, not a see-through one.
+    const sidebar = screen.getByRole("navigation", { name: "Workspace" });
+    expect(sidebar).not.toHaveClass("material-chrome");
+    expect(sidebar).toHaveClass("bg-bg-secondary");
     expect(screen.getByRole("banner")).toHaveClass("material-chrome");
     expect(compiledCss).toMatch(
       /@supports not \(backdrop-filter: blur\(1px\)\)[\s\S]{0,200}background-color:\s*var\(--bg-secondary\)/,

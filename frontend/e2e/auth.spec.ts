@@ -152,6 +152,9 @@ test("test_signing_out_returns_to_signin_and_a_protected_route_bounces_back", as
   await signIn(page);
   await page.waitForURL(`${WEB}/`);
 
+  // Sign-out is in the account menu, whose trigger is the visible email
+  // (a substring match: the name also carries the workspace).
+  await page.getByRole("button", { name: EMAIL }).click();
   await page.getByRole("button", { name: `Sign out of ${ORG}` }).click();
   await page.waitForURL(new RegExp(`^${WEB}/signin`));
 

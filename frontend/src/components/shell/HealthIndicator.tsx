@@ -47,7 +47,7 @@ export function HealthIndicator() {
     // only seeing it if they happen to be reading the sidebar at the time.
     <p
       aria-live="polite"
-      className={`flex items-center gap-2 px-2 py-1 text-footnote ${text}`}
+      className={`flex items-center gap-2 px-3 py-1 text-caption ${text}`}
     >
       <span aria-hidden="true" className={`size-2.5 shrink-0 rounded-full ${dot}`} />
       {label}

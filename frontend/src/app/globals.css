@@ -267,6 +267,11 @@
   to   { opacity: 1; transform: translateY(0); }
 }
 
+@keyframes popover-in {
+  from { opacity: 0; transform: translateY(4px); }
+  to   { opacity: 1; transform: translateY(0); }
+}
+
 @keyframes dialog-overlay-in {
   from { opacity: 0; }
   to   { opacity: 1; }
@@ -628,6 +633,16 @@
      tokens) and an `EmptyState` replacing a loading skeleton. */
   .animate-fade-in-up {
     animation: fade-in-up var(--duration-normal) var(--ease-out);
+  }
+
+  /* A Radix `Popover` (the account menu): it rises the few pixels from the
+     trigger it belongs to, and leaves the same way. */
+  .popover-content {
+    animation: popover-in var(--duration-fast) var(--ease-out);
+  }
+
+  .popover-content[data-state="closed"] {
+    animation: popover-in var(--duration-fast) var(--ease-standard) reverse;
   }
 
   /* A Radix `Dialog`'s overlay and content, sharing one shape across every

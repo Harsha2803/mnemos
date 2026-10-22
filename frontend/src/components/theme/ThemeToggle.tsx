@@ -1,7 +1,6 @@
 "use client";
 
 import * as ToggleGroup from "@radix-ui/react-toggle-group";
-import { Monitor, Moon, Sun, type LucideIcon } from "lucide-react";
 
 import { isThemePreference, setPreference, type ThemePreference } from "@/lib/theme";
 
@@ -9,8 +8,10 @@ import { useThemePreference } from "./useThemePreference";
 
 type Option = {
   value: ThemePreference;
+  /** The accessible name. */
   label: string;
-  Icon: LucideIcon;
+  /** The visible word, always contained in `label` (WCAG 2.5.3). */
+  short: string;
 };
 
 /**
@@ -19,19 +20,18 @@ type Option = {
  * needs somewhere to click.
  */
 const OPTIONS: readonly Option[] = [
-  { value: "system", label: "Match system", Icon: Monitor },
-  { value: "light", label: "Light", Icon: Sun },
-  { value: "dark", label: "Dark", Icon: Moon },
+  { value: "system", label: "Match system", short: "System" },
+  { value: "light", label: "Light", short: "Light" },
+  { value: "dark", label: "Dark", short: "Dark" },
 ];
 
 /**
  * Three ranked choices, on Radix's ToggleGroup so roving focus and the
  * radiogroup semantics come from a component that has already got them right.
  *
- * Each option carries a text label as its accessible name, because the icons
- * alone would be the "colour is never the only signal" mistake in another form
- * — a sun and a moon are not self-evident to everyone, and to a screen reader
- * they are nothing at all.
+ * Words, not a sun and a moon: a glyph is not self-evident to everyone and is
+ * nothing at all to a screen reader. It sits in the account menu (`AccountMenu`),
+ * not the toolbar, because it is set once and rarely revisited.
  */
 export function ThemeToggle() {
   const preference = useThemePreference();
@@ -46,21 +46,21 @@ export function ThemeToggle() {
         if (isThemePreference(next)) setPreference(next);
       }}
       aria-label="Appearance"
-      className="inline-flex items-center gap-1 rounded-md bg-fill-tertiary p-1"
+      className="grid w-full grid-cols-3 rounded-md border border-separator p-0.5"
     >
-      {OPTIONS.map(({ value, label, Icon }) => (
+      {OPTIONS.map(({ value, label, short }) => (
         <ToggleGroup.Item
           key={value}
           value={value}
           aria-label={label}
           className={[
-            "hit-target inline-flex cursor-pointer items-center justify-center rounded-md",
-            "text-label-secondary transition-colors duration-150 ease-standard",
-            "hover:bg-fill-secondary hover:text-label",
-            "data-[state=on]:bg-bg data-[state=on]:text-label data-[state=on]:shadow-sm",
+            "hit-target inline-flex cursor-pointer items-center justify-center rounded-sm px-2",
+            "text-footnote text-label-secondary transition-colors duration-150 ease-standard",
+            "hover:text-label",
+            "data-[state=on]:bg-fill-secondary data-[state=on]:font-semibold data-[state=on]:text-label",
           ].join(" ")}
         >
-          <Icon className="size-[18px]" strokeWidth={1.5} aria-hidden="true" />
+          {short}
         </ToggleGroup.Item>
       ))}
     </ToggleGroup.Root>

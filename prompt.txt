@@ -8,7 +8,8 @@ Frontend only; the retrieval and compile paths stay untouched so the README benc
 stands. Deploying the result to the live demo needs the owner's yes (VM cost).
 
 Progress: slice 0 (screenshot harness) merged, PR #36. Slice 1 (foundations: palette,
-self-hosted fonts, ADR-0013, getServerSnapshot fix) — on feat/ui-foundations.
+self-hosted fonts, ADR-0013, getServerSnapshot fix) merged, PR #37. Slice 2 (shell:
+sidebar, account menu, inspector rail) — on feat/ui-shell.
 
 After the revamp: TRACKER §5's deployment follow-ups (move the VM onto RustFS only with the
 owner's yes; role binding without SQL; §4 item 40).

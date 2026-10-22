@@ -9,13 +9,13 @@
 **Last updated:** 2026-10-22 — **UI revamp run in progress** (owner-authorized, not a
 milestone): Mnemos gets its own visual identity in place of the stock AI-chat look, one
 slice per branch and PR (dated note below, §3 and §5). Slice 0, the screenshot harness,
-merged (PR #36). Slice 1, foundations (palette, self-hosted type, ADR-0013, two fixes), is on
-`feat/ui-foundations`.
-**Phase:** `C3` done (unchanged). UI revamp: slice 1 of 6. Deployment: live, with the
+merged (PR #36); slice 1, foundations, merged (PR #37). Slice 2, the shell, is on
+`feat/ui-shell`.
+**Phase:** `C3` done (unchanged). UI revamp: slice 2 of 6. Deployment: live, with the
 follow-ups in §5's second list.
 **Next task:** §5 — the UI revamp slices in order, then the deployment follow-ups. `B4`,
 `C1`, `C2` stay deliberately deferred.
-**Branch right now:** `feat/ui-foundations`. PRs #28 to #36 are merged.
+**Branch right now:** `feat/ui-shell`. PRs #28 to #37 are merged.
 
 > ### 2026-10-22 — UI revamp: a distinct identity (owner-authorized run, not a milestone)
 >
@@ -1692,7 +1692,8 @@ Not a milestone; no backend capability changes. Evidence per slice:
 | Slice | What landed | Evidence |
 |---|---|---|
 | 0 · screenshot harness | `frontend/screens/` (spec + deterministic fixtures: a cited two-turn answer, a superseded revision and memory claim, running/failed/finished jobs, a persisted bundle), `playwright.screens.config.ts`, `npm run screens` → 28 JPEGs in `docs/screens/` (7 screens × 390/1440 × light/dark), pinned clock, locale, timezone and reduced motion | `npm run screens` 28/28 on the pre-revamp UI; those files are the "before" every later PR diffs against. PR #36, merged as `dc98540` |
-| 1 · foundations | Warm paper / warm charcoal neutrals, verdigris accent (action), rubric red (provenance), new state colours, small radii, a near-opaque toolbar material; Source Serif 4 + IBM Plex Sans + Plex Mono self-hosted via `next/font/local` (111,356 bytes, latin, `swap`; [ADR-0013](docs/ArchitectureDecisionRecords/ADR-0013-self-hosted-type.md)); DesignSystem intro and §0-§2 rewritten with measured contrast on both surfaces; §5's never-installed Framer Motion row corrected to "CSS only"; `getServerSessionSnapshot` returned a new object per call, now a frozen constant | lint, typecheck clean; `npm test` 133/133 (new `session.test.ts` hydrates a session reader and fails on the old code with the exact console message); `npm run build` emits exactly the three fonts; dev console on `/signin` and `/`: 2× "getServerSnapshot should be cached" before, 0 after; `test:responsive` 12/12; `npm run screens` 28/28 |
+| 1 · foundations | Warm paper / warm charcoal neutrals, verdigris accent (action), rubric red (provenance), new state colours, small radii, a near-opaque toolbar material; Source Serif 4 + IBM Plex Sans + Plex Mono self-hosted via `next/font/local` (111,356 bytes, latin, `swap`; [ADR-0013](docs/ArchitectureDecisionRecords/ADR-0013-self-hosted-type.md)); DesignSystem intro and §0-§2 rewritten with measured contrast on both surfaces; §5's never-installed Framer Motion row corrected to "CSS only"; `getServerSessionSnapshot` returned a new object per call, now a frozen constant | lint, typecheck clean; `npm test` 133/133 (new `session.test.ts` hydrates a session reader and fails on the old code with the exact console message); `npm run build` emits exactly the three fonts; dev console on `/signin` and `/`: 2× "getServerSnapshot should be cached" before, 0 after; `test:responsive` 12/12; `npm run screens` 28/28. PR #37, merged as `8134ab1` |
+| 2 · shell | Serif wordmark; typographic sections in three groups with a rubric marker on the current one, no icons; conversations with relative time (`RelativeTime`, exact time on hover and as the link's description), full titles on hover/focus (`Truncate`, replacing the hover marquee), move/rename/delete revealed on hover/focus with a fine pointer and always shown on touch; an account menu (Radix Popover) holding identity, appearance (worded System/Light/Dark) and sign-out; toolbar shows "Chat / <conversation title>" and no theme buttons; the empty inspector is a 48px rail that opens on request and focuses its heading; leaving a conversation clears its selection; the sidebar is opaque paper and only the toolbar keeps a material. Test infrastructure: Vitest `testTimeout` 15s and Testing Library `asyncUtilTimeout` 5s, after load made a different test time out on each run | lint, typecheck clean; `npm test` 136/136 twice in a row (new: rail opens/collapses with focus, no appearance in the toolbar, selection cleared on navigation; updated to the new behaviour: three-column, collapse, resize, chrome-material, sign-out and citation tests); `test:responsive` 12/12; `npm run screens` 32/32 (new `menu` case); e2e `auth.spec.ts` opens the account menu before signing out (run at the end of the revamp) |
 
 ### ✅ Mobile-first product polish — verified locally 2026-09-10
 
@@ -3858,7 +3859,7 @@ starts, each attaching before/after images from `npm run screens`. Before each m
 viewport projects); before the last, also `npm run test:e2e` against a rebuilt Compose stack.
 
 0. ~~Screenshot harness~~ — done, PR #36 (§3).
-1. ~~**Foundations.**~~ — done on `feat/ui-foundations` (§3). An ADR superseding DesignSystem §0's "system font, no webfonts"; §0-§2
+1. ~~**Foundations.**~~ — done, PR #37 (§3). An ADR superseding DesignSystem §0's "system font, no webfonts"; §0-§2
    rewritten for the new identity (no indigo/violet, warm paper and warm charcoal neutrals,
    one meaningful accent, measured contrast rows); `globals.css` tokens; self-hosted OFL
    fonts through `next/font` (serif for reading, sans for UI, mono for metadata) with a
@@ -3866,7 +3867,7 @@ viewport projects); before the last, also `npm run test:e2e` against a rebuilt C
    test; reconcile DesignSystem §5's Framer Motion row with `package.json`. The guard tests
    (no hard-coded colour, every documented token defined, 44px targets, the two dark
    blocks identical) stay green.
-2. **Shell.** Typographic sidebar with an active marker and few icons; conversations with
+2. ~~**Shell.**~~ — done on `feat/ui-shell` (§3). Typographic sidebar with an active marker and few icons; conversations with
    relative time and hover/focus actions (always shown on coarse pointers); appearance moves
    into an account menu; the empty inspector collapses to a slim rail.
 3. **Chat.** The answer as reading text, the question as a compact query line, superscript

@@ -1,9 +1,12 @@
-import { Bookmark, Brain, FileText, LayoutGrid, MessageCircle, Plug, ScrollText, Wrench, type LucideIcon } from "lucide-react";
-
 export type Destination = {
   href: string;
   label: string;
-  Icon: LucideIcon;
+  /**
+   * Which of the three kinds of work the destination belongs to: reading and
+   * asking, the library Mnemos answers from, and operating it. The sidebar
+   * leaves a little space between groups instead of drawing an icon per row.
+   */
+  group: "read" | "library" | "operate";
 };
 
 /**
@@ -17,14 +20,14 @@ export type Destination = {
  * bar is the label in the nav by construction rather than by coincidence.
  */
 export const DESTINATIONS: readonly Destination[] = [
-  { href: "/", label: "Overview", Icon: LayoutGrid },
-  { href: "/chat", label: "Chat", Icon: MessageCircle },
-  { href: "/bookmarks", label: "Bookmarks", Icon: Bookmark },
-  { href: "/knowledge", label: "Knowledge", Icon: FileText },
-  { href: "/memory", label: "Memory", Icon: Brain },
-  { href: "/sources", label: "Sources", Icon: Plug },
-  { href: "/tools", label: "Tools", Icon: Wrench },
-  { href: "/audit", label: "Audit log", Icon: ScrollText },
+  { href: "/", label: "Overview", group: "read" },
+  { href: "/chat", label: "Chat", group: "read" },
+  { href: "/bookmarks", label: "Bookmarks", group: "read" },
+  { href: "/knowledge", label: "Knowledge", group: "library" },
+  { href: "/memory", label: "Memory", group: "library" },
+  { href: "/sources", label: "Sources", group: "library" },
+  { href: "/tools", label: "Tools", group: "operate" },
+  { href: "/audit", label: "Audit log", group: "operate" },
 ];
 
 /**
