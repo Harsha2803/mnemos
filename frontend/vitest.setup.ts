@@ -1,6 +1,6 @@
 import "@testing-library/jest-dom/vitest";
 import { afterEach, beforeEach, vi } from "vitest";
-import { cleanup } from "@testing-library/react";
+import { cleanup, configure } from "@testing-library/react";
 
 import compiledCss from "./src/app/globals.css?inline";
 import {
@@ -12,6 +12,12 @@ import {
 import { navigation, resetNavigation } from "./src/test/navigation";
 import { resetRefreshForTests } from "./src/lib/auth/refresh";
 import { resetSessionForTests } from "./src/lib/auth/session";
+
+// `findBy*` and `waitFor` give up after 1s by default. A whole-tree render with
+// real providers can take longer than that on a loaded machine, and the
+// failures it produced moved between tests from run to run with no assertion
+// wrong. 5s still fails a genuinely missing element quickly.
+configure({ asyncUtilTimeout: 5_000 });
 
 // `usePathname` returns `null` outside a router context and is harmless;
 // `useRouter` throws. From A0 the app navigates — an unauthenticated visit is
