@@ -16,7 +16,6 @@ import { Truncate } from "@/components/ui/Truncate";
 import {
   CHAT_FOLDERS_QUERY_KEY,
   createFolder,
-  createSession,
   deleteFolder,
   deleteSession,
   fetchFolders,
@@ -28,7 +27,9 @@ import {
   type Folder,
 } from "@/lib/chat/api";
 
-export const CHAT_SESSIONS_QUERY_KEY = ["chat", "sessions"] as const;
+import { CHAT_SESSIONS_QUERY_KEY, useStartNewChat } from "@/lib/chat/useStartNewChat";
+
+export { CHAT_SESSIONS_QUERY_KEY };
 
 /**
  * A row's move/rename/delete controls. With a fine pointer they sit over the
@@ -119,11 +120,7 @@ export function ChatSessionList() {
   const folders = useMemo(() => folderData?.folders ?? [], [folderData?.folders]);
   const groups = useMemo(() => groupSessions(sessions, folders), [sessions, folders]);
 
-  async function startNewChat(): Promise<void> {
-    const session = await createSession();
-    await queryClient.invalidateQueries({ queryKey: CHAT_SESSIONS_QUERY_KEY });
-    router.push(`/chat/${session.id}`);
-  }
+  const startNewChat = useStartNewChat();
 
   function startRename(session: ChatSession): void {
     setRenameError(null);
