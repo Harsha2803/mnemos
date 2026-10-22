@@ -13,55 +13,57 @@
    `@theme inline` block further down is a mapping, not a second palette.
    ========================================================================== */
 
-/* ------------------------------------------------- 2.1 colour — light */
+/* ------------------------------------------------- 2.1 colour — light
+
+   A reading room, not a chat toy: warm paper and ink in light mode, warm
+   charcoal in dark (never blue-black). Two inks with one job each:
+     · --accent (verdigris) is what you can act on — links, buttons, focus.
+     · --rubric (an editor's red, after the red ink of manuscript rubrics) is
+       provenance — citation numerals, sidenote rules, revision marks, the
+       current selection. It is never a button and never an error. */
 :root {
-  /* Accent — Mnemos indigo. One accent, for interactive affordances only, never
-     for decoration. 7.18:1 against white, so it is legible as link text and
-     takes white text when used as a fill. */
-  --accent:              #4A3FD1;
-  --accent-hover:        #3E34B8;
-  --on-accent:           #FFFFFF;
+  --accent:              #17625A;
+  --accent-hover:        #114C45;
+  --on-accent:           #FFFDF8;
 
-  /* Label hierarchy as opacity over the background, which is why these stay
-     correct on any surface — including a translucent one. */
-  --label:               rgb(17 17 26 / 1.00);
-  --label-secondary:     rgb(17 17 26 / 0.62);
-  --label-tertiary:      rgb(17 17 26 / 0.32);
-  --label-quaternary:    rgb(17 17 26 / 0.18);
+  --rubric:              #A63D1C;
+  --rubric-tint:         rgb(166 61 28 / 0.12);
 
-  /* Backgrounds, in stacking order. Faintly cool neutrals — a pure grey reads
-     clinical next to long-form text. */
-  --bg:                  #FFFFFF;
-  --bg-secondary:        #F4F5F7;
-  --bg-tertiary:         #FFFFFF;
-  --bg-grouped:          #F4F5F7;
+  /* Ink at four strengths, as opacity over the paper, so the hierarchy holds
+     on every surface. Secondary is 0.66, not 0.62: on --bg-secondary the
+     lighter value measured 4.55:1, too close to the floor. */
+  --label:               rgb(31 27 22 / 1.00);
+  --label-secondary:     rgb(31 27 22 / 0.66);
+  --label-tertiary:      rgb(31 27 22 / 0.36);
+  --label-quaternary:    rgb(31 27 22 / 0.16);
 
-  /* Fills — for controls and non-text surfaces that sit *on* a background. */
-  --fill:                rgb(17 17 26 / 0.08);
-  --fill-secondary:      rgb(17 17 26 / 0.06);
-  --fill-tertiary:       rgb(17 17 26 / 0.04);
+  /* Paper, in stacking order: the page, the desk around it (sidebar,
+     inspector), and the raised sheet (inputs, popovers). */
+  --bg:                  #FAF7F0;
+  --bg-secondary:        #F1ECE1;
+  --bg-tertiary:         #FFFDF8;
+  --bg-grouped:          #F1ECE1;
 
-  /* Hairlines. Translucent, so a separator works over any material. */
-  --separator:           rgb(17 17 26 / 0.12);
-  --separator-opaque:    #E2E3E8;
+  --fill:                rgb(31 27 22 / 0.08);
+  --fill-secondary:      rgb(31 27 22 / 0.06);
+  --fill-tertiary:       rgb(31 27 22 / 0.04);
 
-  /* State. Each has exactly one meaning in this app, and each is dark enough to
-     be used as text on --bg (measured — DesignSystem §2.1). */
-  --success:             #15703C;   /* a claim is current / a job succeeded */
-  --warning:             #9A5B00;   /* superseded, degraded, stale */
-  --danger:              #C2352E;   /* denied, failed, revoked */
-  --info:                #5B4BE1;   /* system / compiler annotation */
+  --separator:           rgb(31 27 22 / 0.14);
+  --separator-opaque:    #DDD6C8;
 
-  /* Accent at 12% — the `tinted` button rank (DesignSystem §4). A token rather
-     than a colour-mix at each call site, so the one number that defines the
-     rank lives in one place. Its hover partner deepens the tint rather than
-     shifting the hue, so the rank stays recognisable while pressed. */
-  --accent-tint:         rgb(74 63 209 / 0.12);
-  --accent-tint-hover:   rgb(74 63 209 / 0.20);
+  /* State. One meaning each, and dark enough to be read as text (measured —
+     DesignSystem §2.1). Never the only signal: each ships with a word. */
+  --success:             #3B6A1E;   /* moss: current, succeeded */
+  --warning:             #875200;   /* ochre: superseded, degraded, stale */
+  --danger:              #A8292E;   /* carmine: denied, failed, revoked */
+  --info:                #4A5A6B;   /* slate: system and compiler notes */
 
-  /* The chrome material's translucency, paired with --material-* below and
-     always with an opaque @supports fallback (DesignSystem §2.4). */
-  --chrome:              rgb(255 255 255 / 0.72);
+  --accent-tint:         rgb(23 98 90 / 0.12);
+  --accent-tint-hover:   rgb(23 98 90 / 0.18);
+
+  /* The sticky toolbar's paper, nearly opaque: content passing under it
+     should be sensed, not read. */
+  --chrome:              rgb(250 247 240 / 0.88);
 }
 
 /* ------------------------------------------------- 2.1 colour — dark
@@ -83,108 +85,117 @@
    light still gets dark — the easy half of this to ship broken. */
 @media (prefers-color-scheme: dark) {
   :root:not([data-theme="light"]) {
-    --accent:            #9B8CFF;
-    --accent-hover:      #B0A4FF;
-    --on-accent:         #14121F;
+    --accent:            #6FC1B2;
+    --accent-hover:      #8ED1C4;
+    --on-accent:         #14201D;
 
-    --label:             rgb(255 255 255 / 1.00);
-    --label-secondary:   rgb(255 255 255 / 0.62);
-    --label-tertiary:    rgb(255 255 255 / 0.32);
-    --label-quaternary:  rgb(255 255 255 / 0.16);
+    --rubric:            #EE9168;
+    --rubric-tint:       rgb(238 145 104 / 0.16);
 
-    --bg:                #0B0B0F;
-    --bg-secondary:      #16161C;
-    --bg-tertiary:       #202029;
-    --bg-grouped:        #0B0B0F;
+    --label:             rgb(240 234 222 / 1.00);
+    --label-secondary:   rgb(240 234 222 / 0.64);
+    --label-tertiary:    rgb(240 234 222 / 0.36);
+    --label-quaternary:  rgb(240 234 222 / 0.16);
 
-    --fill:              rgb(255 255 255 / 0.12);
-    --fill-secondary:    rgb(255 255 255 / 0.09);
-    --fill-tertiary:     rgb(255 255 255 / 0.06);
+    --bg:                #1A1815;
+    --bg-secondary:      #221F1B;
+    --bg-tertiary:       #2B2823;
+    --bg-grouped:        #1A1815;
 
-    --separator:         rgb(255 255 255 / 0.14);
-    --separator-opaque:  #2A2A33;
+    --fill:              rgb(240 234 222 / 0.12);
+    --fill-secondary:    rgb(240 234 222 / 0.09);
+    --fill-tertiary:     rgb(240 234 222 / 0.06);
 
-    --success:           #35C77A;
-    --warning:           #F0A02E;
-    --danger:            #FF6B6E;
-    --info:              #9B8CFF;
+    --separator:         rgb(240 234 222 / 0.14);
+    --separator-opaque:  #37332D;
 
-    --accent-tint:       rgb(155 140 255 / 0.16);
-    --accent-tint-hover: rgb(155 140 255 / 0.26);
-    --chrome:            rgb(22 22 28 / 0.72);
+    --success:           #A4C77B;
+    --warning:           #E2B35D;
+    --danger:            #F28B82;
+    --info:              #A8B5C3;
+
+    --accent-tint:       rgb(111 193 178 / 0.16);
+    --accent-tint-hover: rgb(111 193 178 / 0.26);
+    --chrome:            rgb(26 24 21 / 0.88);
   }
 }
 
 :root[data-theme="dark"] {
-  --accent:            #9B8CFF;
-  --accent-hover:      #B0A4FF;
-  --on-accent:         #14121F;
+  --accent:            #6FC1B2;
+  --accent-hover:      #8ED1C4;
+  --on-accent:         #14201D;
 
-  --label:             rgb(255 255 255 / 1.00);
-  --label-secondary:   rgb(255 255 255 / 0.62);
-  --label-tertiary:    rgb(255 255 255 / 0.32);
-  --label-quaternary:  rgb(255 255 255 / 0.16);
+  --rubric:            #EE9168;
+  --rubric-tint:       rgb(238 145 104 / 0.16);
 
-  --bg:                #0B0B0F;
-  --bg-secondary:      #16161C;
-  --bg-tertiary:       #202029;
-  --bg-grouped:        #0B0B0F;
+  --label:             rgb(240 234 222 / 1.00);
+  --label-secondary:   rgb(240 234 222 / 0.64);
+  --label-tertiary:    rgb(240 234 222 / 0.36);
+  --label-quaternary:  rgb(240 234 222 / 0.16);
 
-  --fill:              rgb(255 255 255 / 0.12);
-  --fill-secondary:    rgb(255 255 255 / 0.09);
-  --fill-tertiary:     rgb(255 255 255 / 0.06);
+  --bg:                #1A1815;
+  --bg-secondary:      #221F1B;
+  --bg-tertiary:       #2B2823;
+  --bg-grouped:        #1A1815;
 
-  --separator:         rgb(255 255 255 / 0.14);
-  --separator-opaque:  #2A2A33;
+  --fill:              rgb(240 234 222 / 0.12);
+  --fill-secondary:    rgb(240 234 222 / 0.09);
+  --fill-tertiary:     rgb(240 234 222 / 0.06);
 
-  --success:           #35C77A;
-  --warning:           #F0A02E;
-  --danger:            #FF6B6E;
-  --info:              #9B8CFF;
+  --separator:         rgb(240 234 222 / 0.14);
+  --separator-opaque:  #37332D;
 
-  --accent-tint:       rgb(155 140 255 / 0.16);
-  --accent-tint-hover: rgb(155 140 255 / 0.26);
-  --chrome:            rgb(22 22 28 / 0.72);
+  --success:           #A4C77B;
+  --warning:           #E2B35D;
+  --danger:            #F28B82;
+  --info:              #A8B5C3;
+
+  --accent-tint:       rgb(111 193 178 / 0.16);
+  --accent-tint-hover: rgb(111 193 178 / 0.26);
+  --chrome:            rgb(26 24 21 / 0.88);
 }
 
-/* ------------------------------------------------------------ 2.2 type */
-:root {
-  --font-sans: -apple-system, BlinkMacSystemFont, "Inter", "Segoe UI", Roboto,
-               "Helvetica Neue", Arial, sans-serif;
-  --font-mono: ui-monospace, "SF Mono", "JetBrains Mono", Menlo, Consolas, monospace;
+/* ------------------------------------------------------------ 2.2 type
 
-  /* Scale adapted for the desktop: a touch UI sets body at ~17pt for arm's
-     length, while a desktop web body sits at 15-16px. The ratios between steps
-     are preserved. Sizes are in rem, never px, which is what lets browser zoom
-     and OS text-size settings work. */
-  --text-large-title: 2.125rem;  /* 34px */
+   Three self-hosted faces (ADR-0013, src/app/fonts.ts): a serif for what is
+   read, a sans for what is operated, a mono for what is identified. The
+   `--font-face-*` variables come from next/font on <html>; the names after
+   them are only what renders if that variable is ever missing. */
+:root {
+  --font-serif: var(--font-face-serif), "Source Serif 4", Georgia, "Times New Roman", serif;
+  --font-sans:  var(--font-face-sans), "IBM Plex Sans", system-ui, "Segoe UI", Roboto, Arial, sans-serif;
+  --font-mono:  var(--font-face-mono), "IBM Plex Mono", ui-monospace, Menlo, Consolas, monospace;
+
+  /* Sizes in rem, never px, which is what lets browser zoom and OS text-size
+     settings work. */
+  --text-large-title: 2.125rem;  /* 34px, serif page titles */
   --text-title-1:     1.75rem;   /* 28px */
   --text-title-2:     1.375rem;  /* 22px */
   --text-title-3:     1.25rem;   /* 20px */
   --text-headline:    1rem;      /* 16px, 600 weight */
   --text-body:        1rem;      /* 16px, 400 */
+  --text-reading:     1.0625rem; /* 17px, serif answers and passages */
   --text-callout:     0.9375rem; /* 15px */
   --text-subheadline: 0.875rem;  /* 14px */
   --text-footnote:    0.8125rem; /* 13px */
-  --text-caption:     0.75rem;   /* 12px */
+  --text-caption:     0.75rem;   /* 12px, the floor for anything read */
 
-  --leading-tight: 1.2;   /* titles */
-  --leading-normal: 1.5;  /* UI text */
-  --leading-relaxed: 1.6; /* message bodies and document text */
+  --leading-tight: 1.2;    /* titles */
+  --leading-normal: 1.5;   /* interface text */
+  --leading-relaxed: 1.65; /* serif reading text */
 
-  /* Tracking tightens as size grows — large text at default tracking reads loose. */
-  --tracking-title: -0.022em;
-  --tracking-body:  -0.011em;
+  /* Plex and Source Serif are drawn for default tracking; only display sizes
+     tighten. Caps labels (mono, uppercase) open up so they read as labels. */
+  --tracking-title: -0.012em;
+  --tracking-body:  0em;
+  --tracking-caps:  0.08em;
 
-  /* The measure. Past ~75 characters the eye loses its place on the return
-     sweep, so this is a legibility control, not a layout preference. */
+  /* The page measure, and the narrower one for running serif text: past ~75
+     characters the eye loses its place on the return sweep. */
   --measure: 46rem;
+  --measure-reading: 36rem;
 
-  /* The chat conversation column's own width — wider than the prose measure,
-     because it is chrome (the composer, its flow annotations, `SqlPanel`'s
-     tabular data) as much as it is prose. Each bubble still clamps to
-     `--measure` on its own (`MessageBubble.tsx`), so a line of text is never
-     wider even though the column around it is. */
+  /* The conversation column: reading text plus a margin for sidenotes. */
   --chat-measure: 64rem;
 }
 
@@ -202,26 +213,28 @@
   --space-16: 4rem;    /* 64px */
 }
 
-/* ------------------------------------- 2.4 radius, materials, elevation */
+/* ------------------------------------- 2.4 radius, materials, elevation
+
+   Paper has corners. Radii are small and rules do the grouping; a rounded
+   card around everything is the template look this system replaces. */
 :root {
-  --radius-sm: 6px;    /* tags, small badges */
-  --radius-md: 10px;   /* buttons, inputs */
-  --radius-lg: 14px;   /* cards, message bubbles */
-  --radius-xl: 20px;   /* sheets, modals */
+  --radius-sm: 2px;    /* stamps, marks, small badges */
+  --radius-md: 4px;    /* buttons, inputs */
+  --radius-lg: 6px;    /* panels, sheets of content */
+  --radius-xl: 10px;   /* dialogs */
   --radius-full: 9999px;
 
-  /* Materials. Translucency + a saturation boost is what makes chrome read as
-     glass rather than as a grey box: the saturate() does as much work as the
-     blur. */
-  --material-thin:    saturate(180%) blur(20px);
-  --material-regular: saturate(180%) blur(30px);
-  --material-thick:   saturate(180%) blur(40px);
+  /* Only the sticky toolbar uses a material: enough blur that text scrolling
+     beneath it does not read through. */
+  --material-thin:    saturate(110%) blur(8px);
+  --material-regular: saturate(110%) blur(14px);
+  --material-thick:   saturate(110%) blur(24px);
 
-  /* Elevation is deliberately restrained: material and hairlines separate
-     layers first, shadow last. */
-  --shadow-sm: 0 1px 2px rgb(0 0 0 / 0.04), 0 1px 3px rgb(0 0 0 / 0.06);
-  --shadow-md: 0 2px 8px rgb(0 0 0 / 0.06), 0 4px 16px rgb(0 0 0 / 0.08);
-  --shadow-lg: 0 8px 32px rgb(0 0 0 / 0.12);
+  /* Shadow is for things that float over the page (popovers, dialogs,
+     sheets) and nothing else. Warm, low and short. */
+  --shadow-sm: 0 1px 2px rgb(20 16 10 / 0.06);
+  --shadow-md: 0 2px 6px rgb(20 16 10 / 0.08), 0 8px 24px rgb(20 16 10 / 0.08);
+  --shadow-lg: 0 12px 40px rgb(20 16 10 / 0.18);
 }
 
 /* ---------------------------------------------------------- 2.5 motion */
@@ -302,6 +315,8 @@
   --color-accent-tint:       var(--accent-tint);
   --color-accent-tint-hover: var(--accent-tint-hover);
   --color-on-accent:         var(--on-accent);
+  --color-rubric:            var(--rubric);
+  --color-rubric-tint:       var(--rubric-tint);
 
   --color-label:             var(--label);
   --color-label-secondary:   var(--label-secondary);
@@ -325,8 +340,9 @@
   --color-danger:            var(--danger);
   --color-info:              var(--info);
 
-  --font-sans: var(--font-sans);
-  --font-mono: var(--font-mono);
+  --font-sans:  var(--font-sans);
+  --font-serif: var(--font-serif);
+  --font-mono:  var(--font-mono);
 
   --text-large-title: var(--text-large-title);
   --text-title-1:     var(--text-title-1);
@@ -334,6 +350,7 @@
   --text-title-3:     var(--text-title-3);
   --text-headline:    var(--text-headline);
   --text-body:        var(--text-body);
+  --text-reading:     var(--text-reading);
   --text-callout:     var(--text-callout);
   --text-subheadline: var(--text-subheadline);
   --text-footnote:    var(--text-footnote);
@@ -345,6 +362,7 @@
 
   --tracking-title: var(--tracking-title);
   --tracking-body:  var(--tracking-body);
+  --tracking-caps:  var(--tracking-caps);
 
   /* The 8pt rhythm. Tailwind multiplies this by the numeric suffix, so `p-4` is
      exactly --space-4 (1rem) and `gap-2` is exactly --space-2. §2.3 and the
@@ -410,8 +428,10 @@
     border-radius: var(--radius-sm);
   }
 
+  /* Selection is a mark the reader makes on the page, so it takes the
+     rubric, the same ink as every other provenance mark. */
   ::selection {
-    background-color: var(--accent-tint);
+    background-color: var(--rubric-tint);
   }
 }
 
@@ -523,6 +543,11 @@
   /* The readable measure for long-form content (DesignSystem §2.2). */
   .measure {
     max-width: var(--measure);
+  }
+
+  /* Running serif text: answers, quoted passages, document excerpts. */
+  .measure-reading {
+    max-width: var(--measure-reading);
   }
 
   /* The wider chat-column measure, §2.2's note above `--chat-measure`. */

@@ -45,6 +45,12 @@ let accessToken: string | null = null;
 // freshly-built object on each read would loop forever.
 let snapshot: SessionSnapshot = { status: "unknown", identity: null };
 
+// The server snapshot is a constant for the same reason: React calls
+// `getServerSnapshot` on every hydration render and compares by identity, so a
+// fresh object per call is reported as "should be cached to avoid an infinite
+// loop" in the console of every page.
+const SERVER_SNAPSHOT: SessionSnapshot = Object.freeze({ status: "unknown", identity: null });
+
 const listeners = new Set<() => void>();
 
 function publish(next: SessionSnapshot): void {
@@ -69,7 +75,7 @@ export function getSessionSnapshot(): SessionSnapshot {
  * server would flash a sign-in screen at somebody who is signed in.
  */
 export function getServerSessionSnapshot(): SessionSnapshot {
-  return { status: "unknown", identity: null };
+  return SERVER_SNAPSHOT;
 }
 
 /** The token the fetch layer attaches. Deliberately not exported to React. */

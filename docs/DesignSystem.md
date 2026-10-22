@@ -4,185 +4,189 @@
 > [`CodingStandards.md`](CodingStandards.md): rules, with the reason attached, because a
 > rule whose rationale is unknown gets worked around the first time it is inconvenient.
 
-This is **Mnemos's own design system**. Its reference point is Apple's
-[Design Resources](https://developer.apple.com/design/resources/) and
-[Human Interface Guidelines](https://developer.apple.com/design/human-interface-guidelines) —
-studied as a source of ideas about typography, spatial rhythm, materials and interaction
-character, and adapted here for a desktop web app.
+This is **Mnemos's own design system**. Its discipline came from studying Apple's
+[Human Interface Guidelines](https://developer.apple.com/design/human-interface-guidelines):
+tokens as the single source, an 8pt rhythm, semantic colour roles, accessibility floors and
+a measured contrast table. That discipline stays. Its **look** does not come from Apple or
+from any other product: since 2026-10-22 the identity is drawn from what Mnemos is about.
 
-**It is not an Apple product, does not imitate one, and claims no association.** Where the
-sections below cite Apple, they cite a *technique* — a type scale, an opacity model for
-text hierarchy, a three-column layout — not a look to be reproduced. Mnemos should feel
-considered and native-quality on a Mac; it should not be mistaken for an Apple app.
+**The idea: a reading room for provenance.** Mnemos answers from documents and data and
+shows where each claim came from: which revision, which passage, what was admitted to the
+prompt and what was excluded, which fact superseded which. So the interface borrows from
+the things people already use to read with provenance: a well-set book, a scholarly
+apparatus, an archive's revision marks. It is calm, precise and editorial. It is not a chat
+toy, and it should not be mistaken for any assistant product.
 
 ---
 
-## 0. What we adopt, and what we do not
+## 0. What we keep, what we chose, and what we refuse
 
-**Adopted, because each solves a problem this app actually has:**
+**Kept from the HIG study, because each solves a problem this app has:**
 
-| Idea | What we take | Why it earns its place here |
+| Idea | What we keep | Why |
 |---|---|---|
-| **Typography** | The system font stack, and a type scale with tight tracking at large sizes | Mnemos displays provenance — which revision, which tag, which claim superseded which. That is detail that must be *readable*, and a real hierarchy is what makes it scannable |
-| **Spatial rhythm** | An 8pt grid with 4pt half-steps | Consistent rhythm is what makes an interface feel composed rather than assembled. Invisible until one component opts out |
-| **Semantic colour** | Roles (`--label-secondary`) rather than literals (`--gray-600`), expressed as opacity over the background | Opacity-based labels stay correct on *any* surface, including translucent ones — which a literal grey does not |
-| **Materials** | Translucency + saturation for chrome, with an opaque fallback | Lets the sidebar and toolbar recede so the conversation is the loudest thing on screen |
-| **Depth over decoration** | Layers and hairlines carry hierarchy; shadows are a last resort | The context bundle sits *behind* the answer. A panel that slides over says that without a sentence of explanation |
-| **Motion character** | Purposeful, quick, spring-like; reduced-motion honoured absolutely | Motion should say where a thing came from, not perform personality |
-| **Accessibility floors** | 44px targets, visible focus, contrast minimums, never colour alone | Cheap while a component is being written, expensive across forty of them |
-| **Three-column layout** | Sidebar / content / inspector | §1 — it happens to be this product's information architecture exactly |
+| **Semantic colour** | Roles (`--label-secondary`) rather than literals, labels as opacity over the background | A role survives a redesign; this revamp changed every value and no component |
+| **Spatial rhythm** | An 8pt grid with 4pt half-steps | Rhythm is invisible until one component opts out |
+| **Accessibility floors** | 44px targets, visible focus, measured contrast, never colour alone | Cheap while a component is written, expensive across forty |
+| **Three columns** | Sidebar / content / inspector | It is this product's information architecture (§1) |
+| **Motion that explains** | Short, causal, reduced-motion absolute | Motion says where a thing came from |
 
-**Not adopted — two of these are practical constraints on assets, not stylistic choices:**
+**Chosen for Mnemos (2026-10-22):**
 
-| Not used | Why | Instead |
+| Element | Choice | Why |
 |---|---|---|
-| **SF Pro as a webfont** | Apple's font licence covers apps on Apple platforms, not general web distribution | The **system font stack** (`-apple-system`, `BlinkMacSystemFont`). It renders as SF on Apple devices because the OS already has it, and degrades cleanly elsewhere. **Inter** (SIL OFL) as the explicit fallback — this is the right answer anyway, since a system font needs no download at all |
-| **SF Symbols** | Same asset-licence boundary | **Lucide** (ISC). Consistent 1.5px stroke, geometrically similar, tree-shakeable React components |
-| **Apple's visual identity** | We are building our own product, not a lookalike | Our own accent, our own iconography, our own voice. The *system* is borrowed; the *identity* is ours |
+| **Neutrals** | Warm paper (`#FAF7F0`) and ink in light; warm charcoal (`#1A1815`) in dark | Long reading on cool white or blue-black is the default look of every AI app; paper reads as a page |
+| **Accent** | **Verdigris** (`#17625A` / `#6FC1B2`): only for what you can act on | One meaningful ink for interaction. No indigo, violet or blue-violet anywhere |
+| **Rubric** | An **editor's red** (`#A63D1C` / `#EE9168`): citation numerals, sidenote rules, revision marks, selection | Manuscripts set rubrics in red ink to mark structure. Here it marks provenance, and only provenance |
+| **Type** | Source Serif 4 to read, IBM Plex Sans to operate, IBM Plex Mono to identify, all self-hosted ([ADR-0013](ArchitectureDecisionRecords/ADR-0013-self-hosted-type.md)) | The system stack rendered as Arial for most visitors; three roles of text want three faces |
+| **Surfaces** | Rules and whitespace group things; small radii; shadow only for what floats | A rounded grey card around everything is the template look this replaces |
+| **Icons** | Lucide, sparingly: where a word would be worse (close, disclosure chevrons, status glyphs) | An icon on every nav row and action is noise that makes nothing lead |
+
+**Refused:**
+
+| Not used | Why |
+|---|---|
+| **SF Pro, SF Symbols, any Apple asset** | Apple's font and symbol licences cover Apple platforms, not web distribution |
+| **Purple, indigo or blue-violet; gradients; glow; sparkle icons** | The visual shorthand of generated AI interfaces; none of it carries meaning here |
+| **Chat-app vocabulary** | Right-aligned tinted user bubbles, grey assistant blocks, pill composers with round arrow buttons. Mnemos's answer is a document with an apparatus, not a message |
+| **Imitating any product** | Not Claude, ChatGPT, Linear, Notion or anything else. The vocabulary comes from books and archives |
 
 ---
 
 ## 1. The three ideas the system is built on
 
-Apple's HIG organises itself around **clarity, deference and depth**. Those three happen
-to describe what this product needs, which is why they are the frame here rather than
-some other vocabulary.
+**The page leads.** The answer, the passage, the document is the loudest thing on screen.
+Chrome is typographic and quiet: words and rules rather than boxes and icons. A row does
+not need a filled background to be a row.
 
-**Deference — the UI defers to the content.** The content is a conversation and the
-documents behind it. Chrome should be quiet: hairline separators, translucent toolbars, no
-box drawn around something whitespace has already grouped. Every pixel of decoration
-competes with a citation.
+**Provenance is visible and has its own ink.** Everything that says *where a claim came
+from* is set in the rubric: the superscript numeral, the sidenote's rule, the struck old
+value beside the new one. A reader learns one colour and can then find every source on
+the page by it.
 
-**Clarity — legibility over density.** See the typography row above. Generous line height,
-a real hierarchy, and colour used to signal state rather than to decorate.
-
-**Depth — layers communicate hierarchy.** The context bundle is *behind* the answer, and an
-inspector that slides in from the right, on a material background, communicates that
-relationship structurally.
+**Weight makes hierarchy.** One thing per region leads, by face, weight or size, and
+everything else steps back. Serif for what is read, sans for what is operated, mono caps
+for labels and identifiers. When everything is a 44px grey box, nothing leads.
 
 ### The layout follows from this
 
-The sidebar / content / inspector arrangement is not a stylistic borrowing — it is this
-product's information architecture:
-
 ```
-┌────────────┬──────────────────────────────┬──────────────┐
-│  Sidebar   │  Content                     │  Inspector   │
-│            │                              │              │
-│ conversa-  │  the conversation            │  the context │
-│ tions,     │  messages, citations,        │  bundle for  │
-│ folders,   │  the composer                │  the selected│
-│ knowledge, │                              │  message     │
-│ sources    │                              │              │
-│            │                              │  (collapsible│
-│ 260px      │  fluid, max 46rem readable   │   320px)     │
-└────────────┴──────────────────────────────┴──────────────┘
+┌────────────┬────────────────────────────────────┬──────────────┐
+│  Sidebar   │  Content                           │  Inspector   │
+│            │                                    │              │
+│ wordmark,  │  the answer as reading text,       │  evidence,   │
+│ sections,  │  sidenotes in the margin,          │  bundle, SQL │
+│ conver-    │  the composer                      │  for the     │
+│ sations    │                                    │  selection   │
+│            │                                    │              │
+│ 260px      │  fluid; text at 36rem + margin     │  320px, or a │
+│            │                                    │  slim rail   │
+└────────────┴────────────────────────────────────┴──────────────┘
 ```
 
-The inspector is the feature. It gets a permanent home on the right — the conventional
-place for one on the desktop — and it collapses rather than disappearing from the mental
-model.
+The inspector is the feature. It keeps its place on the right and its place in the
+reader's mental model; with nothing selected it is a slim rail, not an empty panel.
 
 ---
 
 ## 2. Tokens
 
-Everything below is a CSS custom property, and these values are **ours** — derived from
-studying the reference material, then tuned for a desktop web app. **No component
-hard-codes a colour, a radius, or a spacing value.** A magic number in a component is a value that cannot be themed and
-will drift from its neighbours.
+Everything below is a CSS custom property in `frontend/src/app/globals.css`, and the
+values here are copied from it. **No component hard-codes a colour, a radius, or a spacing
+value.** A magic number in a component is a value that cannot be themed and will drift
+from its neighbours.
 
 ### 2.1 Colour — semantic, never literal
 
-Semantic roles, not a palette. `--label-secondary` survives a redesign; `--gray-600` does
-not, because the next redesign changes which grey it should be.
-
 ```css
 :root {
-  /* Accent — Mnemos indigo. One accent, for interactive affordances only, never for
-     decoration. 7.18:1 against white, so it is legible as link text and takes white
-     text when used as a fill. */
-  --accent:              #4A3FD1;
-  --accent-hover:        #3E34B8;
-  --on-accent:           #FFFFFF;
+  /* Verdigris: what you can act on. Links, buttons, focus. */
+  --accent:              #17625A;
+  --accent-hover:        #114C45;
+  --on-accent:           #FFFDF8;
 
-  /* Label hierarchy as opacity over the background, which is why these stay correct on
-     any surface — including a translucent one. */
-  --label:               rgb(17 17 26 / 1.00);
-  --label-secondary:     rgb(17 17 26 / 0.62);
-  --label-tertiary:      rgb(17 17 26 / 0.32);
-  --label-quaternary:    rgb(17 17 26 / 0.18);
+  /* The rubric: provenance. Citation numerals, sidenote rules, revision
+     marks, the current selection. Never a button and never an error. */
+  --rubric:              #A63D1C;
+  --rubric-tint:         rgb(166 61 28 / 0.12);
 
-  /* Backgrounds, in stacking order. Faintly cool neutrals — a pure grey reads clinical
-     next to long-form text. */
-  --bg:                  #FFFFFF;
-  --bg-secondary:        #F4F5F7;
-  --bg-tertiary:         #FFFFFF;
-  --bg-grouped:          #F4F5F7;
+  /* Ink at four strengths, as opacity over the paper. */
+  --label:               rgb(31 27 22 / 1.00);
+  --label-secondary:     rgb(31 27 22 / 0.66);
+  --label-tertiary:      rgb(31 27 22 / 0.36);
+  --label-quaternary:    rgb(31 27 22 / 0.16);
 
-  /* Fills — for controls and non-text surfaces that sit *on* a background. */
-  --fill:                rgb(17 17 26 / 0.08);
-  --fill-secondary:      rgb(17 17 26 / 0.06);
-  --fill-tertiary:       rgb(17 17 26 / 0.04);
+  /* Paper in stacking order: the page, the desk around it (sidebar,
+     inspector), the raised sheet (inputs, popovers). */
+  --bg:                  #FAF7F0;
+  --bg-secondary:        #F1ECE1;
+  --bg-tertiary:         #FFFDF8;
+  --bg-grouped:          #F1ECE1;
 
-  /* Hairlines. Translucent, so a separator works over any material. */
-  --separator:           rgb(17 17 26 / 0.12);
-  --separator-opaque:    #E2E3E8;
+  --fill:                rgb(31 27 22 / 0.08);
+  --fill-secondary:      rgb(31 27 22 / 0.06);
+  --fill-tertiary:       rgb(31 27 22 / 0.04);
 
-  /* State. Each has exactly one meaning in this app, and each is dark enough to be used
-     as text on --bg (measured, see below). */
-  --success:             #15703C;   /* a claim is current / a job succeeded */
-  --warning:             #9A5B00;   /* superseded, degraded, stale */
-  --danger:              #C2352E;   /* denied, failed, revoked */
-  --info:                #5B4BE1;   /* system / compiler annotation */
+  --separator:           rgb(31 27 22 / 0.14);
+  --separator-opaque:    #DDD6C8;
 
-  /* Accent at 12% — the `tinted` button rank (§4), as a token rather than a
-     colour-mix at each call site, so the one number that defines the rank lives
-     in one place. The hover partner deepens the tint instead of shifting hue,
-     so the rank stays recognisable while pressed. */
-  --accent-tint:         rgb(74 63 209 / 0.12);
-  --accent-tint-hover:   rgb(74 63 209 / 0.20);
+  /* State: one meaning each, dark enough to read as text. */
+  --success:             #3B6A1E;   /* moss: current, succeeded */
+  --warning:             #875200;   /* ochre: superseded, degraded, stale */
+  --danger:              #A8292E;   /* carmine: denied, failed, revoked */
+  --info:                #4A5A6B;   /* slate: system and compiler notes */
 
-  /* The chrome material's own translucency. Always paired with --material-*
-     and the opaque @supports fallback in §2.4. */
-  --chrome:              rgb(255 255 255 / 0.72);
+  --accent-tint:         rgb(23 98 90 / 0.12);
+  --accent-tint-hover:   rgb(23 98 90 / 0.18);
+
+  /* The sticky toolbar's paper. */
+  --chrome:              rgb(250 247 240 / 0.88);
 }
 
 @media (prefers-color-scheme: dark) {
   :root {
-    --accent:            #9B8CFF;
-    --accent-hover:      #B0A4FF;
-    --on-accent:         #14121F;
+    --accent:            #6FC1B2;
+    --accent-hover:      #8ED1C4;
+    --on-accent:         #14201D;
 
-    --label:             rgb(255 255 255 / 1.00);
-    --label-secondary:   rgb(255 255 255 / 0.62);
-    --label-tertiary:    rgb(255 255 255 / 0.32);
-    --label-quaternary:  rgb(255 255 255 / 0.16);
+    --rubric:            #EE9168;
+    --rubric-tint:       rgb(238 145 104 / 0.16);
 
-    /* Surfaces get *lighter* as they stack. */
-    --bg:                #0B0B0F;
-    --bg-secondary:      #16161C;
-    --bg-tertiary:       #202029;
-    --bg-grouped:        #0B0B0F;
+    --label:             rgb(240 234 222 / 1.00);
+    --label-secondary:   rgb(240 234 222 / 0.64);
+    --label-tertiary:    rgb(240 234 222 / 0.36);
+    --label-quaternary:  rgb(240 234 222 / 0.16);
 
-    --fill:              rgb(255 255 255 / 0.12);
-    --fill-secondary:    rgb(255 255 255 / 0.09);
-    --fill-tertiary:     rgb(255 255 255 / 0.06);
+    /* Warm charcoal, lighter as it stacks. */
+    --bg:                #1A1815;
+    --bg-secondary:      #221F1B;
+    --bg-tertiary:       #2B2823;
+    --bg-grouped:        #1A1815;
 
-    --separator:         rgb(255 255 255 / 0.14);
-    --separator-opaque:  #2A2A33;
+    --fill:              rgb(240 234 222 / 0.12);
+    --fill-secondary:    rgb(240 234 222 / 0.09);
+    --fill-tertiary:     rgb(240 234 222 / 0.06);
 
-    --success:           #35C77A;
-    --warning:           #F0A02E;
-    --danger:            #FF6B6E;
-    --info:              #9B8CFF;
+    --separator:         rgb(240 234 222 / 0.14);
+    --separator-opaque:  #37332D;
 
-    --accent-tint:       rgb(155 140 255 / 0.16);
-    --accent-tint-hover: rgb(155 140 255 / 0.26);
-    --chrome:            rgb(22 22 28 / 0.72);
+    --success:           #A4C77B;
+    --warning:           #E2B35D;
+    --danger:            #F28B82;
+    --info:              #A8B5C3;
+
+    --accent-tint:       rgb(111 193 178 / 0.16);
+    --accent-tint-hover: rgb(111 193 178 / 0.26);
+    --chrome:            rgb(26 24 21 / 0.88);
   }
 }
 ```
+
+**Two inks, two jobs.** If it can be clicked to *do* something, it is verdigris. If it says
+*where something came from*, it is the rubric. A citation numeral is both clickable and
+provenance; it is set in the rubric because provenance is what the reader is scanning for,
+and its hover and focus states are what say it can be clicked. Danger is carmine, a
+different hue from the rubric, and never appears without a word or a glyph beside it.
 
 **The dark block is declared twice in `globals.css`, and that is deliberate.** The
 `@media` copy is scoped `:root:not([data-theme="light"])` and is the default and the
@@ -193,80 +197,94 @@ is the easy half of this to ship broken. The two copies must stay identical, and
 `theme.test.ts` asserts that they are, so drift is a test failure rather than one subtly
 wrong shade in one mode.
 
-**These ratios are measured, not asserted.** Against `--bg` in each theme:
+**These ratios are measured, not asserted** (WCAG relative luminance, composited over the
+surface where a token has alpha). Against `--bg` and against `--bg-secondary`, the two
+surfaces text actually sits on:
 
-| Token | Light on `#FFFFFF` | Dark on `#0B0B0F` |
-|---|---|---|
-| `--accent` | **7.18** | **7.10** |
-| `--success` | **6.15** | **8.98** |
-| `--warning` | **5.43** | **9.14** |
-| `--danger` | **5.47** | **7.09** |
-| `--info` | **5.93** | **7.10** |
+| Token | Light on `#FAF7F0` | Light on `#F1ECE1` | Dark on `#1A1815` | Dark on `#221F1B` |
+|---|---|---|---|---|
+| `--label` | **16.00** | **14.53** | **14.79** | **13.70** |
+| `--label-secondary` | **5.35** | **5.14** | **6.68** | **6.38** |
+| `--accent` | **6.70** | **6.08** | **8.39** | **7.77** |
+| `--rubric` | **5.94** | **5.39** | **7.50** | **6.94** |
+| `--success` | **6.01** | **5.46** | **9.31** | **8.62** |
+| `--warning` | **6.06** | **5.51** | **9.14** | **8.47** |
+| `--danger` | **6.50** | **5.90** | **7.42** | **6.87** |
+| `--info` | **6.62** | **6.01** | **8.49** | **7.86** |
 
-All clear the 4.5:1 body-text floor (§3), which is why the state colours are darker in
-light mode than a status colour usually is — they have to survive being used as *text*,
-not only as a dot. If you add a token, measure it and add the row; do not eyeball it.
+Every row clears the 4.5:1 body-text floor (§3) on both surfaces. `--label-secondary` is
+0.66 in light rather than the usual 0.62 because 0.62 measured 4.55 on `--bg-secondary`,
+which is too close to the floor to survive a slightly different screen. `--label-tertiary`
+(about 2.1 light, 3.3 dark) is decorative: rules, placeholders, disabled glyphs, never text
+a user must read. If you add a token, measure it and add the row; do not eyeball it.
 
-The three tokens that are *surfaces* rather than text are measured against the text they
-carry, composited over `--bg`, because that is the pair a reader actually sees:
+Pairs where the surface is itself a token, composited over `--bg`:
 
 | Pair | Light | Dark |
 |---|---|---|
-| `--on-accent` on `--accent` — the `filled` button | **7.18** | **6.68** |
-| `--accent` on `--accent-tint` — the `tinted` button | **5.95** | **5.74** |
-| `--accent` on `--accent-tint-hover` — tinted, hovered | **5.21** | **4.73** |
-| `--label` on `--chrome` over `--bg` — sidebar and toolbar text | **18.77** | **18.52** |
+| `--on-accent` on `--accent` — the `filled` button | **7.05** | **7.93** |
+| `--accent` on `--accent-tint` — the `tinted` button | **5.60** | **6.21** |
+| `--accent` on `--accent-tint-hover` — tinted, hovered | **5.09** | **4.92** |
+| `--rubric` on `--rubric-tint` — a selected citation | **4.97** | **5.67** |
+| `--label` on `--rubric-tint` — selected or highlighted text | **13.38** | **11.19** |
+| `--label` on `--chrome` over `--bg` — toolbar text | **16.00** | **14.79** |
 
-The tinted-hover row is the tightest at 4.73 and it is the one to watch: deepening the
-tint any further to make the hover more obvious would push it under the floor.
+The two to watch are the dark tinted-hover (4.92) and the light rubric-on-tint (4.97):
+deepening either tint to make a state more obvious would push it toward the floor.
 
 **Dark mode is not an inversion.** Dark surfaces get *lighter* as they stack
-(`#000` → `#1C1C1E` → `#2C2C2E`) while light surfaces get subtly darker. Inverting a light
-theme produces the wrong depth cues. A `[data-theme]` attribute on `<html>` must override
-the media query in **both** directions so an explicit user choice wins.
+(`#1A1815` → `#221F1B` → `#2B2823`) while light surfaces get subtly darker. A
+`[data-theme]` attribute on `<html>` must override the media query in **both** directions
+so an explicit user choice wins.
 
 ### 2.2 Type
 
 ```css
 :root {
-  --font-sans: -apple-system, BlinkMacSystemFont, "Inter", "Segoe UI", Roboto,
-               "Helvetica Neue", Arial, sans-serif;
-  --font-mono: ui-monospace, "SF Mono", "JetBrains Mono", Menlo, Consolas, monospace;
+  --font-serif: var(--font-face-serif), "Source Serif 4", Georgia, "Times New Roman", serif;
+  --font-sans:  var(--font-face-sans), "IBM Plex Sans", system-ui, "Segoe UI", Roboto, Arial, sans-serif;
+  --font-mono:  var(--font-face-mono), "IBM Plex Mono", ui-monospace, Menlo, Consolas, monospace;
 
-  /* Scale adapted for the desktop: a touch UI sets body at ~17pt for arm's length,
-     while a desktop web body sits at 15-16px. The ratios between steps are preserved. */
-  --text-large-title: 2.125rem;  /* 34px */
+  --text-large-title: 2.125rem;  /* 34px, serif page titles */
   --text-title-1:     1.75rem;   /* 28px */
   --text-title-2:     1.375rem;  /* 22px */
   --text-title-3:     1.25rem;   /* 20px */
   --text-headline:    1rem;      /* 16px, 600 weight */
   --text-body:        1rem;      /* 16px, 400 */
+  --text-reading:     1.0625rem; /* 17px, serif answers and passages */
   --text-callout:     0.9375rem; /* 15px */
   --text-subheadline: 0.875rem;  /* 14px */
   --text-footnote:    0.8125rem; /* 13px */
-  --text-caption:     0.75rem;   /* 12px */
+  --text-caption:     0.75rem;   /* 12px, the floor for anything read */
 
-  --leading-tight: 1.2;   /* titles */
-  --leading-normal: 1.5;  /* UI text */
-  --leading-relaxed: 1.6; /* message bodies and document text */
+  --leading-tight: 1.2;    /* titles */
+  --leading-normal: 1.5;   /* interface text */
+  --leading-relaxed: 1.65; /* serif reading text */
 
-  /* Tracking tightens as size grows — large text set at default tracking reads loose. */
-  --tracking-title: -0.022em;
-  --tracking-body:  -0.011em;
+  --tracking-title: -0.012em;
+  --tracking-body:  0em;
+  --tracking-caps:  0.08em;
 
-  /* The measure, as a token rather than a number repeated at each call site. */
   --measure: 46rem;
+  --measure-reading: 36rem;
+  --chat-measure: 64rem;
 }
 ```
 
-**Rules.** Sizes in `rem`, never `px` — that is what lets browser zoom and OS text-size
-settings work, and it is the web's stand-in for Dynamic Type. **Never go below
-`--text-caption` (12px)** for anything a user must read. Weight carries hierarchy before
-size does: a 600-weight headline at body size beats a bigger, lighter one.
+**Three faces, three roles** ([ADR-0013](ArchitectureDecisionRecords/ADR-0013-self-hosted-type.md)).
+`font-serif` for what is *read*: answers, quoted passages, document excerpts, page titles
+and the wordmark. `font-sans` (the body default) for what is *operated*: navigation,
+labels, buttons, forms. `font-mono` for what *identifies*: IDs, digests, SQL, page and
+character ranges, and the small uppercase labels (`--tracking-caps`) that name a field or
+stamp a route. The faces load from committed files (`frontend/src/app/fonts/`, 109 KB in
+total), never from a font CDN.
 
-Message and document text uses `--leading-relaxed` and a **`max-width: 46rem`** measure.
-Line length is a legibility control, not a layout preference: past ~75 characters the eye
-loses its place on the return sweep.
+**Rules.** Sizes in `rem`, never `px`, so browser zoom and OS text-size settings work.
+**Never go below `--text-caption` (12px)** for anything a user must read. Weight carries
+hierarchy before size does. Running serif text uses `--text-reading`, `--leading-relaxed`
+and `--measure-reading` (36rem, about 70 characters of Source Serif at 17px): line length
+is a legibility control, not a layout preference. Plex and Source Serif are drawn for
+default tracking, so body text is not tightened; only display sizes are.
 
 ### 2.3 Spacing — 8pt rhythm, 4pt half-steps
 
@@ -293,44 +311,41 @@ opts out.
 
 ```css
 :root {
-  --radius-sm: 6px;    /* tags, small badges */
-  --radius-md: 10px;   /* buttons, inputs */
-  --radius-lg: 14px;   /* cards, message bubbles */
-  --radius-xl: 20px;   /* sheets, modals */
+  --radius-sm: 2px;    /* stamps, marks, small badges */
+  --radius-md: 4px;    /* buttons, inputs */
+  --radius-lg: 6px;    /* panels, sheets of content */
+  --radius-xl: 10px;   /* dialogs */
   --radius-full: 9999px;
 
-  /* Materials. Translucency + a saturation boost is what makes chrome read as glass
-     rather than as a grey box: the saturate() does as much work as the blur. */
-  --material-thin:    saturate(180%) blur(20px);
-  --material-regular: saturate(180%) blur(30px);
-  --material-thick:   saturate(180%) blur(40px);
+  --material-thin:    saturate(110%) blur(8px);
+  --material-regular: saturate(110%) blur(14px);
+  --material-thick:   saturate(110%) blur(24px);
 
-  /* Elevation is deliberately restrained: material and hairlines separate layers first,
-     shadow last. A heavy drop shadow belongs to a different design language. */
-  --shadow-sm: 0 1px 2px rgb(0 0 0 / 0.04), 0 1px 3px rgb(0 0 0 / 0.06);
-  --shadow-md: 0 2px 8px rgb(0 0 0 / 0.06), 0 4px 16px rgb(0 0 0 / 0.08);
-  --shadow-lg: 0 8px 32px rgb(0 0 0 / 0.12);
+  --shadow-sm: 0 1px 2px rgb(20 16 10 / 0.06);
+  --shadow-md: 0 2px 6px rgb(20 16 10 / 0.08), 0 8px 24px rgb(20 16 10 / 0.08);
+  --shadow-lg: 0 12px 40px rgb(20 16 10 / 0.18);
 }
 ```
 
-**Corner radius is not a squircle.** The continuous-curvature corners you see on Apple
-platforms are not what CSS `border-radius` draws — it is a circular arc, and will always
-look marginally tighter. Do not try to
-fake it with SVG masks on ordinary components — the cost is not worth it. Just prefer
-slightly larger radii than instinct suggests.
+**Paper has corners.** Radii are small, and rules and whitespace do the grouping. A
+`--radius-full` pill is for a status dot, not for a button or an input.
 
-**A material needs a fallback.** `backdrop-filter` is unsupported or disabled in some
-contexts, and a translucent bar over unblurred content is illegible. Always pair it:
+**One material, for one job.** Only the sticky toolbar is translucent, and only enough
+that content scrolling beneath it is sensed rather than read. The sidebar and inspector
+are opaque paper (`--bg-secondary`). A material always has its opaque fallback:
 
 ```css
-.toolbar {
-  background: rgb(255 255 255 / 0.72);
+.material-chrome {
+  background-color: var(--chrome);
   backdrop-filter: var(--material-regular);
 }
 @supports not (backdrop-filter: blur(1px)) {
-  .toolbar { background: var(--bg); }   /* opaque, not translucent */
+  .material-chrome { background-color: var(--bg-secondary); }
 }
 ```
+
+**Shadow is for what floats** (popovers, dialogs, sheets) and nothing else. Nothing that
+sits on the page casts one.
 
 ### 2.5 Motion
 
@@ -340,10 +355,7 @@ contexts, and a translucent bar over unblurred content is illegible. Always pair
   --ease-out:      cubic-bezier(0.16, 1, 0.3, 1);   /* things arriving */
 
   /* A spring as a linear() easing, so a plain CSS transition can have one
-     without an animation library. The overshoot peaks at 1.017 and settles —
-     enough to read as physical, not enough to read as playful. Framer Motion's
-     spring is the answer when a gesture must be interruptible; this is the
-     answer when a transition need not be. */
+     without an animation library. The overshoot peaks at 1.017 and settles. */
   --ease-spring: linear(
     0, 0.006, 0.025 2.8%, 0.101 6.1%, 0.539 18.9%, 0.721 25.3%, 0.849 31.5%,
     0.937 38.1%, 0.968 41.8%, 0.991 45.7%, 1.006 50.1%, 1.015 55%, 1.017 63.9%,
@@ -356,9 +368,10 @@ contexts, and a translucent bar over unblurred content is illegible. Always pair
 }
 ```
 
-Motion is **informative, not ornamental**: it shows where a thing came from and where it
-went. An inspector slides in from the right because that is where it lives. Nothing
-bounces for personality.
+Motion is **causal, not ornamental**: the inspector slides from the edge it lives on; a
+sidenote fades toward the numeral it belongs to; a disclosure opens from its own heading.
+Nothing bounces for personality. All of it is CSS transitions and keyframes on these
+tokens; there is no animation library (§5).
 
 **`prefers-reduced-motion` is mandatory, not a nicety.** For some users motion is a
 vestibular trigger. Honour it globally, once:
@@ -375,9 +388,6 @@ vestibular trigger. Honour it globally, once:
 ```
 
 ### 2.6 Layout and accessibility constants
-
-The three numbers §1 and §3 state in prose, as tokens — so a component and the test that
-checks it are reading the same value rather than two copies of it that agree today.
 
 ```css
 :root {
@@ -450,8 +460,9 @@ Settled, and consistent with the zero-cost constraint (ADAPTATION §1):
 | Framework | **Next.js 15** (App Router), TypeScript strict | Already wired in `docker-compose.yml` as the `web` service |
 | Styling | **Tailwind CSS v4**, configured from the tokens in §2 | v4 reads CSS custom properties natively, so the tokens above *are* the config — no second source of truth |
 | Primitives | **Radix UI** | Unstyled and accessible by construction: focus trapping, keyboard nav and ARIA are the parts most likely to be got wrong by hand |
-| Icons | **Lucide** (ISC) | See §0. One icon family, 1.5px stroke, no mixing |
-| Motion | **Framer Motion** | Spring physics and a `useReducedMotion` hook that honours §2.5 |
+| Icons | **Lucide** (ISC) | See §0: sparingly. One icon family, 1.5px stroke, no mixing |
+| Fonts | **Source Serif 4, IBM Plex Sans, IBM Plex Mono** (SIL OFL), self-hosted via `next/font/local` | [ADR-0013](ArchitectureDecisionRecords/ADR-0013-self-hosted-type.md); 109 KB, latin, `swap` |
+| Motion | **CSS only**: transitions and keyframes on the §2.5 tokens | Every motion here is a short, non-interruptible transition, which CSS does with no dependency and no JavaScript on the main thread; reduced motion is one global block. Framer Motion was listed here until 2026-10-22 but was never installed; add an animation library only for a gesture that must be interruptible, and record why here |
 | Data | **TanStack Query** | Caching, revalidation, and request de-duplication against the API |
 | State | React state + context; **no global store** until something demands one | |
 | Testing | **Vitest** + Testing Library; **Playwright** for the flows that cross the API | Component tests assert on roles and labels, which is also an accessibility check |
@@ -539,4 +550,5 @@ make touch controls accessible, and progressively add detail where space permits
   Re-run it with any visual change and commit the files that moved, so the pull request
   shows the before and after.
 
-No additional visual assets, webfonts, UI framework or runtime dependency is needed.
+No additional visual assets, UI framework or runtime dependency is needed. The three
+committed font files (ADR-0013) are the only webfonts.

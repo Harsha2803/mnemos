@@ -2,12 +2,13 @@ import type { Metadata, Viewport } from "next";
 
 import { THEME_INIT_SCRIPT } from "@/lib/theme";
 
+import { FONT_VARIABLES } from "./fonts";
 import "./globals.css";
 import { Providers } from "./providers";
 
 export const metadata: Metadata = {
   title: "Mnemos",
-  description: "An AI workspace chatbot whose context is a compiled artifact.",
+  description: "A workspace that answers from your documents and data, and shows its sources.",
 };
 
 export const viewport: Viewport = {
@@ -26,7 +27,9 @@ export default function RootLayout({
     // `suppressHydrationWarning` belongs here and nowhere else: the script below
     // deliberately mutates <html> before React sees the document, so the server
     // markup and the hydrated markup are *meant* to differ by one attribute.
-    <html lang="en" suppressHydrationWarning>
+    // The font variables sit on <html> because the `--font-*` tokens are
+    // declared on :root and resolve there.
+    <html lang="en" className={FONT_VARIABLES} suppressHydrationWarning>
       <head>
         {/*
           A blocking inline script, first thing in the head. Anything deferred —

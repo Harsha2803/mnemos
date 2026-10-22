@@ -34,8 +34,8 @@ describe("theming", () => {
 
     expect(document.documentElement).toHaveAttribute("data-theme", "light");
     expect(window.localStorage.getItem(THEME_STORAGE_KEY)).toBe("light");
-    expect(token("--bg")).toBe("#FFFFFF");
-    expect(token("--label")).toBe("rgb(17 17 26 / 1.00)");
+    expect(token("--bg")).toBe("#FAF7F0");
+    expect(token("--label")).toBe("rgb(31 27 22 / 1.00)");
 
     // The half jsdom cannot evaluate — it has no real `prefers-color-scheme` —
     // is the media block's scope, and that scope is the entire mechanism. A
@@ -50,8 +50,8 @@ describe("theming", () => {
     await user.click(screen.getByRole("radio", { name: "Dark" }));
 
     expect(document.documentElement).toHaveAttribute("data-theme", "dark");
-    expect(token("--bg")).toBe("#0B0B0F");
-    expect(token("--label")).toBe("rgb(255 255 255 / 1.00)");
+    expect(token("--bg")).toBe("#1A1815");
+    expect(token("--label")).toBe("rgb(240 234 222 / 1.00)");
 
     // --- back to following the OS ------------------------------------------
     await user.click(screen.getByRole("radio", { name: "Match system" }));
@@ -59,7 +59,7 @@ describe("theming", () => {
     // Removed, not set to "system". `data-theme="system"` matches neither rule
     // and would pin every OS-following user to the light palette.
     expect(document.documentElement).not.toHaveAttribute("data-theme");
-    expect(token("--bg")).toBe("#FFFFFF");
+    expect(token("--bg")).toBe("#FAF7F0");
   });
 
   it("test_the_two_dark_palettes_declare_the_same_tokens", () => {
@@ -98,7 +98,7 @@ describe("theming", () => {
     new Function(THEME_INIT_SCRIPT)();
 
     expect(document.documentElement).toHaveAttribute("data-theme", "dark");
-    expect(token("--bg")).toBe("#0B0B0F");
+    expect(token("--bg")).toBe("#1A1815");
   });
 
   it("test_the_pre_paint_script_survives_storage_being_unavailable", () => {
