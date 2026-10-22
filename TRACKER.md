@@ -6,17 +6,15 @@
 > **and [`docs/ADAPTATION.md`](docs/ADAPTATION.md)** *in the same commit* — a stale
 > tracker is worse than none.
 
-**Last updated:** 2026-10-22 — **UI revamp run in progress** (owner-authorized, not a
-milestone): Mnemos gets its own visual identity in place of the stock AI-chat look, one
-slice per branch and PR (dated note below, §3 and §5). Slice 0, the screenshot harness,
-merged (PR #36); slice 1, foundations (PR #37); slice 2, the shell (PR #38); slice 3, chat
-(PR #39); slice 4, the inspector (PR #40). Slice 5, the overview and consistency pass, is on
-`feat/ui-overview`.
-**Phase:** `C3` done (unchanged). UI revamp: slice 5 of 6. Deployment: live, with the
-follow-ups in §5's second list.
-**Next task:** §5 — the UI revamp slices in order, then the deployment follow-ups. `B4`,
-`C1`, `C2` stay deliberately deferred.
-**Branch right now:** `feat/ui-overview`. PRs #28 to #40 are merged.
+**Last updated:** 2026-10-22 — **the UI revamp is complete** (owner-authorized, not a
+milestone): Mnemos has its own identity in place of the stock AI-chat look, in seven
+PRs (#36 to #42), each with before/after screenshots from `docs/screens/` (dated note
+below, §3). Not yet on the live demo: deploying needs the owner's yes (VM cost).
+**Phase:** `C3` done (unchanged). UI revamp: done, awaiting the owner's review of
+`docs/screens/` and a redeploy. Deployment: live, still serving the pre-revamp build.
+**Next task:** §5 — the owner reviews the screenshots and, if happy, redeploys; then the
+deployment follow-ups. `B4`, `C1`, `C2` stay deliberately deferred.
+**Branch right now:** `main`. PRs #28 to #42 are merged (#42 is the revamp's last slice).
 
 > ### 2026-10-22 — UI revamp: a distinct identity (owner-authorized run, not a milestone)
 >
@@ -1686,7 +1684,7 @@ port in `C4`. Until then the README must say so.
 Milestone ledger and exit criteria live in [ADAPTATION §7](docs/ADAPTATION.md#7-milestones).
 Detailed evidence for each ✅ is in [ADAPTATION §8](docs/ADAPTATION.md#8-current-state).
 
-### 🟡 UI revamp — a distinct identity (2026-10-22, owner-authorized, in progress)
+### ✅ UI revamp — a distinct identity (2026-10-22, owner-authorized)
 
 Not a milestone; no backend capability changes. Evidence per slice:
 
@@ -1697,7 +1695,8 @@ Not a milestone; no backend capability changes. Evidence per slice:
 | 2 · shell | Serif wordmark; typographic sections in three groups with a rubric marker on the current one, no icons; conversations with relative time (`RelativeTime`, exact time on hover and as the link's description), full titles on hover/focus (`Truncate`, replacing the hover marquee), move/rename/delete revealed on hover/focus with a fine pointer and always shown on touch; an account menu (Radix Popover) holding identity, appearance (worded System/Light/Dark) and sign-out; toolbar shows "Chat / <conversation title>" and no theme buttons; the empty inspector is a 48px rail that opens on request and focuses its heading; leaving a conversation clears its selection; the sidebar is opaque paper and only the toolbar keeps a material. Test infrastructure: Vitest `testTimeout` 15s and Testing Library `asyncUtilTimeout` 5s, after load made a different test time out on each run | lint, typecheck clean; `npm test` 136/136 twice in a row (new: rail opens/collapses with focus, no appearance in the toolbar, selection cleared on navigation; updated to the new behaviour: three-column, collapse, resize, chrome-material, sign-out and citation tests); `test:responsive` 12/12; `npm run screens` 32/32 (new `menu` case); e2e `auth.spec.ts` opens the account menu before signing out (run at the end of the revamp). PR #38, merged as `f9c93e4` |
 | 3 · chat | The conversation as a document: a query line per question, the answer as serif paragraphs at the reading measure; rubric superscript numerals that hug the cited word; sidenotes (title, page, passage) beside each paragraph on a ≥46rem transcript, an inline source disclosure below it on narrower ones (the floating preview that covered the question is gone); a route stamp revealing its rationale; a quiet colophon (Inspect, Copy, Bookmark, ratings) with the latest answer's budget meter; bookmark/rating rollbacks explained at the control; "Not answered" + "Ask again" for a failed answer; scroll anchoring with "Jump to latest"; one live region announcing start and completion; a composer sheet with keyboard and routing hints and worded Send/Stop. `renderWithProviders` now uses Testing Library's `wrapper`, so `rerender` keeps providers | lint, typecheck clean; `npm test` 146/146 (new `transcript.test.tsx`: paragraphs, numeral spacing, narrow disclosure, wide open, stamp rationale, failure + retry, rollback message, budget meter, completion announcement, scroll anchoring); `test:responsive` 12/12 (the narrow chat case now asserts the inline disclosure before the sheet, and found a zero-height numeral that unit tests could not, fixed); `npm run screens` 32/32. PR #39, merged as `4cdafa5` |
 | 4 · inspector | Evidence lists each passage with numeral, document title (from the cached library) and page; a citation reads as a serif document title, page and character range, and the whole retrieved passage; SQL view with the guard verdict in words, attempt/duration/rows, tables read/denied and copyable SQL; the bundle as an apparatus (thin budget bar with exact numbers, admitted with scores, excluded struck with the reason, lineage and demoted conflicts as revision marks); a bundle that fails to load offers "Try again". New `RevisionMark` (struck old value, new value, effective date; worded for screen readers), also replacing Memory's raw-id lineage with a "Revisions" list. The transcript's SQL panel moves to the same vocabulary. Found and fixed by the screenshot run: absolutely positioned `sr-only` text inside the main column had no positioned ancestor, so `/memory` made the document itself 1180px tall at a 900px viewport; the shell and its content column are now positioned | lint, typecheck clean; `npm test` 151/151 (new `inspector.test.tsx`: revision mark, Memory revisions, evidence titles, citation view with next/previous, bundle exclusions and lineage marks); `test:responsive` 12/12, whose `fits()` now also asserts the document never scrolls (failed at 1180 > 901 without the fix) with a superseded memory claim added to its fixtures; `npm run screens` 40/40 (new `bundle` and `sql` cases, an SSE fixture for sending). PR #40, merged as `8ce181f` |
-| 5 · overview + consistency | Overview rebuilt: the workspace's state as one serif sentence with its numbers linked, three text actions, readiness as one line with per-service detail on demand (open by itself when something is down), and a dated activity ledger (ingested, failed, ingesting, added, revised, conversation) grouped by day, with document and memory supersessions as revision marks. Consistency pass over Knowledge, Sources, Memory, Tools, Bookmarks and Audit log: `PageHeader`/`SectionHeading`, rules instead of cards (`List`, `Table`, ledgers), one `.field` class for inputs, status as a mono word (`.status-label`), superseded rows struck, relative times with exact time on hover, kinder empty/error copy with a next step, labelled loading regions, readable file kinds ("PDF", "Word") with the media type on hover | lint, typecheck clean; `npm test` 154/154 (new `overview.test.tsx`: state sentence, collapsed readiness, dated ledger with a revision and a failure); `test:responsive` 12/12; `npm run screens` 40/40, which caught two layout faults fixed here (a select sized by its longest option overflowing the Sources item pane; table values and action icons wrapping on Knowledge) |
+| 5 · overview + consistency | Overview rebuilt: the workspace's state as one serif sentence with its numbers linked, three text actions, readiness as one line with per-service detail on demand (open by itself when something is down), and a dated activity ledger (ingested, failed, ingesting, added, revised, conversation) grouped by day, with document and memory supersessions as revision marks. Consistency pass over Knowledge, Sources, Memory, Tools, Bookmarks and Audit log: `PageHeader`/`SectionHeading`, rules instead of cards (`List`, `Table`, ledgers), one `.field` class for inputs, status as a mono word (`.status-label`), superseded rows struck, relative times with exact time on hover, kinder empty/error copy with a next step, labelled loading regions, readable file kinds ("PDF", "Word") with the media type on hover | lint, typecheck clean; `npm test` 154/154 (new `overview.test.tsx`: state sentence, collapsed readiness, dated ledger with a revision and a failure); `test:responsive` 12/12; `npm run screens` 40/40, which caught two layout faults fixed here (a select sized by its longest option overflowing the Sources item pane; table values and action icons wrapping on Knowledge). PR #41, merged as `06f67fe` |
+| 6 · sign-in, shortcuts, states | Sign-in with the product's identity (wordmark, one sentence, a typeset specimen of a cited answer and a revised claim; auth behaviour unchanged). Keyboard: Ctrl/⌘+K command palette (combobox over listbox: sections, recent conversations, new chat, inspector, appearance), `n`, `/`, `[` `]`, `i`, `?`, Escape, from one listener and one `SHORTCUTS` list, linked from the account menu; `useStartNewChat` shared by every way of starting a chat. State audit: Knowledge, Bookmarks, the sidebar's conversations, Sources, Tools and an opened conversation showed their *empty* state when a request failed; `LoadError` now says what failed, why, and offers "Try again"; every loading region has one label. README test count (162) and ADR count (13) updated | lint, typecheck clean; `npm test` 162/162 (new: shortcuts and palette, load errors that fail on the old code); `test:responsive` 12/12; `npm run screens` 42 passed + 2 skipped (new desktop `palette` case); **e2e 16/16** against a rebuilt Compose stack (`docker compose up -d --build`, `make wait`: `/readyz` all `ok`). The first full e2e run was 14/16: two assertions encoded copy this revamp changed (a "N passages" cell, now a bare count under its header; the empty-folder line) and were updated to the new text, the passages check now also requiring a non-zero count. In isolated reruns `knowledge.spec.ts` failed 2 of 10 times waiting for a citation numeral that never rendered because the model's answer carried no `[n]` marker: the pre-existing model-dependent flake recorded in the 2026-08-23 note, not a regression |
 
 ### ✅ Mobile-first product polish — verified locally 2026-09-10
 
@@ -3865,39 +3864,17 @@ Recorded so they are not rediscovered as surprises:
 
 ## 5. NEXT TASK
 
-**First: the UI revamp run** (2026-10-22, dated note at the top). Its brief is the owner's
-handoff, `../prompts/mnemos-ui-revamp.txt` in the portfolio folder; the essentials are
-restated here so this file stands alone. One branch and PR per slice, merged before the next
-starts, each attaching before/after images from `npm run screens`. Before each merge:
-`npm run lint`, `npm run typecheck`, `npm test`, `npm run test:responsive` (all four
-viewport projects); before the last, also `npm run test:e2e` against a rebuilt Compose stack.
+**First: the owner reviews the UI revamp** (2026-10-22, done in code; §3). The gallery is
+`docs/screens/` (README there; "before" is commit `0087ed5`). If it is approved, ship it to
+the live demo from the laptop (the VM costs money while up, so only with the owner's yes):
 
-0. ~~Screenshot harness~~ — done, PR #36 (§3).
-1. ~~**Foundations.**~~ — done, PR #37 (§3). An ADR superseding DesignSystem §0's "system font, no webfonts"; §0-§2
-   rewritten for the new identity (no indigo/violet, warm paper and warm charcoal neutrals,
-   one meaningful accent, measured contrast rows); `globals.css` tokens; self-hosted OFL
-   fonts through `next/font` (serif for reading, sans for UI, mono for metadata) with a
-   stated byte budget; fix the dev-console "getServerSnapshot should be cached" error with a
-   test; reconcile DesignSystem §5's Framer Motion row with `package.json`. The guard tests
-   (no hard-coded colour, every documented token defined, 44px targets, the two dark
-   blocks identical) stay green.
-2. ~~**Shell.**~~ — done, PR #38 (§3). Typographic sidebar with an active marker and few icons; conversations with
-   relative time and hover/focus actions (always shown on coarse pointers); appearance moves
-   into an account menu; the empty inspector collapses to a slim rail.
-3. ~~**Chat.**~~ — done, PR #39 (§3). The answer as reading text, the question as a compact query line, superscript
-   citations with sidenotes on wide panes and inline disclosure on narrow ones (no preview
-   covering the question), a route stamp that reveals its rationale, a better composer,
-   scroll anchoring with "jump to latest", completion announced.
-4. ~~**Inspector.**~~ — done, PR #40 (§3). Deferred with reason: the
-   passage's *neighbouring* text (§4). Evidence with document title, page and passage; bundle and SQL views in
-   the new vocabulary; supersession as revision marks (struck old value, new value, date).
-5. ~~**Overview**~~ — done on `feat/ui-overview` (§3). Then a consistency pass over Knowledge, Sources, Memory, Tools, Bookmarks
-   and Audit log.
-6. **Sign-in** with identity (auth behaviour unchanged), keyboard shortcuts, and an audit of
-   empty, loading and error states.
+```
+cd ~/Desktop/mnemos-demo && ./up && ./redeploy main && ./down
+```
 
-Stop and ask only for: cost, a published README number, a refused push or merge, or if the
-direction clearly fails on the real screens after slice 1 (say so with screenshots first).
+Known and deliberately deferred from the revamp: a passage's *neighbouring* text in the
+inspector (§4 item 42). Physical-device keyboard and safe-area checks remain manual QA, as
+before. `knowledge.spec.ts` keeps its model-dependent citation flake (§3, slice 6 row).
 
 **Then: deployment follow-ups** (2026-09-26). The demo is live; these are what remain, in
 order. Each is maintenance, not a milestone — follow §0/§7 exactly as for milestone work.

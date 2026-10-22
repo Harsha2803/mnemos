@@ -508,6 +508,21 @@ retrofit across forty of them.
   with a rubric rule. The bundle shows its budget as a thin bar with exact numbers,
   admitted items with their scores, excluded items struck with the reason in caps, and
   lineage as revision marks.
+- **A failed load is never an empty state.** A list whose request failed renders
+  `LoadError` (a carmine rule, what could not be loaded, the API's reason, "Try again"),
+  never "No documents yet": that would tell the reader something false. Loading regions
+  carry one label each (`role="status"`), the shapes inside are decoration.
+- **Keyboard.** One listener (`Shortcuts`): Ctrl/⌘+K opens the command palette (a
+  combobox over a listbox: sections, recent conversations, new chat, the inspector,
+  appearance); `n` new conversation; `/` the composer; `[` and `]` step through the
+  selected answer's sources; `i` toggles the inspector; `?` lists every shortcut; Escape
+  closes what is open, and with nothing open clears the selection. Single keys act only
+  when focus is not in a field. The list lives once, in `SHORTCUTS`, for the handler and
+  the help dialog alike; the account menu links to it.
+- **Sign-in** has the product's identity and none of its chrome: the wordmark, one
+  sentence of what Mnemos is, a typeset specimen (a cited answer with its sidenote and a
+  revised claim, hidden from assistive technology as decoration), and the form with its
+  one filled button. On a phone the specimen is left out.
 - **The inspector with nothing selected** is a 48px rail on the right edge, one control
   that opens it to explain itself. A selection opens it fully; leaving the conversation
   clears the selection, because evidence belongs to the answer it was opened from.
@@ -548,10 +563,10 @@ exists.
 | The Tailwind theme mapping (`@theme inline`, and the `--color-*: initial` reset) | same file, lower half |
 | `.hit-target`, `.material-chrome`, `.measure`, `.list-group` / `.list-row` | same file, `@layer components` |
 | Theme preference, the pre-paint script, the store | `frontend/src/lib/theme.ts` |
-| `Button`, `List`, `EmptyState`, `Skeleton`, `Table`, `PageHeader` / `SectionHeading` | `frontend/src/components/ui/` |
+| `Button`, `List`, `EmptyState`, `LoadError`, `Skeleton`, `Table`, `PageHeader` / `SectionHeading` | `frontend/src/components/ui/` |
 | `.field`, `.field-label`, `.status-label`, `.stamp`, `.citation-marker`, `.hit-area-inline` | `frontend/src/app/globals.css`, `@layer components` |
 | `ThemeToggle` (rendered inside `AccountMenu`) | `frontend/src/components/theme/` |
-| `AccountMenu`, `SidebarContent`, the inspector rail, `ToolbarTitle` | `frontend/src/components/shell/` |
+| `AccountMenu`, `SidebarContent`, the inspector rail, `ToolbarTitle`, `Shortcuts` (palette, help) | `frontend/src/components/shell/` |
 | `Truncate`, `RelativeTime` (and `lib/time.ts` for the wording), `RevisionMark` | `frontend/src/components/ui/` |
 | The three-column shell and the breakpoint sheets | `frontend/src/components/shell/AppShell.tsx` |
 | Generated API types (never hand-edited; `npm run generate:api`) | `frontend/src/lib/api/schema.ts` |

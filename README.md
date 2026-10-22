@@ -353,7 +353,7 @@ backend/src/mnemos/
 backend/tests/    the suite — identity, tenant isolation, tokens, invariants
 frontend/src/     Next.js app router · components · generated API client
 deploy/           postgres init (extensions + analytics warehouse) · keycloak realm
-docs/             architecture, design system, threat model, 12 ADRs, Demo.md
+docs/             architecture, design system, threat model, 13 ADRs, Demo.md, screens/
 bench_results/    the JSON behind the tables above
 ```
 
@@ -362,7 +362,7 @@ Run the gates the way CI does:
 ```bash
 cd backend  && ../.venv/bin/python -m pytest      # 504 passed (needs Docker + Keycloak)
 cd frontend && npm ci && npm run lint && npx tsc --noEmit && npm run test && npm run build
-                                                   # 131 passed
+                                                   # 162 passed
 ```
 
 Critical-path browser coverage — auth, routed chat, RAG/citations, guarded NL2SQL, live
@@ -373,6 +373,7 @@ the whole workspace at 320px, 390px, tablet, and desktop widths:
 ```bash
 cd frontend && npx playwright test               # 16 passed (needs the full stack up)
 cd frontend && npm run test:responsive            # 12 passed; starts its own web server
+cd frontend && npm run screens                    # the screenshot gallery in docs/screens/
 ```
 
 ---
@@ -380,7 +381,7 @@ cd frontend && npm run test:responsive            # 12 passed; starts its own we
 ## Relationship to `docs/`
 
 `docs/` (Architecture, SystemDesign, DatabaseDesign, APIContract, ThreatModel, DesignSystem
-and 12 ADRs) preserves both the completed design and optional extension seams. The focused
+and 13 ADRs) preserves both the completed design and optional extension seams. The focused
 finish completed `B3`, `C4`, reduced `D1`, and the owner-reopened `C3`.
 
 The distinction is deliberate and stated rather than hidden: deferred product features and
