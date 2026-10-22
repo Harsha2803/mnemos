@@ -8,6 +8,12 @@ const document = { id: "document-1", title: longName, media_type: "text/plain", 
 const source = { id: "source-1", slug: "handbook", name: "Handbook source", kind: "local_fs", is_enabled: true, created_at: session.created_at };
 const sql = { sql: "SELECT region, revenue FROM analytics.sales_order", verdict: "allowed", verdict_detail: null, attempt: 1, authorized_tables: ["analytics.sales_order"], denied_tables: [], executed: true, row_count: 2, truncated: false, duration_ms: 42, error_code: null, error_detail: null, columns: ["region", "revenue", "notes"], rows: [["West", 128400, longName], ["East", null, "true"]] };
 
+const claim = (id: string, objectText: string, status: string, validFrom: string, validTo: string) => ({ id, subject: { id: "subject-1", kind: "person", external_ref: "employee:ada", display_name: longName }, predicate: "reports_to", object_text: objectText, kind: "fact", status, scope: {}, valid_from: validFrom, valid_to: validTo, recorded_at: validFrom, retracted_at: null, confidence: 1, trust_tier: 40, source_kind: "user", source_ref: null });
+const memory = {
+  claims: [claim("claim-2", longName, "active", "2026-07-01T00:00:00Z", "9999-12-31T23:59:59Z"), claim("claim-1", "Elena Petrova", "superseded", "2025-03-01T00:00:00Z", "2026-07-01T00:00:00Z")],
+  edges: [{ id: "edge-1", source_id: "claim-2", target_id: "claim-1", kind: "supersedes", rationale: longName, created_at: session.created_at }],
+};
+
 async function fixtures(page: Page) {
   await page.routeWebSocket("**/ws/**", () => {});
   await page.route("http://localhost:8000/**", async (route) => {
@@ -28,7 +34,7 @@ async function fixtures(page: Page) {
     else if (path.endsWith("/connectors")) body = [source, { ...source, id: "source-2", slug: "other", name: "Other source" }];
     else if (path.endsWith("/items")) body = [{ uri: longName, name: longName, content_type: "text/plain", size_bytes: 1200, modified_at: null }];
     else if (path.endsWith("/ingest")) body = { job_id: "job-1", status: "queued", uri: longName };
-    else if (path.endsWith("/memories")) body = { claims: [], edges: [] };
+    else if (path.endsWith("/memories")) body = memory;
     else if (path.endsWith("/audit/events")) body = { events: [{ id: "event-1", occurred_at: session.created_at, actor_id: "user-1", action: "tool.invoke", resource_kind: "tool", resource_id: "tool-1", outcome: "deny", reason: longName }] };
     else if (path.endsWith("/bundle")) { await route.fulfill({ status: 404, json: {} }); return; }
     await route.fulfill({ json: body });
@@ -41,6 +47,11 @@ async function fits(page: Page) {
     return box.width > 0 && el.scrollWidth > el.clientWidth + 1;
   }).map((el) => `${el.tagName}.${el.className}: ${el.scrollWidth} > ${el.clientWidth}`));
   expect(overflowing).toEqual([]);
+  // The shell is exactly the viewport and scrolls inside itself; the document
+  // scrolling too means something escaped it (a second scrollbar, and the
+  // toolbar sliding away).
+  const documentSize = await page.evaluate(() => ({ height: window.document.documentElement.scrollHeight, view: window.innerHeight }));
+  expect(documentSize.height).toBeLessThanOrEqual(documentSize.view + 1);
 }
 
 async function navigate(page: Page, label: string) {
