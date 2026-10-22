@@ -113,7 +113,7 @@ test("test_you_can_organize_bookmark_rate_and_find_a_conversation", async ({ pag
   const folderBHeading = sidebar.getByText(folderBName, { exact: true });
   const folderBRow = folderBHeading.locator("xpath=ancestor::li[1]");
   await expect(folderBRow.locator("xpath=following-sibling::li[1]")).toContainText(
-    "No conversations here yet.",
+    "Empty. Move a conversation here from its row.",
   );
 
   // --- A real conversation to organize, bookmark and rate.

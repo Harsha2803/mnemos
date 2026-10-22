@@ -113,7 +113,8 @@ test("test_you_can_upload_a_document_ask_about_it_and_click_the_citation", async
   // is a claim about the pipeline rather than about the upload alone.
   const row = page.getByRole("row").filter({ hasText: filename });
   await expect(row).toBeVisible({ timeout: 60_000 });
-  await expect(row).toContainText(/\d+ passages/);
+  // Indexed: the Passages column holds a count, and it is not zero.
+  await expect(row).toContainText(/Passages\s*[1-9]\d*/);
 
   await nav(page).getByRole("link", { name: "Chat", exact: true }).click();
   await page.waitForURL(new RegExp(`^${WEB}/chat`));
