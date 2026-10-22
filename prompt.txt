@@ -1,21 +1,19 @@
 Current task update — 2026-10-22
 
-Read TRACKER.md first. The owner authorized a UI revamp run (TRACKER dated note
-"UI revamp: a distinct identity"; §5 lists the slices). §0 rule 9 is lifted for that run
-only. Each slice is its own branch and PR, merged before the next starts, with before and
-after screenshots from `npm run screens` (frontend/screens/, output in docs/screens/).
-Frontend only; the retrieval and compile paths stay untouched so the README benchmark
-stands. Deploying the result to the live demo needs the owner's yes (VM cost).
+Read TRACKER.md first. The owner-authorized UI revamp is complete and merged (PRs #36 to
+#42; TRACKER dated note "UI revamp: a distinct identity", §3 table). Mnemos now has its own
+identity: warm paper/charcoal, verdigris for action and a rubric red for provenance,
+self-hosted Source Serif 4 / IBM Plex Sans / IBM Plex Mono (ADR-0013), the conversation set
+as a document with sidenotes, an inspector that reads like an apparatus, revision marks for
+supersession, an overview ledger, keyboard shortcuts and a command palette. DesignSystem.md
+§0-§4 describe all of it; `npm run screens` regenerates the gallery in docs/screens/.
+§0 rule 9 (one task per session) is back in force.
 
-Progress: slice 0 (screenshot harness) merged, PR #36. Slice 1 (foundations: palette,
-self-hosted fonts, ADR-0013, getServerSnapshot fix) merged, PR #37. Slice 2 (shell:
-sidebar, account menu, inspector rail) merged, PR #38. Slice 3 (chat as a document:
-sidenotes, route stamp, composer, scroll anchoring) merged, PR #39. Slice 4 (inspector
-views, revision marks) merged, PR #40. Slice 5 (overview ledger, consistency pass) — on
-feat/ui-overview.
-
-After the revamp: TRACKER §5's deployment follow-ups (move the VM onto RustFS only with the
-owner's yes; role binding without SQL; §4 item 40).
+What is next (TRACKER §5): the owner reviews docs/screens/ and, with a yes for the VM time,
+redeploys (`cd ~/Desktop/mnemos-demo && ./up && ./redeploy main && ./down`). Then the
+deployment follow-ups (move the VM onto RustFS only with the owner's yes; role binding
+without SQL; §4 item 40). Deferred from the revamp: a passage's neighbouring text in the
+inspector (§4 item 42).
 
 --- Previous task update (2026-09-26) ---
 

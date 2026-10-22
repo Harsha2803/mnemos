@@ -104,6 +104,16 @@ test("navigation and account menu", async ({ page }, info) => {
   await shoot(page, "menu", info.project.name);
 });
 
+test("command palette", async ({ page }, info) => {
+  test.skip(isPhone(page), "a keyboard feature; phones reach the same places from the navigation sheet");
+  await page.goto("/chat/s1");
+  await expect(page.getByRole("button", { name: /Show source 1/ })).toBeVisible();
+  await page.keyboard.press("Control+k");
+  await page.getByRole("combobox", { name: "Go to or do" }).fill("go");
+  await expect(page.getByRole("option").first()).toBeVisible();
+  await shoot(page, "palette", info.project.name);
+});
+
 test("knowledge", async ({ page }, info) => {
   await page.goto("/knowledge");
   await expect(page.getByRole("table", { name: "Knowledge documents" })).toBeVisible();

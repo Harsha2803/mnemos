@@ -776,6 +776,11 @@
     animation: popover-in var(--duration-fast) var(--ease-standard) reverse;
   }
 
+  /* The command palette drops a few pixels into place under the toolbar. */
+  .palette-content {
+    animation: popover-in var(--duration-fast) var(--ease-out);
+  }
+
   /* A Radix `Dialog`'s overlay and content, sharing one shape across every
      confirmation in the app (`ChatSessionList.tsx`'s and `DocumentList.tsx`'s
      delete dialogs today). Keyed off `data-state` rather than a mount/unmount

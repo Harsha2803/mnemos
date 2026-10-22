@@ -5,6 +5,7 @@ import { useQuery } from "@tanstack/react-query";
 import { PanelLeft, PanelRight, PanelRightOpen, X } from "lucide-react";
 import { usePathname } from "next/navigation";
 import {
+  useCallback,
   useEffect,
   useRef,
   useState,
@@ -23,6 +24,7 @@ import { useInspectorSelection } from "@/lib/inspector/SelectionProvider";
 
 import { destinationFor } from "./destinations";
 import { InspectorContent } from "./InspectorContent";
+import { Shortcuts } from "./Shortcuts";
 import { SidebarContent } from "./SidebarContent";
 import { INSPECTOR_INLINE, SIDEBAR_INLINE, useMediaQuery } from "./useMediaQuery";
 
@@ -144,12 +146,22 @@ export function AppShell({ children }: { children: ReactNode }) {
   const inspectorShowing = inspectorIsInline ? inspectorPinned : inspectorSheetOpen;
   const inspectorIsRail = inspectorPinned && selection === null && !emptyInspectorExpanded;
 
+  // The `i` shortcut and the palette: the same thing the toolbar button does.
+  const toggleInspector = useCallback(() => {
+    if (inspectorIsInline) setInspectorPinned((open) => !open);
+    else {
+      inspectorReturnFocus.current = document.activeElement as HTMLElement | null;
+      setInspectorSheetOpen((open) => !open);
+    }
+  }, [inspectorIsInline]);
+
   return (
     // `relative` here and on the content column: an absolutely positioned
     // descendant (every `sr-only` label) needs a positioned ancestor inside
     // the shell, or it is laid out against the document and makes the page
     // itself scroll past the shell — found on /memory by the screenshot run.
     <div className="workspace-shell relative flex h-dvh overflow-hidden bg-bg text-label">
+      <Shortcuts onToggleInspector={toggleInspector} />
       {sidebarIsInline && (
         <nav
           id={SIDEBAR_ID}

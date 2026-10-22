@@ -6,6 +6,7 @@ import { useMemo, useState, type FormEvent } from "react";
 
 import { Button } from "@/components/ui/Button";
 import { EmptyState } from "@/components/ui/EmptyState";
+import { LoadError } from "@/components/ui/LoadError";
 import { PageHeader, SectionHeading } from "@/components/ui/PageHeader";
 import { RelativeTime } from "@/components/ui/RelativeTime";
 import { Skeleton } from "@/components/ui/Skeleton";
@@ -62,7 +63,9 @@ export default function ToolsPage() {
 
       <section className="flex flex-col gap-3" aria-labelledby="servers-heading">
         <SectionHeading id="servers-heading">Registered servers</SectionHeading>
-        {servers.isPending ? <LoadingRows /> : (servers.data?.length ?? 0) === 0 ? (
+        {servers.isPending ? <LoadingRows label="Loading servers" /> : servers.isError ? (
+          <LoadError what="Registered servers" error={servers.error} onRetry={() => void servers.refetch()} />
+        ) : (servers.data?.length ?? 0) === 0 ? (
           <EmptyState icon={Wrench} title="No MCP server registered" description="Register one above. The fields are filled in for the demo server that runs with the stack." headingLevel={3} />
         ) : (
           <div className="list-group">
@@ -75,7 +78,9 @@ export default function ToolsPage() {
 
       <section className="flex flex-col gap-3" aria-labelledby="catalog-heading">
         <SectionHeading id="catalog-heading">Discovered catalog</SectionHeading>
-        {tools.isPending ? <LoadingRows /> : (tools.data?.length ?? 0) === 0 ? (
+        {tools.isPending ? <LoadingRows label="Loading the tool catalog" /> : tools.isError ? (
+          <LoadError what="The tool catalog" error={tools.error} onRetry={() => void tools.refetch()} />
+        ) : (tools.data?.length ?? 0) === 0 ? (
           <p className="border-y border-separator py-4 text-callout text-label-secondary">Press Discover on a registered server to list its tools here.</p>
         ) : (
           <div className="flex flex-col border-t border-separator">
@@ -95,7 +100,9 @@ export default function ToolsPage() {
 
       <section className="flex flex-col gap-3" aria-labelledby="history-heading">
         <SectionHeading id="history-heading">Invocation history</SectionHeading>
-        {invocations.isPending ? <LoadingRows /> : (invocations.data?.length ?? 0) === 0 ? (
+        {invocations.isPending ? <LoadingRows label="Loading invocation history" /> : invocations.isError ? (
+          <LoadError what="Invocation history" error={invocations.error} onRetry={() => void invocations.refetch()} />
+        ) : (invocations.data?.length ?? 0) === 0 ? (
           <p className="border-y border-separator py-4 text-callout text-label-secondary">Nothing has been proposed yet. Calls appear here from the moment they are proposed.</p>
         ) : (
           <div className="flex flex-col border-t border-separator">
@@ -205,7 +212,7 @@ function firstStringArgument(tool: McpTool): string | null {
   return typeof schema === "object" && schema !== null && (schema as Record<string, unknown>).type === "string" ? required[0] : null;
 }
 
-function LoadingRows() {
-  return <div className="flex flex-col gap-2" aria-hidden="true"><Skeleton className="h-16 w-full" /><Skeleton className="h-16 w-full" /></div>;
+function LoadingRows({ label }: { label: string }) {
+  return <div className="flex flex-col gap-2" role="status" aria-label={label}><Skeleton className="h-16 w-full" /><Skeleton className="h-16 w-full" /></div>;
 }
 

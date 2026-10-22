@@ -95,7 +95,17 @@ export function AccountMenu() {
             <ThemeToggle />
           </div>
 
-          <div className="border-t border-separator pt-3">
+          <div className="flex flex-col border-t border-separator pt-3">
+            <Popover.Close asChild>
+              <Button
+                rank="plain"
+                className="w-full !justify-between !px-2 !font-medium !text-label"
+                onClick={() => window.dispatchEvent(new Event("mnemos:shortcuts"))}
+              >
+                Keyboard shortcuts
+                <kbd className="rounded-sm border border-separator px-1.5 font-mono text-caption text-label-secondary">?</kbd>
+              </Button>
+            </Popover.Close>
             <Button
               rank="plain"
               className="w-full !justify-start !px-2"

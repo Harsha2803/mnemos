@@ -6,6 +6,7 @@ import Link from "next/link";
 
 import { Button } from "@/components/ui/Button";
 import { EmptyState } from "@/components/ui/EmptyState";
+import { LoadError } from "@/components/ui/LoadError";
 import { PageHeader } from "@/components/ui/PageHeader";
 import { Skeleton } from "@/components/ui/Skeleton";
 import {
@@ -24,7 +25,7 @@ import {
  */
 export default function BookmarksPage() {
   const queryClient = useQueryClient();
-  const { data, isPending } = useQuery({
+  const { data, isPending, isError, error, refetch } = useQuery({
     queryKey: CHAT_BOOKMARKS_QUERY_KEY,
     queryFn: ({ signal }) => fetchBookmarks(signal),
   });
@@ -52,6 +53,8 @@ export default function BookmarksPage() {
             <Skeleton className="h-20 w-full" />
             <Skeleton className="h-20 w-full" />
           </div>
+        ) : isError ? (
+          <LoadError what="Your bookmarks" error={error} onRetry={() => void refetch()} />
         ) : bookmarks.length === 0 ? (
           <EmptyState
             icon={BookmarkIcon}

@@ -4,12 +4,13 @@
 > self-contained: architecture, the capability inventory, schema, milestones, and current
 > state. [`TRACKER.md`](../TRACKER.md) holds live task status; this holds the design.
 
-**Last updated:** 2026-10-22 — an owner-authorized **UI revamp** is in progress (§8, first
-entry): Mnemos's own visual identity in six slices, one PR each, frontend only. Slice 0, a
-committed screenshot harness, merged (PR #36); slice 1, foundations, merged (PR #37); slice 2, the shell, merged (PR #38); slice 3, chat, merged (PR #39); slice 4, the inspector, merged (PR #40); slice 5, overview and consistency, is landing. Nothing in the milestone ledger (§7) moves: `D1`
-and `C3` are done, `B4`, `C1`, `C2` stay deliberately deferred. Earlier: `C3` — conversation
-product depth — closed 2026-08-23 with folders, bookmarks, feedback, history search and the
-audit log (PR #26); detail in `TRACKER.md`'s 2026-08-22 and 2026-08-23 dated notes.
+**Last updated:** 2026-10-22 — an owner-authorized **UI revamp** is complete (§8, first
+entry): Mnemos's own visual identity, in seven PRs (#36 to #42), frontend only; the
+benchmark and every backend path are untouched. Nothing in the milestone ledger (§7)
+moves: `D1` and `C3` are done, `B4`, `C1`, `C2` stay deliberately deferred. Earlier: `C3` —
+conversation product depth — closed 2026-08-23 with folders, bookmarks, feedback, history
+search and the audit log (PR #26); detail in `TRACKER.md`'s 2026-08-22 and 2026-08-23
+dated notes.
 
 ---
 
@@ -331,7 +332,7 @@ merely untested; that is written up in §8 and in
 
 ## 8. Current state
 
-### UI revamp — a distinct identity (2026-10-22, in progress, not a milestone)
+### UI revamp — a distinct identity (2026-10-22, complete, not a milestone)
 
 Owner-authorized: replace the stock AI-chat look with an identity drawn from what Mnemos
 is about (provenance, revisions, what was admitted and excluded), and give every component
@@ -382,7 +383,18 @@ the list.
   vocabulary: serif page titles, rules not cards, one field style, status as a word,
   relative time with the exact time on hover, empty and error states that say what to do
   next. Evidence: 154/154 unit, 12/12 responsive, 40/40 screens (two layout faults found
-  in the screenshots and fixed).
+  in the screenshots and fixed). PR #41.
+- **Slice 6 — sign-in, shortcuts, states.** Sign-in carries the identity (wordmark, one
+  sentence, a typeset specimen) with its auth behaviour unchanged. A command palette
+  (Ctrl/⌘+K) and single-key shortcuts (`n`, `/`, `[`, `]`, `i`, `?`, Escape) come from one
+  listener and one list. The state audit found six lists that rendered "nothing yet" when
+  their request *failed*; they now say what failed and offer to retry. Evidence: 162/162
+  unit, 12/12 responsive, 42 screens, and **e2e 16/16 against a rebuilt Compose stack**
+  (two e2e assertions updated for changed copy; the known model-dependent citation flake
+  in `knowledge.spec.ts` seen twice in ten isolated runs). PR #42.
+
+The revamp is complete in code. The live demo still serves the earlier build until the
+owner approves VM time for a redeploy (TRACKER §5).
 
 ### Mobile-first polish — verified locally (2026-09-10)
 
@@ -1681,7 +1693,7 @@ explicitly reopens scope — as happened for `C3` on 2026-08-22 (TRACKER §5).
   machine with the stack up and fail on CI — that is how it was found.
 - The root README numbers come from `bench_results/hashing.json` on Postgres. If retrieval,
   memory or compilation changes, rerun `make bench` and update both artifacts together.
-- `docs/` (Architecture, SystemDesign, DatabaseDesign, APIContract, ThreatModel, 12 ADRs)
+- `docs/` (Architecture, SystemDesign, DatabaseDesign, APIContract, ThreatModel, 13 ADRs)
   preserves extension seams beyond the committed portfolio finish. The README must keep
   those optional designs distinct from built or committed capabilities.
 - The v0.1 brute-force retrieval weakness was closed in `A2` with pgvector HNSW; keep ACL
