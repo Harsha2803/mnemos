@@ -1,10 +1,10 @@
 "use client";
 
-import { Database, FolderOpen, Globe } from "lucide-react";
-import type { LucideIcon } from "lucide-react";
+import { FolderOpen } from "lucide-react";
 
 import { EmptyState } from "@/components/ui/EmptyState";
 import { List, ListItem } from "@/components/ui/List";
+import { relativeLong } from "@/lib/time";
 import type { ContentSource } from "@/lib/connectors/api";
 
 export type SourceListProps = {
@@ -14,11 +14,11 @@ export type SourceListProps = {
   lastActivityBySlug?: Record<string, string>;
 };
 
-const KIND_ICON: Record<string, LucideIcon> = {
-  s3: Database,
-  minio: Database,
-  local_fs: FolderOpen,
-  http: Globe,
+const KIND_LABEL: Record<string, string> = {
+  s3: "S3",
+  minio: "S3-compatible",
+  local_fs: "Directory",
+  http: "URL list",
 };
 
 export function SourceList({ sources, selectedSlug, onSelect, lastActivityBySlug = {} }: SourceListProps) {
@@ -27,7 +27,7 @@ export function SourceList({ sources, selectedSlug, onSelect, lastActivityBySlug
       <EmptyState
         icon={FolderOpen}
         title="No sources registered yet"
-        description="Register one above, then browse what it contains."
+        description="Connect one above: a bucket, a directory the operator has approved, or a list of URLs."
         headingLevel={3}
       />
     );
@@ -36,27 +36,27 @@ export function SourceList({ sources, selectedSlug, onSelect, lastActivityBySlug
   return (
     <List label="Sources">
       {sources.map((source) => {
-        const Icon = KIND_ICON[source.kind] ?? FolderOpen;
         const lastActivity = lastActivityBySlug[source.slug];
+        const selected = source.slug === selectedSlug;
         return (
-          <ListItem
-            key={source.id}
-            leading={<Icon className="size-[18px]" strokeWidth={1.5} aria-hidden="true" />}
-            current={source.slug === selectedSlug}
-          >
+          <ListItem key={source.id} current={selected}>
             <button
               type="button"
               onClick={() => onSelect(source.slug)}
-              aria-current={source.slug === selectedSlug ? "true" : undefined}
-              className="hit-target block w-full text-left"
+              aria-current={selected ? "true" : undefined}
+              className={[
+                "hit-target relative block w-full py-1 pl-3 text-left",
+                "before:absolute before:inset-y-2 before:left-0 before:w-0.5 before:rounded-full",
+                selected ? "before:bg-rubric" : "before:bg-transparent",
+              ].join(" ")}
             >
-              <span className="block truncate font-medium text-label">{source.name}</span>
-              <span className="block text-footnote text-label-secondary">
-                {source.slug} · {source.kind}
+              <span className={`block truncate ${selected ? "font-semibold" : "font-medium"} text-label`}>{source.name}</span>
+              <span className="block font-mono text-caption text-label-secondary">
+                {source.slug} · {KIND_LABEL[source.kind] ?? source.kind}
               </span>
-              <span className="block text-caption text-label-tertiary">
-                {source.is_enabled ? "Enabled" : "Disabled"} · Added {formatDate(source.created_at)}
-                {lastActivity ? ` · Active ${relativeTime(lastActivity)}` : ""}
+              <span className="block text-caption text-label-secondary">
+                {source.is_enabled ? "Enabled" : "Disabled"} · added {relativeLong(source.created_at)}
+                {lastActivity ? ` · last activity ${relativeLong(lastActivity)}` : ""}
               </span>
             </button>
           </ListItem>
@@ -66,14 +66,4 @@ export function SourceList({ sources, selectedSlug, onSelect, lastActivityBySlug
   );
 }
 
-function formatDate(value: string): string {
-  return new Intl.DateTimeFormat(undefined, { dateStyle: "medium" }).format(new Date(value));
-}
 
-function relativeTime(value: string): string {
-  const minutes = Math.max(0, Math.floor((Date.now() - new Date(value).getTime()) / 60_000));
-  if (minutes < 1) return "just now";
-  if (minutes < 60) return `${minutes}m ago`;
-  if (minutes < 1440) return `${Math.floor(minutes / 60)}h ago`;
-  return `${Math.floor(minutes / 1440)}d ago`;
-}

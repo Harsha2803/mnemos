@@ -6,6 +6,8 @@ import { useMemo, useState, type FormEvent } from "react";
 
 import { Button } from "@/components/ui/Button";
 import { EmptyState } from "@/components/ui/EmptyState";
+import { PageHeader, SectionHeading } from "@/components/ui/PageHeader";
+import { RelativeTime } from "@/components/ui/RelativeTime";
 import { Skeleton } from "@/components/ui/Skeleton";
 import {
   decideToolInvocation,
@@ -24,7 +26,8 @@ import {
   type ToolInvocation,
 } from "@/lib/tools/api";
 
-const INPUT = "hit-target w-full rounded-md border border-separator bg-bg px-3 text-callout text-label outline-none focus-visible:ring-2 focus-visible:ring-accent";
+const INPUT = "field hit-target";
+const LABEL = "field-label";
 
 export default function ToolsPage() {
   const queryClient = useQueryClient();
@@ -48,22 +51,19 @@ export default function ToolsPage() {
 
   return (
     <div className="flex flex-col gap-8">
-      <header className="flex flex-col gap-2">
-        <h1 className="text-large-title font-semibold tracking-title text-label">Tools</h1>
-        <p className="text-callout leading-relaxed text-label-secondary">
-          Register one MCP server, cache its catalog, grant it to yourself, and inspect every
-          proposal, approval, denial, result, and failure. Credentials are stored per user.
-        </p>
-      </header>
+      <PageHeader
+        title="Tools"
+        description="MCP servers Mnemos may call, and every call it has proposed: approved, denied, run or failed. Credentials are encrypted and kept per user."
+      />
 
-      {notice !== null && <p role="status" className="rounded-md bg-fill-secondary px-4 py-3 text-callout">{notice}</p>}
+      {notice !== null && <p role="status" className="border-l-2 border-success pl-3 text-callout text-label">{notice}</p>}
 
       <RegisterServer onComplete={(message) => { setNotice(message); void refresh(); }} />
 
       <section className="flex flex-col gap-3" aria-labelledby="servers-heading">
-        <h2 id="servers-heading" className="text-title-3 font-semibold tracking-title">Registered servers</h2>
+        <SectionHeading id="servers-heading">Registered servers</SectionHeading>
         {servers.isPending ? <LoadingRows /> : (servers.data?.length ?? 0) === 0 ? (
-          <EmptyState icon={Wrench} title="No MCP server registered" description="Use the form above to register the local demo server." headingLevel={3} />
+          <EmptyState icon={Wrench} title="No MCP server registered" description="Register one above. The fields are filled in for the demo server that runs with the stack." headingLevel={3} />
         ) : (
           <div className="list-group">
             {servers.data?.map((server) => (
@@ -74,31 +74,31 @@ export default function ToolsPage() {
       </section>
 
       <section className="flex flex-col gap-3" aria-labelledby="catalog-heading">
-        <h2 id="catalog-heading" className="text-title-3 font-semibold tracking-title">Discovered catalog</h2>
-        {(tools.data?.length ?? 0) === 0 ? (
-          <p className="text-callout text-label-secondary">Discover a registered server to cache its tools here.</p>
+        <SectionHeading id="catalog-heading">Discovered catalog</SectionHeading>
+        {tools.isPending ? <LoadingRows /> : (tools.data?.length ?? 0) === 0 ? (
+          <p className="border-y border-separator py-4 text-callout text-label-secondary">Press Discover on a registered server to list its tools here.</p>
         ) : (
-          <div className="grid grid-cols-1 gap-3">
+          <div className="flex flex-col border-t border-separator">
             {tools.data?.map((tool) => <ToolCard key={tool.id} tool={tool} onComplete={(message) => { setNotice(message); void refresh(); }} />)}
           </div>
         )}
       </section>
 
       <section className="flex flex-col gap-3" aria-labelledby="approvals-heading">
-        <h2 id="approvals-heading" className="text-title-3 font-semibold tracking-title">Awaiting approval</h2>
+        <SectionHeading id="approvals-heading">Awaiting approval</SectionHeading>
         {pending.length === 0 ? (
-          <p className="text-callout text-label-secondary">No tool call is waiting for your decision.</p>
+          <p className="border-y border-separator py-4 text-callout text-label-secondary">No tool call is waiting for your decision.</p>
         ) : pending.map((invocation) => (
           <ApprovalRow key={invocation.id} invocation={invocation} onComplete={(message) => { setNotice(message); void refresh(); }} />
         ))}
       </section>
 
       <section className="flex flex-col gap-3" aria-labelledby="history-heading">
-        <h2 id="history-heading" className="text-title-3 font-semibold tracking-title">Invocation history</h2>
+        <SectionHeading id="history-heading">Invocation history</SectionHeading>
         {invocations.isPending ? <LoadingRows /> : (invocations.data?.length ?? 0) === 0 ? (
-          <p className="text-callout text-label-secondary">Proposals and results will appear here.</p>
+          <p className="border-y border-separator py-4 text-callout text-label-secondary">Nothing has been proposed yet. Calls appear here from the moment they are proposed.</p>
         ) : (
-          <div className="flex flex-col gap-2">
+          <div className="flex flex-col border-t border-separator">
             {invocations.data?.map((invocation) => <HistoryRow key={invocation.id} invocation={invocation} />)}
           </div>
         )}
@@ -130,11 +130,11 @@ function RegisterServer({ onComplete }: { onComplete: (message: string) => void 
 
   return (
     <section className="flex flex-col gap-3" aria-labelledby="register-tool-heading">
-      <h2 id="register-tool-heading" className="text-title-3 font-semibold tracking-title">Register a server</h2>
-      <form onSubmit={submit} className="grid grid-cols-1 gap-3 rounded-lg bg-bg-secondary p-4 @xl/content:grid-cols-3">
-        <label className="flex flex-col gap-1 text-footnote font-semibold">Slug<input className={INPUT} name="slug" defaultValue="demo" required /></label>
-        <label className="flex flex-col gap-1 text-footnote font-semibold">Name<input className={INPUT} name="name" defaultValue="Mnemos demo" required /></label>
-        <label className="flex flex-col gap-1 text-footnote font-semibold">Streamable HTTP endpoint<input className={INPUT} name="endpoint" defaultValue="http://demo-mcp:8100/mcp" required /></label>
+      <SectionHeading id="register-tool-heading">Register a server</SectionHeading>
+      <form onSubmit={submit} className="grid grid-cols-1 gap-3 rounded-md border border-separator p-4 @xl/content:grid-cols-3">
+        <label className={LABEL}>Slug<input className={INPUT} name="slug" defaultValue="demo" required /></label>
+        <label className={LABEL}>Name<input className={INPUT} name="name" defaultValue="Mnemos demo" required /></label>
+        <label className={LABEL}>Streamable HTTP endpoint<input className={`${INPUT} font-mono`} name="endpoint" defaultValue="http://demo-mcp:8100/mcp" required /></label>
         <div className="@xl/content:col-span-3"><Button type="submit" rank="filled" disabled={mutation.isPending}>Register server</Button></div>
       </form>
       {error !== null && <p role="alert" className="text-callout text-danger">{error}</p>}
@@ -150,15 +150,15 @@ function ServerRow({ server, onComplete }: { server: Awaited<ReturnType<typeof f
   const credential = useMutation({ mutationFn: () => saveToolCredential(server.id, scheme, secret), onSuccess: () => { setError(null); setSecret(""); onComplete("Your credential was encrypted and saved."); }, onError: (caught: Error) => setError(caught.message) });
 
   return (
-    <div className="list-row flex flex-col gap-3 px-4 py-3">
+    <div className="list-row flex flex-col gap-3 py-4">
       <div className="flex flex-wrap items-center gap-3">
-        <div className="min-w-0 flex-1"><p className="font-semibold">{server.name}</p><p className="truncate text-footnote text-label-secondary">{server.endpoint}</p></div>
-        <span className="text-footnote text-label-secondary">{server.credential_configured ? "Credential configured" : "No credential"}</span>
+        <div className="min-w-0 flex-1"><p className="font-semibold">{server.name}</p><p className="truncate font-mono text-caption text-label-secondary" title={server.endpoint}>{server.endpoint}</p></div>
+        <span className={`status-label ${server.credential_configured ? "text-success" : "text-label-secondary"}`}>{server.credential_configured ? "Credential saved" : "No credential"}</span>
         <Button rank="tinted" onClick={() => discover.mutate()} disabled={discover.isPending}>Discover</Button>
       </div>
       <div className="grid grid-cols-1 gap-2 @xl/content:grid-cols-[10rem_minmax(0,1fr)_auto]">
-        <label className="flex flex-col gap-1 text-footnote font-semibold">Credential scheme<select className={INPUT} value={scheme} onChange={(event) => setScheme(event.target.value as typeof scheme)}><option value="none">None</option><option value="bearer">Bearer</option><option value="api_key">API key</option></select></label>
-        <label className="flex flex-col gap-1 text-footnote font-semibold">Secret<input className={INPUT} type="password" value={secret} onChange={(event) => setSecret(event.target.value)} disabled={scheme === "none"} autoComplete="off" /></label>
+        <label className={LABEL}>Credential scheme<select className={INPUT} value={scheme} onChange={(event) => setScheme(event.target.value as typeof scheme)}><option value="none">None</option><option value="bearer">Bearer</option><option value="api_key">API key</option></select></label>
+        <label className={LABEL}>Secret<input className={INPUT} type="password" value={secret} onChange={(event) => setSecret(event.target.value)} disabled={scheme === "none"} autoComplete="off" /></label>
         <Button className="self-end" onClick={() => credential.mutate()} disabled={credential.isPending}>Save for me</Button>
       </div>
       {error !== null && <p role="alert" className="text-callout text-danger">{error}</p>}
@@ -174,9 +174,10 @@ function ToolCard({ tool, onComplete }: { tool: McpTool; onComplete: (message: s
   const invoke = useMutation({ mutationFn: () => proposeToolInvocation(tool.id, argumentName, value), onSuccess: (record) => { setError(null); onComplete(record.status === "pending_approval" ? "Invocation proposed and waiting below." : `Invocation ${record.status}.`); }, onError: (caught: Error) => setError(caught.message) });
 
   return (
-    <article className="flex flex-col gap-3 rounded-lg bg-bg-secondary p-4">
-      <div><h3 className="text-headline font-semibold">{tool.name}</h3><p className="text-footnote text-label-secondary">{tool.description ?? "No description"} · {tool.is_mutating ? "Mutating" : "Read-only"}</p></div>
-      <label className="flex flex-col gap-1 text-footnote font-semibold">{argumentName}<input className={INPUT} value={value} onChange={(event) => setValue(event.target.value)} /></label>
+    <article className="flex flex-col gap-3 border-b border-separator py-4">
+      <div className="flex flex-wrap items-baseline justify-between gap-2"><h3 className="font-mono text-headline font-semibold">{tool.name}</h3><span className={`status-label ${tool.is_mutating ? "text-warning" : "text-label-secondary"}`}>{tool.is_mutating ? "Mutating" : "Read-only"}</span></div>
+      <p className="text-footnote text-label-secondary">{tool.description ?? "No description"}</p>
+      <label className={LABEL}>{argumentName}<input className={INPUT} value={value} onChange={(event) => setValue(event.target.value)} /></label>
       <div className="flex flex-wrap gap-2"><Button onClick={() => grant.mutate()} disabled={grant.isPending}>Grant to me</Button><Button rank="filled" onClick={() => invoke.mutate()} disabled={invoke.isPending}>Propose call</Button></div>
       {error !== null && <p role="alert" className="text-callout text-danger">{error}</p>}
     </article>
@@ -186,14 +187,14 @@ function ToolCard({ tool, onComplete }: { tool: McpTool; onComplete: (message: s
 function ApprovalRow({ invocation, onComplete }: { invocation: ToolInvocation; onComplete: (message: string) => void }) {
   const [error, setError] = useState<string | null>(null);
   const mutation = useMutation({ mutationFn: (decision: "approve" | "deny") => decideToolInvocation(invocation.id, decision), onSuccess: (record) => { setError(null); onComplete(`Invocation ${record.status}.`); }, onError: (caught: Error) => setError(caught.message) });
-  return <article className="flex flex-col gap-3 rounded-lg border border-separator bg-bg-secondary p-4"><div className="flex items-center gap-2"><Clock3 className="size-5 text-warning" aria-hidden="true" /><h3 className="font-semibold">Proposed call</h3></div><pre className="overflow-x-auto text-footnote text-label-secondary">{JSON.stringify(invocation.arguments, null, 2)}</pre><div className="flex gap-2"><Button rank="filled" onClick={() => mutation.mutate("approve")}>Approve and run</Button><Button onClick={() => mutation.mutate("deny")}>Deny</Button></div>{error !== null && <p role="alert" className="text-callout text-danger">{error}</p>}</article>;
+  return <article className="flex flex-col gap-3 border-l-2 border-warning py-1 pl-4"><div className="flex items-center gap-2"><Clock3 className="size-4 text-warning" strokeWidth={1.5} aria-hidden="true" /><h3 className="font-semibold">Proposed call</h3><RelativeTime value={invocation.created_at} form="long" className="text-caption text-label-secondary" /></div><pre className="overflow-x-auto rounded-sm bg-bg-tertiary p-3 font-mono text-footnote text-label">{JSON.stringify(invocation.arguments, null, 2)}</pre><div className="flex gap-2"><Button rank="filled" onClick={() => mutation.mutate("approve")}>Approve and run</Button><Button onClick={() => mutation.mutate("deny")}>Deny</Button></div>{error !== null && <p role="alert" className="text-callout text-danger">{error}</p>}</article>;
 }
 
 function HistoryRow({ invocation }: { invocation: ToolInvocation }) {
   const denied = invocation.status === "denied";
   const succeeded = invocation.status === "succeeded";
   const Icon = denied ? CircleSlash2 : succeeded ? CheckCircle2 : Clock3;
-  return <article className="flex gap-3 rounded-md bg-bg-secondary p-4"><Icon className={denied ? "size-5 shrink-0 text-danger" : succeeded ? "size-5 shrink-0 text-success" : "size-5 shrink-0 text-warning"} aria-hidden="true" /><div className="min-w-0"><p className="font-semibold capitalize">{invocation.status.replace("_", " ")}</p><p className="text-footnote text-label-secondary">Trust tier {invocation.caller_trust_tier} · {new Date(invocation.created_at).toLocaleString()}</p>{invocation.offending_source !== null && <p className="text-callout text-danger">Denied because retrieved source “{invocation.offending_source}” did not have enough authority.</p>}{invocation.denied_reason !== null && invocation.offending_source === null && <p className="text-callout text-danger">Reason: {invocation.denied_reason}</p>}{succeeded && <pre className="mt-2 overflow-x-auto text-footnote">{JSON.stringify(invocation.result, null, 2)}</pre>}{invocation.error_code !== null && <p className="text-callout text-danger">Failure: {invocation.error_code}</p>}</div></article>;
+  return <article className="flex gap-3 border-b border-separator py-3"><Icon className={denied ? "mt-0.5 size-4 shrink-0 text-danger" : succeeded ? "mt-0.5 size-4 shrink-0 text-success" : "mt-0.5 size-4 shrink-0 text-warning"} strokeWidth={1.5} aria-hidden="true" /><div className="min-w-0"><p className="font-semibold capitalize">{invocation.status.replace("_", " ")}</p><p className="text-footnote text-label-secondary">Trust tier {invocation.caller_trust_tier} · <RelativeTime value={invocation.created_at} form="long" /></p>{invocation.offending_source !== null && <p className="text-callout text-danger">Denied because retrieved source “{invocation.offending_source}” did not have enough authority.</p>}{invocation.denied_reason !== null && invocation.offending_source === null && <p className="text-callout text-danger">Reason: {invocation.denied_reason}</p>}{succeeded && <pre className="mt-2 overflow-x-auto font-mono text-footnote">{JSON.stringify(invocation.result, null, 2)}</pre>}{invocation.error_code !== null && <p className="text-callout text-danger">Failure: {invocation.error_code}</p>}</div></article>;
 }
 
 function firstStringArgument(tool: McpTool): string | null {

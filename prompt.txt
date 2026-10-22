@@ -11,7 +11,8 @@ Progress: slice 0 (screenshot harness) merged, PR #36. Slice 1 (foundations: pal
 self-hosted fonts, ADR-0013, getServerSnapshot fix) merged, PR #37. Slice 2 (shell:
 sidebar, account menu, inspector rail) merged, PR #38. Slice 3 (chat as a document:
 sidenotes, route stamp, composer, scroll anchoring) merged, PR #39. Slice 4 (inspector
-views, revision marks) — on feat/ui-inspector.
+views, revision marks) merged, PR #40. Slice 5 (overview ledger, consistency pass) — on
+feat/ui-overview.
 
 After the revamp: TRACKER §5's deployment follow-ups (move the VM onto RustFS only with the
 owner's yes; role binding without SQL; §4 item 40).

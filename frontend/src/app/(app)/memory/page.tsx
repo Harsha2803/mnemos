@@ -7,6 +7,8 @@ import { useState, type ReactNode } from "react";
 import { Button } from "@/components/ui/Button";
 import { RevisionMark } from "@/components/ui/RevisionMark";
 import { EmptyState } from "@/components/ui/EmptyState";
+import { PageHeader, SectionHeading } from "@/components/ui/PageHeader";
+import { RelativeTime } from "@/components/ui/RelativeTime";
 import { Skeleton } from "@/components/ui/Skeleton";
 import {
   createMemory,
@@ -20,8 +22,8 @@ import {
   type MemoryWrite,
 } from "@/lib/memory/api";
 
-const INPUT = "hit-target w-full rounded-md border border-separator bg-bg px-3 text-callout text-label outline-none focus-visible:ring-2 focus-visible:ring-accent";
-const TEXTAREA = `${INPUT} min-h-24 py-2`;
+const INPUT = "field hit-target";
+const TEXTAREA = "field hit-target min-h-24";
 
 type Draft = {
   subjectKind: string;
@@ -96,26 +98,22 @@ export default function MemoryPage() {
 
   return (
     <div className="flex flex-col gap-8">
-      <header className="flex flex-col gap-2">
-        <h1 className="text-large-title font-semibold tracking-title text-label">Memory</h1>
-        <p className="text-callout leading-relaxed text-label-secondary">
-          Record durable claims without overwriting history. Facts with the same subject, predicate, scope and overlapping validity supersede atomically; the timeline below can be reconstructed on either clock.
-        </p>
-      </header>
+      <PageHeader
+        title="Memory"
+        description="Durable claims Mnemos can use in answers. Nothing is overwritten: a new fact about the same subject supersedes the old one, and both stay on record on two clocks, when it was true and when Mnemos believed it."
+      />
 
       <section aria-labelledby="write-heading" className="flex flex-col gap-3">
         <div className="flex items-center justify-between gap-3">
-          <h2 id="write-heading" className="text-title-3 font-semibold tracking-title">
-            {superseding ? "Supersede claim" : "Record a claim"}
-          </h2>
+          <SectionHeading id="write-heading">{superseding ? "Supersede claim" : "Record a claim"}</SectionHeading>
           {superseding && <Button rank="plain" onClick={() => { setSuperseding(null); setDraft(EMPTY_DRAFT); }}>Cancel</Button>}
         </div>
         {superseding && (
-          <p className="rounded-md bg-accent-tint p-3 text-footnote text-accent">
-            The prior claim remains in belief-time history; this form creates its immutable replacement.
+          <p className="border-l-2 border-rubric pl-3 text-footnote text-label">
+            Replacing <span className="font-semibold">{superseding.subject.display_name} · {superseding.predicate}</span>: “{superseding.object_text}”. The old claim stays in history; this creates its replacement.
           </p>
         )}
-        <form className="grid grid-cols-1 gap-4 rounded-lg bg-bg-secondary p-4 @xl/content:grid-cols-2" onSubmit={(event) => { event.preventDefault(); setNotice(null); save.mutate(); }}>
+        <form className="grid grid-cols-1 gap-4 rounded-md border border-separator p-4 @xl/content:grid-cols-2" onSubmit={(event) => { event.preventDefault(); setNotice(null); save.mutate(); }}>
           <Field label="Subject type"><input required className={INPUT} value={draft.subjectKind} onChange={(event) => setDraft({ ...draft, subjectKind: event.target.value })} /></Field>
           <Field label="Subject reference"><input required className={INPUT} placeholder="employee:ada" value={draft.subjectRef} onChange={(event) => setDraft({ ...draft, subjectRef: event.target.value })} /></Field>
           <Field label="Subject name"><input required className={INPUT} placeholder="Ada Lovelace" value={draft.subjectName} onChange={(event) => setDraft({ ...draft, subjectName: event.target.value })} /></Field>
@@ -135,37 +133,53 @@ export default function MemoryPage() {
 
       <section aria-labelledby="history-heading" className="flex flex-col gap-4">
         <div>
-          <h2 id="history-heading" className="text-title-3 font-semibold tracking-title">Bitemporal history</h2>
+          <SectionHeading id="history-heading">Bitemporal history</SectionHeading>
           <p className="mt-1 text-footnote text-label-secondary">Valid time asks when a claim applies. Belief time asks what Mnemos knew then.</p>
         </div>
         <MemoryFilterBar filters={filters} onChange={setFilters} />
         {history.isPending ? (
-          <div className="flex flex-col gap-2"><Skeleton label="Loading memory history" className="h-24 w-full" /><Skeleton className="h-24 w-full" /></div>
+          <div className="flex flex-col gap-2"><Skeleton label="Loading memory history" className="h-20 w-full" /><Skeleton className="h-20 w-full" /></div>
         ) : history.isError ? (
-          <p role="alert" className="text-callout text-danger">{history.error.message}</p>
+          <div role="alert" className="flex flex-wrap items-center gap-3 border-l-2 border-danger pl-3 text-callout text-danger">
+            The history could not be loaded ({history.error.message}).
+            <Button rank="plain" onClick={() => void history.refetch()}>Try again</Button>
+          </div>
         ) : history.data.claims.length === 0 ? (
-          <EmptyState icon={Brain} title="No claims at this time" description="Record a claim above, or broaden the two time filters." headingLevel={3} />
+          <EmptyState icon={Brain} title="No claims at this time" description="Nothing was true, or believed, at the times chosen. Clear the two time filters, or record a claim above." headingLevel={3} />
         ) : (
-          <div className="grid grid-cols-1 gap-4 @xl/content:grid-cols-[minmax(0,1fr)_20rem]">
-            <ol aria-label="Memory claims" className="flex flex-col gap-3">
-              {history.data.claims.map((claim) => (
-                <li key={claim.id} className="rounded-lg border border-separator bg-bg-secondary p-4">
-                  <div className="flex flex-wrap items-start justify-between gap-3">
-                    <div><p className="text-callout font-semibold text-label">{claim.subject.display_name} · {claim.predicate}</p><p className="mt-1 text-footnote text-label-secondary">{claim.object_text}</p></div>
-                    <span className="rounded-full bg-fill-tertiary px-2 py-1 text-caption font-semibold uppercase text-label-secondary">{claim.status}</span>
-                  </div>
-                  <dl className="mt-3 grid gap-2 text-caption text-label-tertiary @xl/content:grid-cols-2">
-                    <div><dt className="font-semibold">Valid time</dt><dd>{formatRange(claim.valid_from, claim.valid_to)}</dd></div>
-                    <div><dt className="font-semibold">Belief time</dt><dd>{formatRange(claim.recorded_at, claim.retracted_at)}</dd></div>
-                  </dl>
-                  {claim.retracted_at === null && (
-                    <div className="mt-3 flex flex-wrap gap-2">
-                      <Button rank="tinted" onClick={() => beginSupersede(claim)}><RotateCcw className="size-4" aria-hidden="true" />Supersede</Button>
-                      <Button rank="plain" disabled={retract.isPending} onClick={() => retract.mutate(claim.id)}><XCircle className="size-4" aria-hidden="true" />Retract</Button>
+          <div className="grid grid-cols-1 gap-8 @xl/content:grid-cols-[minmax(0,1fr)_18rem]">
+            <ol aria-label="Memory claims" className="flex flex-col border-t border-separator">
+              {history.data.claims.map((claim) => {
+                const live = claim.status === "active";
+                return (
+                  <li key={claim.id} className="flex flex-col gap-2 border-b border-separator py-4">
+                    <div className="flex flex-wrap items-baseline justify-between gap-x-3 gap-y-1">
+                      <p className="text-callout font-semibold text-label">
+                        {claim.subject.display_name} · <span className="font-mono font-normal">{claim.predicate}</span>
+                      </p>
+                      <span className={`status-label ${live ? "text-success" : claim.status === "superseded" ? "text-warning" : "text-label-secondary"}`}>
+                        {claim.status}
+                      </span>
                     </div>
-                  )}
-                </li>
-              ))}
+                    <p className={`font-serif text-reading leading-relaxed ${live ? "text-label" : "text-label-secondary line-through decoration-rubric"}`}>
+                      {claim.object_text}
+                    </p>
+                    <dl className="grid gap-x-6 gap-y-1 font-mono text-caption text-label-secondary @xl/content:grid-cols-2">
+                      <div><dt className="inline uppercase tracking-caps">Valid </dt><dd className="inline">{formatRange(claim.valid_from, claim.valid_to)}</dd></div>
+                      <div><dt className="inline uppercase tracking-caps">Believed </dt><dd className="inline">{formatRange(claim.recorded_at, claim.retracted_at)}</dd></div>
+                    </dl>
+                    <p className="text-caption text-label-secondary">
+                      Recorded <RelativeTime value={claim.recorded_at} form="long" /> · {claim.kind} · confidence {claim.confidence}
+                    </p>
+                    {claim.retracted_at === null && (
+                      <div className="-ml-2 flex flex-wrap gap-1">
+                        <Button rank="plain" className="!px-2" onClick={() => beginSupersede(claim)}><RotateCcw className="size-4" strokeWidth={1.5} aria-hidden="true" />Supersede</Button>
+                        <Button rank="plain" className="!px-2" disabled={retract.isPending} onClick={() => retract.mutate(claim.id)}><XCircle className="size-4" strokeWidth={1.5} aria-hidden="true" />Retract</Button>
+                      </div>
+                    )}
+                  </li>
+                );
+              })}
             </ol>
             <Revisions history={history.data} />
           </div>
@@ -229,11 +243,11 @@ function formatDay(value: string): string {
 }
 
 function Field({ label, children, className = "" }: { label: string; children: ReactNode; className?: string }) {
-  return <label className={`flex flex-col gap-1 text-footnote font-semibold text-label-secondary ${className}`}>{label}{children}</label>;
+  return <label className={`field-label ${className}`.trim()}>{label}{children}</label>;
 }
 
 function MemoryFilterBar({ filters, onChange }: { filters: MemoryFilters; onChange: (next: MemoryFilters) => void }) {
-  return <div className="grid grid-cols-1 gap-3 rounded-lg bg-bg-tertiary p-3 @xl/content:grid-cols-4"><Field label="Subject reference"><input className={INPUT} value={filters.subjectRef ?? ""} onChange={(event) => onChange({ ...filters, subjectRef: event.target.value })} /></Field><Field label="Valid at"><input type="datetime-local" className={INPUT} value={toLocalDateTime(filters.asOf)} onChange={(event) => onChange({ ...filters, asOf: localToIso(event.target.value) })} /></Field><Field label="Believed at"><input type="datetime-local" className={INPUT} value={toLocalDateTime(filters.believedAt)} onChange={(event) => onChange({ ...filters, believedAt: localToIso(event.target.value) })} /></Field><label className="hit-target flex items-center gap-2 self-end text-footnote font-semibold text-label-secondary"><input type="checkbox" checked={filters.includeRetracted ?? true} onChange={(event) => onChange({ ...filters, includeRetracted: event.target.checked })} />Include retracted</label></div>;
+  return <div className="grid grid-cols-1 gap-3 @xl/content:grid-cols-4"><Field label="Subject reference"><input className={INPUT} value={filters.subjectRef ?? ""} onChange={(event) => onChange({ ...filters, subjectRef: event.target.value })} /></Field><Field label="Valid at"><input type="datetime-local" className={INPUT} value={toLocalDateTime(filters.asOf)} onChange={(event) => onChange({ ...filters, asOf: localToIso(event.target.value) })} /></Field><Field label="Believed at"><input type="datetime-local" className={INPUT} value={toLocalDateTime(filters.believedAt)} onChange={(event) => onChange({ ...filters, believedAt: localToIso(event.target.value) })} /></Field><label className="hit-target flex items-center gap-2 self-end text-footnote font-semibold text-label-secondary"><input type="checkbox" checked={filters.includeRetracted ?? true} onChange={(event) => onChange({ ...filters, includeRetracted: event.target.checked })} />Include retracted</label></div>;
 }
 
 function toWrite(draft: Draft): MemoryWrite {
@@ -242,4 +256,4 @@ function toWrite(draft: Draft): MemoryWrite {
 
 function localToIso(value: string): string | undefined { return value ? new Date(value).toISOString() : undefined; }
 function toLocalDateTime(value: string | undefined): string { if (!value) return ""; const date = new Date(value); const offset = date.getTimezoneOffset() * 60_000; return new Date(date.getTime() - offset).toISOString().slice(0, 16); }
-function formatRange(from: string, to: string | null): string { return `${new Date(from).toLocaleString()} → ${to === null || to.startsWith("9999-") ? "open" : new Date(to).toLocaleString()}`; }
+function formatRange(from: string, to: string | null): string { return `${formatDay(from)} → ${to === null || to.startsWith("9999-") ? "open" : formatDay(to)}`; }

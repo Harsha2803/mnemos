@@ -6,7 +6,7 @@
 
 **Last updated:** 2026-10-22 — an owner-authorized **UI revamp** is in progress (§8, first
 entry): Mnemos's own visual identity in six slices, one PR each, frontend only. Slice 0, a
-committed screenshot harness, merged (PR #36); slice 1, foundations, merged (PR #37); slice 2, the shell, merged (PR #38); slice 3, chat, merged (PR #39); slice 4, the inspector, is landing. Nothing in the milestone ledger (§7) moves: `D1`
+committed screenshot harness, merged (PR #36); slice 1, foundations, merged (PR #37); slice 2, the shell, merged (PR #38); slice 3, chat, merged (PR #39); slice 4, the inspector, merged (PR #40); slice 5, overview and consistency, is landing. Nothing in the milestone ledger (§7) moves: `D1`
 and `C3` are done, `B4`, `C1`, `C2` stay deliberately deferred. Earlier: `C3` — conversation
 product depth — closed 2026-08-23 with folders, bookmarks, feedback, history search and the
 audit log (PR #26); detail in `TRACKER.md`'s 2026-08-22 and 2026-08-23 dated notes.
@@ -375,7 +375,14 @@ the list.
   repeats retrieval's tag ACL outside the scan). The screenshot run exposed `sr-only`
   text escaping the shell and making the document scroll; fixed, and the responsive
   suite now asserts the document never scrolls. Evidence: 151/151 unit, 12/12
-  responsive, 40/40 screens.
+  responsive, 40/40 screens. PR #40.
+- **Slice 5 — overview and consistency.** The overview is a sentence and a ledger: the
+  workspace's state in one line, readiness in one line, and dated activity (ingestion,
+  failures, revisions as revision marks, conversations). Every other screen takes the same
+  vocabulary: serif page titles, rules not cards, one field style, status as a word,
+  relative time with the exact time on hover, empty and error states that say what to do
+  next. Evidence: 154/154 unit, 12/12 responsive, 40/40 screens (two layout faults found
+  in the screenshots and fixed).
 
 ### Mobile-first polish — verified locally (2026-09-10)
 

@@ -4,6 +4,7 @@ import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 
 import { DocumentList } from "@/components/knowledge/DocumentList";
 import { UploadControl } from "@/components/knowledge/UploadControl";
+import { PageHeader, SectionHeading } from "@/components/ui/PageHeader";
 import { Skeleton } from "@/components/ui/Skeleton";
 import { deleteDocument, fetchDocuments, KNOWLEDGE_QUERY_KEY } from "@/lib/knowledge/api";
 
@@ -21,23 +22,19 @@ export default function KnowledgePage() {
 
   return (
     <div className="flex flex-col gap-8">
-      <header className="flex flex-col gap-2">
-        <h1 className="text-large-title font-semibold tracking-title text-label">Knowledge</h1>
-        <p className="text-callout leading-relaxed text-label-secondary">
-          Upload documents, then ask about them in chat. Open an answer’s citations to read its sources.
-        </p>
-      </header>
+      <PageHeader
+        title="Knowledge"
+        description="The documents Mnemos answers from. Upload them here or ingest them from a source; superseded revisions stay on record and are never quoted."
+      />
 
       <UploadControl
         onUploaded={() => void queryClient.invalidateQueries({ queryKey: KNOWLEDGE_QUERY_KEY })}
       />
 
       <section className="flex flex-col gap-3" aria-labelledby="documents-heading">
-        <h2 id="documents-heading" className="text-title-3 font-semibold tracking-title">
-          Documents
-        </h2>
+        <SectionHeading id="documents-heading">Documents</SectionHeading>
         {isPending ? (
-          <div className="flex flex-col gap-2" aria-hidden="true">
+          <div className="flex flex-col gap-2" role="status" aria-label="Loading documents">
             <Skeleton className="h-12 w-full" />
             <Skeleton className="h-12 w-full" />
           </div>

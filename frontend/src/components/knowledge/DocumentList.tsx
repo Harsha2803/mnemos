@@ -6,6 +6,7 @@ import Link from "next/link";
 import { useMemo, useState } from "react";
 
 import { Button } from "@/components/ui/Button";
+import { RelativeTime } from "@/components/ui/RelativeTime";
 import { Table } from "@/components/ui/Table";
 import { EmptyState } from "@/components/ui/EmptyState";
 import type { KnowledgeDocument } from "@/lib/knowledge/api";
@@ -42,7 +43,7 @@ export function DocumentList({ documents, onDelete }: DocumentListProps) {
       <EmptyState
         icon={FileText}
         title="No documents yet"
-        description="Upload a document above or connect a source, then ask about it in chat."
+        description="Upload one above or ingest it from a source. Once it is indexed, ask about it in chat and every answer will cite its page."
         headingLevel={3}
         action={<Link href="/sources" className="hit-target inline-flex items-center rounded-md px-4 font-semibold text-accent hover:bg-fill-tertiary">Connect a source</Link>}
       />
@@ -55,19 +56,19 @@ export function DocumentList({ documents, onDelete }: DocumentListProps) {
         <div className="grid grid-cols-1 gap-2 @xl/content:grid-cols-[minmax(0,1fr)_auto_auto]">
           <label className="relative">
             <span className="sr-only">Search documents</span>
-            <Search className="pointer-events-none absolute left-3 top-1/2 size-4 -translate-y-1/2 text-label-tertiary" aria-hidden="true" />
-            <input value={query} onChange={(event) => setQuery(event.target.value)} placeholder="Search documents" className="hit-target w-full rounded-md border border-separator bg-bg pl-10 pr-3 text-callout text-label" />
+            <Search className="pointer-events-none absolute left-3 top-1/2 size-4 -translate-y-1/2 text-label-tertiary" strokeWidth={1.5} aria-hidden="true" />
+            <input value={query} onChange={(event) => setQuery(event.target.value)} placeholder="Search by title" className="field hit-target !pl-9" />
           </label>
           <label>
             <span className="sr-only">Filter document status</span>
-            <select value={status} onChange={(event) => setStatus(event.target.value)} className="hit-target w-full min-w-0 rounded-md border border-separator bg-bg px-3 text-callout text-label">
+            <select value={status} onChange={(event) => setStatus(event.target.value)} className="field hit-target">
               <option value="all">All statuses</option>
               {statuses.map((value) => <option key={value} value={value}>{statusLabel(value)}</option>)}
             </select>
           </label>
           <label>
             <span className="sr-only">Sort documents</span>
-            <select value={sort} onChange={(event) => setSort(event.target.value as SortKey)} className="hit-target w-full min-w-0 rounded-md border border-separator bg-bg px-3 text-callout text-label">
+            <select value={sort} onChange={(event) => setSort(event.target.value as SortKey)} className="field hit-target">
               <option value="created">Newest first</option>
               <option value="title">Title</option>
               <option value="size">Size</option>
@@ -77,16 +78,16 @@ export function DocumentList({ documents, onDelete }: DocumentListProps) {
         </div>
 
         {visible.length === 0 ? (
-          <EmptyState icon={Search} title="No documents match" description="Try a different title or status." headingLevel={3} />
+          <EmptyState icon={Search} title="No documents match" description="Nothing in the library has that title and status. Clear the search or choose All statuses." headingLevel={3} />
         ) : (
           <Table caption="Knowledge documents" rows={visible} rowKey={(document) => document.id} columns={[
-            { key: "document", header: "Document", render: (document) => <><span className="block font-semibold text-label">{document.title}</span><span className="block text-caption text-label-secondary">{document.media_type}</span></> },
+            { key: "document", header: "Document", render: (document) => <><span className={`block font-semibold ${document.superseded_by !== null ? "text-label-secondary line-through decoration-rubric" : "text-label"}`}>{document.title}</span>{document.superseded_by !== null ? <span className="block text-caption text-label-secondary">Replaced by {titleOf(document.superseded_by, documents)}</span> : <span className="block font-mono text-caption text-label-secondary" title={document.media_type}>{kindOf(document.media_type)}</span>}</> },
             { key: "status", header: "Status", render: (document) => <StatusChip document={document} /> },
-            { key: "passages", header: "Passages", render: (document) => `${document.chunk_count} passages` },
-            { key: "size", header: "Size", render: (document) => formatBytes(document.byte_size) },
-            { key: "added", header: "Added", render: (document) => formatDate(document.created_at) },
-            { key: "actions", header: "Actions", render: (document) => <div className="flex flex-wrap gap-2">
-              <Link href="/chat" aria-label={`Ask about ${document.title}`} className="hit-target inline-flex items-center justify-center rounded-md px-2 text-accent hover:bg-fill-tertiary"><MessageCircle className="size-4" aria-hidden="true" /></Link>
+            { key: "passages", header: "Passages", render: (document) => <span className="font-mono text-footnote">{document.chunk_count}</span> },
+            { key: "size", header: "Size", render: (document) => <span className="whitespace-nowrap font-mono text-footnote">{formatBytes(document.byte_size)}</span> },
+            { key: "added", header: "Added", render: (document) => <RelativeTime value={document.created_at} form="long" className="whitespace-nowrap text-footnote" /> },
+            { key: "actions", header: "Actions", render: (document) => <div className="flex flex-nowrap">
+              <Link href="/chat" aria-label={`Ask about ${document.title}`} className="hit-target inline-flex items-center justify-center rounded-md px-2 text-accent hover:bg-fill-tertiary"><MessageCircle className="size-4" strokeWidth={1.5} aria-hidden="true" /></Link>
               <Button rank="plain" aria-label={`Delete ${document.title}`} className="!px-2" onClick={() => setPendingDelete(document)}><Trash2 className="size-4" strokeWidth={1.5} aria-hidden="true" /></Button>
             </div> },
           ]} />
@@ -110,14 +111,28 @@ export function DocumentList({ documents, onDelete }: DocumentListProps) {
   );
 }
 
+/** Status as a word in mono caps; a superseded revision says so whatever its pipeline state. */
 function StatusChip({ document }: { document: KnowledgeDocument }) {
   const superseded = document.superseded_by !== null;
   const tone = superseded ? "text-warning" : document.status === "ready" ? "text-success" : document.status === "failed" ? "text-danger" : "text-info";
-  return <span className={`inline-flex rounded-full bg-fill-tertiary px-2 py-1 font-semibold ${tone}`}>{superseded ? "Superseded" : statusLabel(document.status)}</span>;
+  return <span className={`status-label ${tone}`}>{superseded ? "Superseded" : statusLabel(document.status)}</span>;
+}
+
+/** A reader's name for a file type; the full media type stays in the tooltip. */
+function kindOf(mediaType: string): string {
+  if (mediaType === "application/pdf") return "PDF";
+  if (mediaType === "text/markdown") return "Markdown";
+  if (mediaType === "text/plain") return "Plain text";
+  if (mediaType === "text/html") return "HTML";
+  if (mediaType.includes("wordprocessingml") || mediaType === "application/msword") return "Word";
+  return mediaType.split("/").at(-1) ?? mediaType;
+}
+
+function titleOf(id: string, documents: KnowledgeDocument[]): string {
+  return documents.find((document) => document.id === id)?.title ?? "a newer revision";
 }
 
 function statusLabel(status: string): string { return status.charAt(0).toUpperCase() + status.slice(1).replaceAll("_", " "); }
-function formatDate(value: string): string { return new Intl.DateTimeFormat(undefined, { dateStyle: "medium" }).format(new Date(value)); }
 function formatBytes(bytes: number): string {
   if (bytes < 1024) return `${bytes} B`;
   if (bytes < 1024 * 1024) return `${Math.round(bytes / 1024)} KB`;

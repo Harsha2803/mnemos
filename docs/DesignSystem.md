@@ -424,13 +424,22 @@ retrofit across forty of them.
 - **Buttons.** Three ranks only: `filled` (one primary action per view), `tinted`
   (`--accent` at 12% behind `--accent` text), `plain`. More ranks than that and none of
   them mean anything.
-- **Lists.** Grouped-inset style: rounded container on `--bg-secondary`, hairline
-  separators **inset to the text origin**, not full-bleed. A small detail, and the one that
-  most separates a considered list from a default one.
+- **Pages** open with `PageHeader`: the title in the serif at `--text-large-title`, one or
+  two sentences of what the screen is for at the reading measure, and a rule. Sections
+  inside use `SectionHeading` (interface face, `--text-headline`).
+- **Lists and tables are drawn with rules**, not rounded grey cards: a hairline above and
+  below the group, and between rows. `List` keeps its separators **inset to the text
+  origin**; `Table` heads its columns in mono caps. A row that is selected carries the
+  same short rubric rule as the current navigation item.
+- **Fields** are one class, `.field` (raised paper, hairline, accent on focus, 44px, body
+  size), labelled with `.field-label`. Forms sit in a bordered sheet, not a filled card.
+- **Status is a word** (`.status-label`: mono caps, coloured by meaning), never a pill of
+  colour. A superseded document or claim is also struck through in the rubric.
 - **Sheets and modals.** A modal is for a decision that blocks progress. Everything else
   is an inspector or an inline disclosure. Modals need `<dialog>`, focus trapping, `Esc`,
   and focus restored to the trigger on close.
-- **Empty states.** Every list gets one: an icon, one line of what goes here, one action.
+- **Empty states.** Every list gets one: a quiet glyph, a serif title, a sentence that says
+  what goes here and how it gets there, and one action where there is one.
   An empty pane with no explanation reads as a bug — the user cannot tell "nothing here
   yet" from "this failed to load", and assumes the worse of the two. The action is omitted
   **only** when there is genuinely nothing the user can do yet; a control that does nothing
@@ -539,7 +548,8 @@ exists.
 | The Tailwind theme mapping (`@theme inline`, and the `--color-*: initial` reset) | same file, lower half |
 | `.hit-target`, `.material-chrome`, `.measure`, `.list-group` / `.list-row` | same file, `@layer components` |
 | Theme preference, the pre-paint script, the store | `frontend/src/lib/theme.ts` |
-| `Button`, `List`, `EmptyState`, `Skeleton`, `Table` | `frontend/src/components/ui/` |
+| `Button`, `List`, `EmptyState`, `Skeleton`, `Table`, `PageHeader` / `SectionHeading` | `frontend/src/components/ui/` |
+| `.field`, `.field-label`, `.status-label`, `.stamp`, `.citation-marker`, `.hit-area-inline` | `frontend/src/app/globals.css`, `@layer components` |
 | `ThemeToggle` (rendered inside `AccountMenu`) | `frontend/src/components/theme/` |
 | `AccountMenu`, `SidebarContent`, the inspector rail, `ToolbarTitle` | `frontend/src/components/shell/` |
 | `Truncate`, `RelativeTime` (and `lib/time.ts` for the wording), `RevisionMark` | `frontend/src/components/ui/` |

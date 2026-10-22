@@ -83,15 +83,19 @@ export function ItemBrowser({ sourceName, items, onIngest }: ItemBrowserProps) {
 
   return (
     <div className="flex flex-col gap-3">
-      <div className="grid grid-cols-1 gap-2 @xl/content:grid-cols-[minmax(0,1fr)_auto]">
-        <label className="relative">
+      {/* Flex, not a grid keyed to the page: this pane can be narrow inside a
+          wide page, and a grid column sized to the select squeezed the search. */}
+      <div className="flex flex-wrap gap-2">
+        <label className="relative min-w-0 flex-[2] basis-48">
           <span className="sr-only">Search source items</span>
-          <Search className="pointer-events-none absolute left-3 top-1/2 size-4 -translate-y-1/2 text-label-tertiary" aria-hidden="true" />
-          <input value={query} onChange={(event) => setQuery(event.target.value)} placeholder="Search items" className="hit-target w-full rounded-md border border-separator bg-bg pl-10 pr-3 text-callout text-label" />
+          <Search className="pointer-events-none absolute left-3 top-1/2 size-4 -translate-y-1/2 text-label-tertiary" strokeWidth={1.5} aria-hidden="true" />
+          <input value={query} onChange={(event) => setQuery(event.target.value)} placeholder="Search by name" className="field hit-target !pl-9" />
         </label>
-        <label>
+        {/* `min-w-0` matters: a select's intrinsic width is its longest option,
+            and a long media type would otherwise push it out of the pane. */}
+        <label className="min-w-0 flex-1 basis-40">
           <span className="sr-only">Filter item type</span>
-          <select value={type} onChange={(event) => setType(event.target.value)} className="hit-target w-full min-w-0 rounded-md border border-separator bg-bg px-3 text-callout text-label">
+          <select value={type} onChange={(event) => setType(event.target.value)} className="field hit-target">
             <option value="all">All file types</option>
             {types.map((value) => <option key={value} value={value}>{value}</option>)}
           </select>
@@ -103,7 +107,7 @@ export function ItemBrowser({ sourceName, items, onIngest }: ItemBrowserProps) {
       </p>
 
       {visible.length === 0 ? (
-        <p className="rounded-md border border-separator p-4 text-footnote text-label-secondary">No source items match these filters.</p>
+        <p className="border-y border-separator py-4 text-footnote text-label-secondary">Nothing here matches that name and type. Your selection is kept.</p>
       ) : <Table
         caption={`Items at ${sourceName}`}
         rows={visible}
@@ -115,8 +119,8 @@ export function ItemBrowser({ sourceName, items, onIngest }: ItemBrowserProps) {
               <span className="min-w-0">{item.name}</span>
             </label>
           ) },
-          { key: "type", header: "Type", render: (item) => item.content_type },
-          { key: "size", header: "Size", render: (item) => formatBytes(item.size_bytes) },
+          { key: "type", header: "Type", render: (item) => <span className="block max-w-[14rem] truncate font-mono text-caption" title={item.content_type}>{item.content_type}</span> },
+          { key: "size", header: "Size", render: (item) => <span className="font-mono text-footnote">{formatBytes(item.size_bytes)}</span> },
           { key: "modified", header: "Modified", render: (item) => formatDate(item.modified_at) },
         ]}
       />}
