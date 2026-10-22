@@ -1,6 +1,5 @@
 "use client";
 
-import { ArrowUp, Square } from "lucide-react";
 import { useEffect, useRef, type KeyboardEvent } from "react";
 
 import { Button } from "@/components/ui/Button";
@@ -11,22 +10,24 @@ export type ComposerProps = {
   streaming: boolean;
 };
 
+/** The composer's textarea id, so a keyboard shortcut can focus it from anywhere. */
+export const COMPOSER_INPUT_ID = "composer-input";
+
 /**
- * A textarea that grows with its content, up to a cap — DesignSystem §4's
- * loading rule extends naturally here: the composer should not itself jump
- * around while somebody is mid-sentence.
+ * Where a question is written: a sheet of paper at the foot of the
+ * conversation, not a pill with a round arrow.
  *
- * Enter sends; Shift+Enter inserts a newline. Disabled while a response
- * streams, with a visible stop control in its place (TRACKER §5 deliverable 5).
+ * The textarea grows with its content up to a cap, so the composer does not
+ * jump while somebody is mid-sentence. Enter sends; Shift+Enter is a new line,
+ * and the sheet says so. It also says what happens next — Mnemos chooses
+ * whether to read documents, query data, call a tool or just answer — because
+ * there is deliberately no mode to pick (A4): one surface, and the route is
+ * shown beside the answer.
  *
- * A4 deliberately exposes no answer-mode control: one conversation surface
- * accepts the question and the router explains its choice beside the answer.
+ * While an answer streams the textarea is disabled and Stop takes Send's
+ * place, so stopping is always one press away (TRACKER §5 deliverable 5).
  */
-export function Composer({
-  onSend,
-  onStop,
-  streaming,
-}: ComposerProps) {
+export function Composer({ onSend, onStop, streaming }: ComposerProps) {
   const ref = useRef<HTMLTextAreaElement>(null);
 
   useEffect(() => {
@@ -54,43 +55,47 @@ export function Composer({
   }
 
   return (
-    <div className="composer flex shrink-0 flex-col gap-2 border-t border-separator bg-bg px-3 py-3 sm:px-4">
-      <div className="flex items-end gap-2">
+    <div className="composer shrink-0 bg-bg px-3 pt-2 sm:px-6">
+      <div
+        className={[
+          "flex flex-col rounded-md border border-separator bg-bg-tertiary shadow-sm",
+          "transition-[border-color,box-shadow] duration-150 ease-standard",
+          "focus-within:border-accent focus-within:shadow-md",
+        ].join(" ")}
+      >
         <textarea
           ref={ref}
+          id={COMPOSER_INPUT_ID}
           rows={1}
-          placeholder="Ask Mnemos anything"
+          placeholder={streaming ? "Mnemos is answering…" : "Ask about your documents or your data"}
           aria-label="Message"
+          aria-describedby="composer-hint"
           disabled={streaming}
           onKeyDown={onKeyDown}
           className={[
-            "min-h-11 min-w-0 flex-1 resize-none rounded-md border border-separator bg-bg-secondary px-3 py-2",
+            "min-h-12 w-full resize-none bg-transparent px-4 pb-1 pt-3",
             "text-body leading-normal text-label placeholder:text-label-tertiary",
-            "focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-accent focus-visible:ring-offset-2",
-            "disabled:opacity-60",
+            "focus-visible:outline-none disabled:cursor-not-allowed disabled:opacity-60",
           ].join(" ")}
         />
-        {streaming ? (
-          <Button
-            rank="tinted"
-            aria-label="Stop generating"
-            onClick={onStop}
-            className="!w-11 shrink-0 !px-0"
-          >
-            <Square className="size-4" strokeWidth={1.5} aria-hidden="true" />
-          </Button>
-        ) : (
-          <Button
-            rank="filled"
-            aria-label="Send message"
-            onClick={submit}
-            className="!w-11 shrink-0 !rounded-full !px-0"
-          >
-            <ArrowUp className="size-[18px]" strokeWidth={2} aria-hidden="true" />
-          </Button>
-        )}
+        <div className="flex items-center gap-3 pb-1 pl-4 pr-1">
+          <p id="composer-hint" className="min-w-0 flex-1 truncate text-caption text-label-secondary">
+            <span className="hidden [@media(hover:hover)_and_(pointer:fine)]:inline">
+              <kbd className="font-mono">Enter</kbd> to send · <kbd className="font-mono">Shift Enter</kbd> for a new line ·{" "}
+            </span>
+            Mnemos picks documents, data or a tool
+          </p>
+          {streaming ? (
+            <Button rank="tinted" aria-label="Stop generating" onClick={onStop} className="shrink-0">
+              Stop
+            </Button>
+          ) : (
+            <Button rank="filled" aria-label="Send message" onClick={submit} className="shrink-0">
+              Send
+            </Button>
+          )}
+        </div>
       </div>
-
     </div>
   );
 }

@@ -98,14 +98,25 @@ test("chat keeps the composer reachable and opens readable evidence and SQL", as
   await page.goto("/chat/session-1");
   const marker = page.getByRole("button", { name: /Show source 1/ });
   await expect(page.getByRole("textbox", { name: "Message", exact: true })).toBeInViewport();
-  await marker.click();
   const inline = (page.viewportSize()?.width ?? 0) >= 1280;
+  // A wide transcript has a margin, so the numeral opens the inspector. A
+  // narrow one opens the source under its paragraph first, and the inspector
+  // is one deliberate press further — nothing covers the text being read.
+  let opener = marker;
+  await marker.click();
+  if (!inline) {
+    await expect(marker).toHaveAttribute("aria-expanded", "true");
+    opener = page.getByRole("button", { name: "Open source 1 in the inspector", exact: true });
+    await expect(opener).toBeVisible();
+    await fits(page);
+    await opener.click();
+  }
   const inspector = inline ? page.getByRole("complementary", { name: "Context inspector" }) : page.getByRole("dialog", { name: "Context inspector" });
   await expect(inspector.locator("blockquote")).toContainText("Five days carry over");
   await fits(page);
   if (!inline) {
     await inspector.getByRole("button", { name: "Close context inspector" }).click();
-    await expect(marker).toBeFocused();
+    await expect(opener).toBeFocused();
   }
   await page.setViewportSize({ width: page.viewportSize()!.width, height: 400 });
   const composer = page.getByRole("textbox", { name: "Message", exact: true });

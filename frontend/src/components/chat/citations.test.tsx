@@ -85,8 +85,14 @@ describe("citations", () => {
     expect(screen.queryByRole("button", { name: "Expand context inspector" })).toBeNull();
     expect(screen.getAllByText(CITATION.quoted_text)).toHaveLength(2);
     expect(screen.getByText("Page 3")).toBeInTheDocument();
-    // The char span is what makes this provenance rather than a document name.
-    expect(screen.getAllByText(/Characters 0–71/)).toHaveLength(2);
+    // The char span is what makes this provenance rather than a document name;
+    // the inspector carries it, the margin note carries the page.
+    expect(screen.getAllByText(/Characters 0–71/)).toHaveLength(1);
+    // `hidden: true` because the margin column is shown by a container query,
+    // which jsdom does not evaluate; responsive/ checks it in a real browser.
+    expect(
+      screen.getByRole("button", { name: /^Open source 1 in the inspector: .*page 3$/, hidden: true }),
+    ).toBeInTheDocument();
   });
 
   it("test_leaving_the_conversation_clears_its_selection", async () => {

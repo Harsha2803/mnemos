@@ -6,7 +6,7 @@
 
 **Last updated:** 2026-10-22 — an owner-authorized **UI revamp** is in progress (§8, first
 entry): Mnemos's own visual identity in six slices, one PR each, frontend only. Slice 0, a
-committed screenshot harness, merged (PR #36); slice 1, foundations, merged (PR #37); slice 2, the shell, is landing. Nothing in the milestone ledger (§7) moves: `D1`
+committed screenshot harness, merged (PR #36); slice 1, foundations, merged (PR #37); slice 2, the shell, merged (PR #38); slice 3, chat, is landing. Nothing in the milestone ledger (§7) moves: `D1`
 and `C3` are done, `B4`, `C1`, `C2` stay deliberately deferred. Earlier: `C3` — conversation
 product depth — closed 2026-08-23 with folders, bookmarks, feedback, history search and the
 audit log (PR #26); detail in `TRACKER.md`'s 2026-08-22 and 2026-08-23 dated notes.
@@ -359,7 +359,14 @@ the list.
   actions revealed on hover/focus (always on touch), an account menu that now holds
   appearance and sign-out, a breadcrumb toolbar title, and an inspector that is a 48px rail
   until something is selected. Selection clears when the route changes. Evidence: 136/136
-  unit twice, 12/12 responsive, 32/32 screens.
+  unit twice, 12/12 responsive, 32/32 screens. PR #38.
+- **Slice 3 — chat.** Each exchange is a query line and an answer set as serif reading
+  text; citations are superscript numerals with sidenotes in the margin on wide panes and
+  an inline disclosure on narrow ones; the route is a stamp that explains itself; the
+  colophon holds actions and the latest answer's budget meter; failures and rollbacks are
+  said where they happen; scrolling never yanks a reader who scrolled up ("Jump to
+  latest"); completion is announced once. Evidence: 146/146 unit, 12/12 responsive (which
+  caught a zero-height superscript button jsdom could not), 32/32 screens.
 
 ### Mobile-first polish — verified locally (2026-09-10)
 

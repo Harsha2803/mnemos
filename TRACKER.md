@@ -9,13 +9,13 @@
 **Last updated:** 2026-10-22 — **UI revamp run in progress** (owner-authorized, not a
 milestone): Mnemos gets its own visual identity in place of the stock AI-chat look, one
 slice per branch and PR (dated note below, §3 and §5). Slice 0, the screenshot harness,
-merged (PR #36); slice 1, foundations, merged (PR #37). Slice 2, the shell, is on
-`feat/ui-shell`.
-**Phase:** `C3` done (unchanged). UI revamp: slice 2 of 6. Deployment: live, with the
+merged (PR #36); slice 1, foundations (PR #37); slice 2, the shell (PR #38). Slice 3,
+chat, is on `feat/ui-chat`.
+**Phase:** `C3` done (unchanged). UI revamp: slice 3 of 6. Deployment: live, with the
 follow-ups in §5's second list.
 **Next task:** §5 — the UI revamp slices in order, then the deployment follow-ups. `B4`,
 `C1`, `C2` stay deliberately deferred.
-**Branch right now:** `feat/ui-shell`. PRs #28 to #37 are merged.
+**Branch right now:** `feat/ui-chat`. PRs #28 to #38 are merged.
 
 > ### 2026-10-22 — UI revamp: a distinct identity (owner-authorized run, not a milestone)
 >
@@ -1693,7 +1693,8 @@ Not a milestone; no backend capability changes. Evidence per slice:
 |---|---|---|
 | 0 · screenshot harness | `frontend/screens/` (spec + deterministic fixtures: a cited two-turn answer, a superseded revision and memory claim, running/failed/finished jobs, a persisted bundle), `playwright.screens.config.ts`, `npm run screens` → 28 JPEGs in `docs/screens/` (7 screens × 390/1440 × light/dark), pinned clock, locale, timezone and reduced motion | `npm run screens` 28/28 on the pre-revamp UI; those files are the "before" every later PR diffs against. PR #36, merged as `dc98540` |
 | 1 · foundations | Warm paper / warm charcoal neutrals, verdigris accent (action), rubric red (provenance), new state colours, small radii, a near-opaque toolbar material; Source Serif 4 + IBM Plex Sans + Plex Mono self-hosted via `next/font/local` (111,356 bytes, latin, `swap`; [ADR-0013](docs/ArchitectureDecisionRecords/ADR-0013-self-hosted-type.md)); DesignSystem intro and §0-§2 rewritten with measured contrast on both surfaces; §5's never-installed Framer Motion row corrected to "CSS only"; `getServerSessionSnapshot` returned a new object per call, now a frozen constant | lint, typecheck clean; `npm test` 133/133 (new `session.test.ts` hydrates a session reader and fails on the old code with the exact console message); `npm run build` emits exactly the three fonts; dev console on `/signin` and `/`: 2× "getServerSnapshot should be cached" before, 0 after; `test:responsive` 12/12; `npm run screens` 28/28. PR #37, merged as `8134ab1` |
-| 2 · shell | Serif wordmark; typographic sections in three groups with a rubric marker on the current one, no icons; conversations with relative time (`RelativeTime`, exact time on hover and as the link's description), full titles on hover/focus (`Truncate`, replacing the hover marquee), move/rename/delete revealed on hover/focus with a fine pointer and always shown on touch; an account menu (Radix Popover) holding identity, appearance (worded System/Light/Dark) and sign-out; toolbar shows "Chat / <conversation title>" and no theme buttons; the empty inspector is a 48px rail that opens on request and focuses its heading; leaving a conversation clears its selection; the sidebar is opaque paper and only the toolbar keeps a material. Test infrastructure: Vitest `testTimeout` 15s and Testing Library `asyncUtilTimeout` 5s, after load made a different test time out on each run | lint, typecheck clean; `npm test` 136/136 twice in a row (new: rail opens/collapses with focus, no appearance in the toolbar, selection cleared on navigation; updated to the new behaviour: three-column, collapse, resize, chrome-material, sign-out and citation tests); `test:responsive` 12/12; `npm run screens` 32/32 (new `menu` case); e2e `auth.spec.ts` opens the account menu before signing out (run at the end of the revamp) |
+| 2 · shell | Serif wordmark; typographic sections in three groups with a rubric marker on the current one, no icons; conversations with relative time (`RelativeTime`, exact time on hover and as the link's description), full titles on hover/focus (`Truncate`, replacing the hover marquee), move/rename/delete revealed on hover/focus with a fine pointer and always shown on touch; an account menu (Radix Popover) holding identity, appearance (worded System/Light/Dark) and sign-out; toolbar shows "Chat / <conversation title>" and no theme buttons; the empty inspector is a 48px rail that opens on request and focuses its heading; leaving a conversation clears its selection; the sidebar is opaque paper and only the toolbar keeps a material. Test infrastructure: Vitest `testTimeout` 15s and Testing Library `asyncUtilTimeout` 5s, after load made a different test time out on each run | lint, typecheck clean; `npm test` 136/136 twice in a row (new: rail opens/collapses with focus, no appearance in the toolbar, selection cleared on navigation; updated to the new behaviour: three-column, collapse, resize, chrome-material, sign-out and citation tests); `test:responsive` 12/12; `npm run screens` 32/32 (new `menu` case); e2e `auth.spec.ts` opens the account menu before signing out (run at the end of the revamp). PR #38, merged as `f9c93e4` |
+| 3 · chat | The conversation as a document: a query line per question, the answer as serif paragraphs at the reading measure; rubric superscript numerals that hug the cited word; sidenotes (title, page, passage) beside each paragraph on a ≥46rem transcript, an inline source disclosure below it on narrower ones (the floating preview that covered the question is gone); a route stamp revealing its rationale; a quiet colophon (Inspect, Copy, Bookmark, ratings) with the latest answer's budget meter; bookmark/rating rollbacks explained at the control; "Not answered" + "Ask again" for a failed answer; scroll anchoring with "Jump to latest"; one live region announcing start and completion; a composer sheet with keyboard and routing hints and worded Send/Stop. `renderWithProviders` now uses Testing Library's `wrapper`, so `rerender` keeps providers | lint, typecheck clean; `npm test` 146/146 (new `transcript.test.tsx`: paragraphs, numeral spacing, narrow disclosure, wide open, stamp rationale, failure + retry, rollback message, budget meter, completion announcement, scroll anchoring); `test:responsive` 12/12 (the narrow chat case now asserts the inline disclosure before the sheet, and found a zero-height numeral that unit tests could not, fixed); `npm run screens` 32/32 |
 
 ### ✅ Mobile-first product polish — verified locally 2026-09-10
 
@@ -3867,10 +3868,10 @@ viewport projects); before the last, also `npm run test:e2e` against a rebuilt C
    test; reconcile DesignSystem §5's Framer Motion row with `package.json`. The guard tests
    (no hard-coded colour, every documented token defined, 44px targets, the two dark
    blocks identical) stay green.
-2. ~~**Shell.**~~ — done on `feat/ui-shell` (§3). Typographic sidebar with an active marker and few icons; conversations with
+2. ~~**Shell.**~~ — done, PR #38 (§3). Typographic sidebar with an active marker and few icons; conversations with
    relative time and hover/focus actions (always shown on coarse pointers); appearance moves
    into an account menu; the empty inspector collapses to a slim rail.
-3. **Chat.** The answer as reading text, the question as a compact query line, superscript
+3. ~~**Chat.**~~ — done on `feat/ui-chat` (§3). The answer as reading text, the question as a compact query line, superscript
    citations with sidenotes on wide panes and inline disclosure on narrow ones (no preview
    covering the question), a route stamp that reveals its rationale, a better composer,
    scroll anchoring with "jump to latest", completion announced.
