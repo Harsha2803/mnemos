@@ -1,5 +1,5 @@
 import { render, type RenderResult } from "@testing-library/react";
-import type { ReactElement } from "react";
+import type { ReactElement, ReactNode } from "react";
 import { vi } from "vitest";
 
 import { Providers } from "@/app/providers";
@@ -18,10 +18,15 @@ import { InspectorSelectionProvider } from "@/lib/inspector/SelectionProvider";
  * rendered without it is a component rendered outside the real tree.
  */
 export function renderWithProviders(ui: ReactElement): RenderResult {
-  return render(
+  // As a `wrapper`, so `rerender` keeps the providers (and their state).
+  return render(ui, { wrapper: AppProviders });
+}
+
+function AppProviders({ children }: { children: ReactNode }) {
+  return (
     <Providers>
-      <InspectorSelectionProvider>{ui}</InspectorSelectionProvider>
-    </Providers>,
+      <InspectorSelectionProvider>{children}</InspectorSelectionProvider>
+    </Providers>
   );
 }
 
