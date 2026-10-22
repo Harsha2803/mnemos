@@ -18,6 +18,7 @@ Each file is `<width>-<scheme>-<screen>.jpg`:
 | `bundle` | "Inspect answer" on the first answer, then Bundle: budget, admitted, excluded, revision marks |
 | `sql` | a question sent in `/chat/s2` answered from data: the result table inline, the SQL view in the inspector |
 | `menu` | the account menu open (appearance, sign-out); on a phone, over the navigation sheet |
+| `palette` | desktop only: Ctrl+K with "go" typed |
 | `knowledge` | `/knowledge`, including a superseded revision and a document still processing |
 | `sources` | `/sources` with a source selected, its items, and running, failed and finished jobs |
 | `memory` | `/memory`, scrolled to the claim history with one superseded claim |
