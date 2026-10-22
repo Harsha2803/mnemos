@@ -7,6 +7,7 @@ import { EventFeed, type FeedJob, type FeedJobStatus } from "@/components/connec
 import { ItemBrowser } from "@/components/connectors/ItemBrowser";
 import { RegisterSourceForm } from "@/components/connectors/RegisterSourceForm";
 import { SourceList } from "@/components/connectors/SourceList";
+import { LoadError } from "@/components/ui/LoadError";
 import { PageHeader, SectionHeading } from "@/components/ui/PageHeader";
 import { Skeleton } from "@/components/ui/Skeleton";
 import {
@@ -156,10 +157,12 @@ export default function SourcesPage() {
         <section className="flex flex-col gap-3" aria-labelledby="sources-heading">
           <SectionHeading id="sources-heading">Registered sources</SectionHeading>
           {sources.isPending ? (
-            <div className="flex flex-col gap-2" aria-hidden="true">
+            <div className="flex flex-col gap-2" role="status" aria-label="Loading sources">
               <Skeleton className="h-12 w-full" />
               <Skeleton className="h-12 w-full" />
             </div>
+          ) : sources.isError ? (
+            <LoadError what="Your sources" error={sources.error} onRetry={() => void sources.refetch()} />
           ) : (
             <SourceList
               sources={sources.data ?? []}
@@ -179,11 +182,13 @@ export default function SourcesPage() {
               Choose a source on the left to see what it holds.
             </p>
           ) : items.isPending ? (
-            <div className="flex flex-col gap-2" aria-hidden="true">
+            <div className="flex flex-col gap-2" role="status" aria-label="Loading items">
               <Skeleton className="h-10 w-full" />
               <Skeleton className="h-10 w-full" />
               <Skeleton className="h-10 w-full" />
             </div>
+          ) : items.isError ? (
+            <LoadError what={`What ${selectedSource?.name ?? "this source"} holds`} error={items.error} onRetry={() => void items.refetch()} />
           ) : (
             <ItemBrowser
               key={selectedSlug}
@@ -198,10 +203,12 @@ export default function SourcesPage() {
       <section className="flex flex-col gap-3" aria-labelledby="activity-heading">
         <SectionHeading id="activity-heading">Ingestion activity</SectionHeading>
         {recentJobs.isPending && feedJobs.length === 0 ? (
-          <div className="flex flex-col gap-2" aria-hidden="true">
+          <div className="flex flex-col gap-2" role="status" aria-label="Loading ingestion activity">
             <Skeleton className="h-16 w-full" />
             <Skeleton className="h-16 w-full" />
           </div>
+        ) : recentJobs.isError && feedJobs.length === 0 ? (
+          <LoadError what="Ingestion activity" error={recentJobs.error} onRetry={() => void recentJobs.refetch()} />
         ) : (
           <EventFeed jobs={feedJobs} />
         )}

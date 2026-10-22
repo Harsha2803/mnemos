@@ -4,13 +4,14 @@ import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 
 import { DocumentList } from "@/components/knowledge/DocumentList";
 import { UploadControl } from "@/components/knowledge/UploadControl";
+import { LoadError } from "@/components/ui/LoadError";
 import { PageHeader, SectionHeading } from "@/components/ui/PageHeader";
 import { Skeleton } from "@/components/ui/Skeleton";
 import { deleteDocument, fetchDocuments, KNOWLEDGE_QUERY_KEY } from "@/lib/knowledge/api";
 
 export default function KnowledgePage() {
   const queryClient = useQueryClient();
-  const { data, isPending } = useQuery({
+  const { data, isPending, isError, error, refetch } = useQuery({
     queryKey: KNOWLEDGE_QUERY_KEY,
     queryFn: ({ signal }) => fetchDocuments(signal),
   });
@@ -38,6 +39,8 @@ export default function KnowledgePage() {
             <Skeleton className="h-12 w-full" />
             <Skeleton className="h-12 w-full" />
           </div>
+        ) : isError ? (
+          <LoadError what="Your documents" error={error} onRetry={() => void refetch()} />
         ) : (
           <DocumentList
             documents={data ?? []}

@@ -11,6 +11,7 @@ import { Button } from "@/components/ui/Button";
 import { EmptyState } from "@/components/ui/EmptyState";
 import { RelativeTime } from "@/components/ui/RelativeTime";
 import { Skeleton } from "@/components/ui/Skeleton";
+import { LoadError } from "@/components/ui/LoadError";
 import { Truncate } from "@/components/ui/Truncate";
 import {
   CHAT_FOLDERS_QUERY_KEY,
@@ -77,7 +78,7 @@ export function ChatSessionList() {
   const pathname = usePathname();
   const router = useRouter();
   const queryClient = useQueryClient();
-  const { data, isPending } = useQuery({
+  const { data, isPending, isError, error, refetch } = useQuery({
     queryKey: CHAT_SESSIONS_QUERY_KEY,
     queryFn: ({ signal }) => fetchSessions(signal),
   });
@@ -220,7 +221,7 @@ export function ChatSessionList() {
 
   if (isPending) {
     return (
-      <div className="flex flex-col gap-2 px-2" aria-hidden="true">
+      <div className="flex flex-col gap-2 px-2" role="status" aria-label="Loading conversations">
         <Skeleton className="h-9 w-full" />
         <Skeleton className="h-9 w-full" />
         <Skeleton className="h-9 w-3/4" />
@@ -259,7 +260,11 @@ export function ChatSessionList() {
         </label>
       )}
 
-      {isSearching ? (
+      {isError ? (
+        <div className="px-3">
+          <LoadError what="Conversations" error={error} onRetry={() => void refetch()} />
+        </div>
+      ) : isSearching ? (
         <SearchResults
           results={searchResults}
           isPending={isSearchPending}
@@ -488,7 +493,7 @@ type SearchResultsProps = {
 function SearchResults({ results, isPending, pathname }: SearchResultsProps) {
   if (isPending) {
     return (
-      <div className="flex flex-col gap-2 px-2" aria-hidden="true">
+      <div className="flex flex-col gap-2 px-2" role="status" aria-label="Searching conversations">
         <Skeleton className="h-9 w-full" />
         <Skeleton className="h-9 w-full" />
       </div>

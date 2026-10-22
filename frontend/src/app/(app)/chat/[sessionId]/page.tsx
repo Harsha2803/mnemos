@@ -8,6 +8,7 @@ import { CHAT_SESSIONS_QUERY_KEY } from "@/components/chat/ChatSessionList";
 import { Composer } from "@/components/chat/Composer";
 import type { DisplayMessage } from "@/components/chat/MessageBubble";
 import { MessageList } from "@/components/chat/MessageList";
+import { LoadError } from "@/components/ui/LoadError";
 import { Skeleton } from "@/components/ui/Skeleton";
 import { fetchSession, removeBookmark, removeFeedback, upsertBookmark, upsertFeedback } from "@/lib/chat/api";
 import { streamChatReply } from "@/lib/chat/stream";
@@ -32,7 +33,7 @@ export default function ChatSessionPage() {
   const queryClient = useQueryClient();
   const { select, selection } = useInspectorSelection();
 
-  const { data, isPending } = useQuery({
+  const { data, isPending, isError, error, refetch } = useQuery({
     queryKey: sessionQueryKey(sessionId),
     queryFn: ({ signal }) => fetchSession(sessionId, signal),
   });
@@ -288,6 +289,10 @@ export default function ChatSessionPage() {
             <Skeleton className="mt-3 h-4 w-full max-w-[var(--measure-reading)]" />
             <Skeleton className="h-4 w-11/12 max-w-[var(--measure-reading)]" />
             <Skeleton className="h-4 w-3/4 max-w-[var(--measure-reading)]" />
+          </div>
+        ) : isError && messages.length === 0 ? (
+          <div className="px-4 py-6 sm:px-6">
+            <LoadError what="This conversation" error={error} onRetry={() => void refetch()} />
           </div>
         ) : (
           <MessageList
